@@ -228,7 +228,7 @@ crx/
 
 ## 油猴脚本（scripts/）
 
-页面顶部「📥 油猴脚本」按钮 → 下载 `scripts/gamebanana-cookie-userscript.user.js`（单一来源）。用途：浏览器打开 gamebanana.com 后点右下角 🍌，检测登录态/用户名 + 复制完整 Cookie（含 HttpOnly，供设置页填 `gbCookie`），并可把当前 mod 一键发送到服务器下载。
+页面顶部「📥 油猴脚本」按钮 → 下载 `scripts/gamebanana-cookie-userscript.user.js`（单一来源；入口 URL 必须是 `/gamebanana-cookie-userscript.user.js`——`.user.js` 后缀是油猴扩展弹安装的硬要求，`/userscript` 无后缀无效）。用途：浏览器打开 gamebanana.com 后点右下角 🍌，检测登录态/用户名 + 复制完整 Cookie（含 HttpOnly，供设置页填 `gbCookie`），并可把当前 mod 一键发送到服务器下载。
 
 ---
 
