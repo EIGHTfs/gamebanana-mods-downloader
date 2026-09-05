@@ -1254,12 +1254,14 @@ async function doDownloadLoop() {
     try { await finalizeHtmls(); } catch (_) {}
     task.updatedAt = Date.now();
     saveTask();
+    console.log(`[task] 下载完成（共 ${(task.items || []).length} 项）`);
   } catch (e) {
     if (!task) return;
     task.status = "done";
     task.error = e.message || String(e);
     task.updatedAt = Date.now();
     saveTask();
+    console.log(`[task] 下载完成（异常收尾: ${task.error}）`);
   }
 }
 
@@ -1387,74 +1389,121 @@ function modInTask(url, excludePendingIdx) {
   return false;
 }
 
+// ---------- 追加计划（纯函数，便携可测；2026-09-05 用户规则：导入=只有追加，没有覆盖）-----
+// 用户规则：
+//   · 导入/提交一律「追加」——运行中/暂停中/准备中直接追到 pendingMods；
+//   · done（已完成）→ 列表保留展示，但新任务开始（导入）前清空旧批次 → 追加到空；
+//   · stopped（已终止=按钮清空队列）→ 追加到空（新建批次）；
+//   · 结果：没有「覆盖」路径，看起来像覆盖的操作实际都是「追加到空」。
+// 返回 { reset: "new"|"done"|"stopped"|null, append: [url], dedupSkipped, listSkipped }
+function planForAppend(t, urls, extractModId) {
+  const ex = (u) => { try { return String((extractModId || gbApi.extractModId)(u) || "").trim(); } catch (_) { return ""; } };
+  const reset = !t ? "new" : (t.status === "done" ? "done" : (t.status === "stopped" ? "stopped" : null));
+  let list = (urls || []).slice();
+  // 本批内重复 modId 只留一个
+  const seen = new Set();
+  let dedupSkipped = 0;
+  list = list.filter((u) => {
+    const id = ex(u);
+    if (!id) return true;
+    if (seen.has(id)) { dedupSkipped++; return false; }
+    seen.add(id);
+    return true;
+  });
+  // 已在列表（pendingMods + items 出现过同 modId）→ 跳过（仅不清空批次时才有旧列表）
+  let listSkipped = 0;
+  if (!reset) {
+    const pend = (t && t.pendingMods) || [];
+    const its = (t && t.items) || [];
+    list = list.filter((u) => {
+      const id = ex(u);
+      if (!id) return true;
+      for (const m of pend) { if (ex(m && (m.profileUrl || m.url)) === id) { listSkipped++; return false; } }
+      for (const it of its) { if (ex(it && (it.modUrl || it.url)) === id) { listSkipped++; return false; } }
+      return true;
+    });
+  }
+  return { reset, append: list, dedupSkipped, listSkipped };
+}
+
+// 重置任务为「空批次」：开始新批次前清空旧 items/results/pendingMods（done=已完成列表、stopped=终止列表）
+function resetTaskBatch(reason) {
+  task.status = "preparing";
+  task.pendingMods = [];
+  task.buildIndex = 0;
+  task.items = [];
+  task.currentIndex = 0;
+  task.results = [];
+  task.resultsMap = {};
+  task.doneCount = 0;
+  task.currentItem = null;
+  task.activeItems = [];
+  task.preparingItem = null;
+  task.abort = false;
+  task.pause = false;
+  task.updatedAt = Date.now();
+  console.log(`[task] ${reason}：清空旧批次，开始新批次`);
+}
+
 async function startDownloadTask({ mods }) {
   let urls = (mods || [])
     .map((m) => String((m && (m.profileUrl || m.url || m)) || "").trim())
     .filter((u) => u && gbApi.extractModId(u));
   if (!urls.length) throw new Error("没有有效的 mod 链接");
 
-  if (task && (task.status === "running" || task.status === "preparing" || task.status === "paused")) {
-    task.pendingMods = task.pendingMods || [];
-    // 2026-08-30 用户要求（简化）：去重不看状态——本批内重复 modId 只留一个；已在下载列表（重复 modId）跳过
-    {
-      const seen = new Set();
-      urls = urls.filter((u) => {
-        const uid = (() => { try { return String(gbApi.extractModId(u) || "").trim(); } catch (_) { return ""; } })();
-        if (!uid) return true;
-        if (seen.has(uid)) return false;
-        seen.add(uid);
-        return true;
-      });
-    }
-    const before = urls.length;
-    urls = urls.filter((u) => !modInTask(u));
-    const skipped = before - urls.length;
-    task.pendingMods.push(...urls.map((u) => ({ profileUrl: u, name: u })));
-    task.message = `已追加 ${urls.length} 个 mod 到下载队列` + (skipped > 0 ? `（跳过 ${skipped} 个已在下载列表）` : "");
-    task.updatedAt = Date.now();
-    saveTask();
-    // 2026-08-26 修复（用户反馈：paused 时提交显示「追加中」不下载）：
-    //   paused 状态提交新 mod → 自动恢复下载（用户期望立即开始，而非只追加）
-    if (task.status === "running" || task.status === "preparing") {
-      runDownloadLoop();
-    } else if (task.status === "paused") {
-      task.status = "running";
-      task.pause = false;
-      task.abort = false;
-      task.message = `已恢复下载（追加 ${urls.length} 个 mod）` + (typeof skipped !== "undefined" && skipped > 0 ? `（跳过 ${skipped} 个已在下载列表）` : "");
-      task.updatedAt = Date.now();
-      saveTask();
-      runDownloadLoop();
-    }
-    return task;
+  // 只有追加：先算计划（是否需清空旧批次 + 去重 + 跳过已在列表）
+  const plan = planForAppend(task, urls);
+
+  if (plan.reset === "new") {
+    // 无任务 → 新建空任务骨架，再追加（追加到空）
+    task = {
+      status: "preparing",
+      pendingMods: [],
+      buildIndex: 0,
+      items: [],
+      currentIndex: 0,
+      results: [],
+      resultsMap: {},
+      doneCount: 0,
+      currentItem: null,
+      activeItems: [],
+      preparingItem: null,
+      concurrency: cfg.readConfig().downloadConcurrency || 4,
+      message: "",
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      abort: false,
+      pause: false
+    };
+    // 2026-08-27 找回模式：pendingMods 倒序（旧的 mod 在前，先处理旧 mod 找回）
+    if (cfg.readConfig().restoreOnly) plan.append.reverse();
+    console.log("[task] 新建下载任务");
+  } else if (plan.reset) {
+    // done / stopped → 新任务开始前清空旧批次（保留展示到导入这一刻），再追加到空
+    resetTaskBatch(plan.reset === "done" ? "任务已完成" : "任务已终止");
   }
 
-  task = {
-    status: "preparing",
-    // 2026-08-27 找回模式：pendingMods 倒序（旧的 mod 在前，先处理旧 mod 找回）
-    pendingMods: (() => {
-      const list = urls.map((u) => ({ profileUrl: u, name: u }));
-      if (cfg.readConfig().restoreOnly) list.reverse();
-      return list;
-    })(),
-    buildIndex: 0,
-    items: [],
-    currentIndex: 0,
-    results: [],
-    resultsMap: {},
-    doneCount: 0,
-    currentItem: null,
-    activeItems: [],
-    preparingItem: null,
-    concurrency: cfg.readConfig().downloadConcurrency || 4,
-    message: `准备中 0/${urls.length}`,
-    startedAt: Date.now(),
-    updatedAt: Date.now(),
-    abort: false,
-    pause: false
-  };
+  task.pendingMods = task.pendingMods || [];
+  task.pendingMods.push(...plan.append.map((u) => ({ profileUrl: u, name: u })));
+  const skipped = plan.dedupSkipped + plan.listSkipped;
+  task.message = `已追加 ${plan.append.length} 个 mod 到下载队列` + (skipped > 0 ? `（跳过 ${skipped} 个已在下载列表）` : "");
+  task.updatedAt = Date.now();
+  console.log(`[task] 追加 ${plan.append.length} 个 mod 到下载队列` + (skipped > 0 ? `（跳过 ${skipped} 个）` : ""));
   saveTask();
-  runDownloadLoop();
+
+  // 2026-08-26 修复（用户反馈：paused 时提交显示「追加中」不下载）：
+  //   paused 状态提交新 mod → 自动恢复下载（用户期望立即开始，而非只追加）
+  if (task.status === "running" || task.status === "preparing") {
+    runDownloadLoop();
+  } else if (task.status === "paused") {
+    task.status = "running";
+    task.pause = false;
+    task.abort = false;
+    task.message = `已恢复下载（追加 ${plan.append.length} 个 mod）` + (skipped > 0 ? `（跳过 ${skipped} 个已在下载列表）` : "");
+    task.updatedAt = Date.now();
+    saveTask();
+    runDownloadLoop();
+  }
   return task;
 }
 
@@ -1465,6 +1514,7 @@ function pauseTask() {
   task.message = "已暂停";
   task.updatedAt = Date.now();
   saveTask();
+  console.log("[task] 暂停");
   return { ok: true };
 }
 
@@ -1477,6 +1527,7 @@ function resumeTask() {
   task.updatedAt = Date.now();
   saveTask();
   runDownloadLoop();
+  console.log("[task] 继续");
   return { ok: true };
 }
 
@@ -1498,6 +1549,7 @@ function stopTask() {
   try { fs.unlinkSync(TASK_FILE); } catch (_) {}
   // 不再立即 task=null——等 doDownloadLoop 收尾（检测 abort → destroy 请求 → 清理）
   modDirByItem.clear();
+  console.log("[task] 终止（清空队列）");
   return { ok: true };
 }
 
@@ -1706,6 +1758,7 @@ module.exports = {
   skipItem,
   skipAllFailed,
   restorePendingTask,
+  planForAppend, // 2026-09-05 便携测试用：导入追加计划（纯函数，不触碰全局状态）
   runDownloadLoop,
   downloadToFile,
   executeDownloadItem,

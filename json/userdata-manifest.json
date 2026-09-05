@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "app": "gamebanana-mods-downloader",
-  "generatedAt": "2026-09-03T19:20:46.867Z",
+  "generatedAt": "2026-09-05T10:57:30.362Z",
   "note": "导出时根据源码 //userdata-manifest.json 注释自动生成，不要手改。",
   "files": [
     {

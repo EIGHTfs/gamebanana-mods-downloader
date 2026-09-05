@@ -10,7 +10,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFile } = require("child_process");
+const { execFile, execFileSync } = require("child_process");
 
 const jsonDir = require("./json-dir");
 const APP_ROOT = path.join(__dirname, "..", "..");
@@ -18,13 +18,30 @@ const APP_NAME = "gamebanana-mods-downloader";
 const MANIFEST_FILE = jsonDir.jsonFile("userdata-manifest.json");
 const MARKER = "//userdata-manifest.json";
 
+const toolCache = new Map();
+
+// 探测 tool/bin 下的二进制在本机能否执行（群晖专用 zip 依赖 libsynosdk.so.7，
+// 非群晖系统会报共享库缺失 → 回退系统 PATH 的 zip/unzip）
+function toolUsable(local) {
+  if (toolCache.has(local)) return toolCache.get(local);
+  let ok = false;
+  try {
+    execFileSync(local, ["-v"], { stdio: "ignore", timeout: 3000 });
+    ok = true;
+  } catch (_) {
+    ok = false;
+  }
+  toolCache.set(local, ok);
+  return ok;
+}
+
 function findTool(name) {
   const exts = process.platform === "win32" ? [".exe", ""] : [""];
   for (const e of exts) {
     const local = path.join(APP_ROOT, "tool", "bin", name + e);
-    if (fs.existsSync(local)) return local;
+    if (fs.existsSync(local) && toolUsable(local)) return local;
   }
-  return name;
+  return name; // 回退系统 PATH
 }
 const ZIP_BIN = () => findTool("zip");
 const UNZIP_BIN = () => findTool("unzip");
