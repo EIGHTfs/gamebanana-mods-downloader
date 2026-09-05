@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "GameBanana Mods Downloader",
+  "version": "1.1.0",
+  "author": "EIGHTfs",
+  "description": "搜索、下载 GameBanana Mod。支持浏览器下载 / 插件下载 / 服务端 / Aria2。",
+  "permissions": [
+    "downloads",
+    "storage",
+    "nativeMessaging",
+    "cookies",
+    "activeTab",
+    "scripting",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://gamebanana.com/*",
+    "https://www.gamebanana.com/*",
+    "https://images.gamebanana.com/*",
+    "https://files.gamebanana.com/*",
+    "https://*.gamebanana.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GameBanana Mods Downloader",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gamebanana.com/*", "https://www.gamebanana.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

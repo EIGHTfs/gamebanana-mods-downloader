@@ -1,0 +1,9 @@
+{
+  "name": "com.gamebanana.mods.downloader.host",
+  "description": "GameBanana Mods Downloader native host",
+  "path": "HOST_PATH",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://EXTENSION_ID/"
+  ]
+}

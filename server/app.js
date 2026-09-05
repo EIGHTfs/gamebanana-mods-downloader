@@ -58,10 +58,10 @@ function setSessionCookie(res, token) {
   res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`);
 }
 
-function requireAuth(req) {
+async function requireAuth(req) {
   const cfgNow = cfg.readConfig();
   if (!cfgNow.passwordHash) return true;
-  return auth.isValidSession(auth.extractToken(req));
+  return await auth.isValidSession(auth.extractToken(req));
 }
 
 function injectAssetVersion(html, publicDir) {
@@ -151,7 +151,7 @@ const server = http.createServer(async (req, res) => {
     const pub = match(publicRoutes);
     if (pub) return await pub(req, res, parsed);
     // ---- 需鉴权 ----
-    if (pathname.startsWith("/api/") && !requireAuth(req)) {
+    if (pathname.startsWith("/api/") && !(await requireAuth(req))) {
       return sendJson(res, 401, { ok: false, error: "未登录" });
     }
     // ---- 业务路由（/api/*）----
@@ -190,28 +190,31 @@ const server = http.createServer(async (req, res) => {
 });
 
 // ---------- 启动 ----------
-const cfgNow = cfg.readConfig();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : (cfgNow.port || 8642);
+(async () => {
+  const cfgNow = cfg.readConfig();
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : (cfgNow.port || 8642);
 
-auth.loadSessions();
-downloader.restorePendingTask();
-search.restorePendingQuery();
+  await auth.loadSessions();
+  auth.startCleanup(); // 每小时清过期 session
+  downloader.restorePendingTask();
+  search.restorePendingQuery();
 
-// hash 反查：加载两张持久化索引表（json/gb-hash-index.json + json/local-hash-index.json）
-try {
-  const r = hashIndex.load();
-  console.log(`[hash-index] 已加载: GB 表 ${r.gb} 条, 本地表 ${r.local} 条`);
-} catch (e) {
-  console.log("[hash-index] 加载失败: " + (e && e.message));
-}
-
-server.listen(PORT, "0.0.0.0", () => {
-  console.log("==============================================");
-  console.log("gbmd-v3 server 已启动");
-  console.log(`  本机访问: http://127.0.0.1:${PORT}`);
-  console.log(`  局域网访问: http://<本机IP>:${PORT}`);
-  if (!cfg.hasPassword()) {
-    console.log('  ⚠️  尚未设置密码！首次使用请先设置：node app.js --set-password "你的密码"');
+  // hash 反查：加载两张持久化索引表（json/gb-hash-index.json + json/local-hash-index.json）
+  try {
+    const r = hashIndex.load();
+    console.log(`[hash-index] 已加载: GB 表 ${r.gb} 条, 本地表 ${r.local} 条`);
+  } catch (e) {
+    console.log("[hash-index] 加载失败: " + (e && e.message));
   }
-  console.log("==============================================");
-});
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log("==============================================");
+    console.log("gbmd-v3 server 已启动");
+    console.log(`  本机访问: http://127.0.0.1:${PORT}`);
+    console.log(`  局域网访问: http://<本机IP>:${PORT}`);
+    if (!cfg.hasPassword()) {
+      console.log('  ⚠️  尚未设置密码！首次使用请先设置：node app.js --set-password "你的密码"');
+    }
+    console.log("==============================================");
+  });
+})();

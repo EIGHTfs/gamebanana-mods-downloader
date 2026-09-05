@@ -6,57 +6,56 @@
 "use strict";
 
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
+const fsAsync = require("./utils/fs-async");
 
 const jsonDir = require("./lib/json-dir");
 const SESSION_FILE = jsonDir.migrateRuntimeJson("sessions.json");
 const sessions = new Map(); // token -> { expiresAt }
 
-function loadSessions() {
+async function loadSessions() {
   try {
-    if (fs.existsSync(SESSION_FILE)) {
-      const data = JSON.parse(fs.readFileSync(SESSION_FILE, "utf8"));
-      const now = Date.now();
-      for (const [token, s] of Object.entries(data)) {
-        if (s.expiresAt > now) sessions.set(token, { expiresAt: s.expiresAt });
-      }
+    const exists = await fsAsync.exists(SESSION_FILE);
+    if (!exists) return;
+    const data = await fsAsync.readJson(SESSION_FILE, {});
+    const now = Date.now();
+    for (const [token, s] of Object.entries(data)) {
+      if (s.expiresAt > now) sessions.set(token, { expiresAt: s.expiresAt });
     }
   } catch (_) {}
 }
 
-function saveSessions() {
+async function saveSessions() {
   const data = {};
   for (const [token, s] of sessions) data[token] = { expiresAt: s.expiresAt };
   try {
-    jsonDir.ensureJsonDir();
-    fs.writeFileSync(SESSION_FILE, JSON.stringify(data), "utf8");
+    await fsAsync.writeJson(SESSION_FILE, data);
   } catch (_) {}
 }
 
-function createSession(hours) {
+async function createSession(hours) {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = Date.now() + (hours || 72) * 3600 * 1000;
   sessions.set(token, { expiresAt });
-  saveSessions();
+  await saveSessions();
   return token;
 }
 
-function isValidSession(token) {
+async function isValidSession(token) {
   if (!token) return false;
   const s = sessions.get(token);
   if (!s) return false;
   if (s.expiresAt < Date.now()) {
     sessions.delete(token);
-    saveSessions();
+    await saveSessions();
     return false;
   }
   return true;
 }
 
-function destroySession(token) {
+async function destroySession(token) {
   if (token) sessions.delete(token);
-  saveSessions();
+  await saveSessions();
 }
 
 function extractToken(req) {
@@ -65,10 +64,55 @@ function extractToken(req) {
   return m ? m[1] : null;
 }
 
+/**
+ * 清理过期 session（内存 + 磁盘）
+ * 返回删除数量
+ */
+async function cleanupExpired() {
+  const now = Date.now();
+  let removed = 0;
+  for (const [token, s] of sessions) {
+    if (s.expiresAt <= now) {
+      sessions.delete(token);
+      removed++;
+    }
+  }
+  if (removed > 0) {
+    await saveSessions();
+    console.log(`[auth] 清理 ${removed} 个过期 session`);
+  }
+  return removed;
+}
+
+let cleanupTimer = null;
+
+/**
+ * 启动定期清理（默认每小时）
+ * 返回 timer 引用以便测试停止
+ */
+function startCleanup(intervalMs) {
+  if (cleanupTimer) clearInterval(cleanupTimer);
+  const ms = intervalMs || 3600 * 1000; // 1 小时
+  cleanupTimer = setInterval(async () => { await cleanupExpired(); }, ms);
+  cleanupTimer.unref(); // 不阻止进程退出
+  return cleanupTimer;
+}
+
+function stopCleanup() {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
+}
+
 module.exports = {
   loadSessions,
   createSession,
   isValidSession,
   destroySession,
-  extractToken
+  extractToken,
+  cleanupExpired,
+  startCleanup,
+  stopCleanup,
+  sessions // 测试用
 };

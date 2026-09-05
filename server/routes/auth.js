@@ -13,12 +13,12 @@ module.exports = function register(api) {
     const cfgNow = cfg.readConfig();
     if (!cfgNow.passwordHash) {
       // 2026-08-26 用户约定：初次未设密码 → 只警告，直接视为登录成功（可正常使用）
-      const token = auth.createSession(cfgNow.sessionHours || 72);
+      const token = await auth.createSession(cfgNow.sessionHours || 72);
       setSessionCookie(res, token);
       return sendJson(res, 200, { ok: true, noPassword: true, message: "未设置访问密码，可直接使用（建议尽快设置）" });
     }
     if (cfg.verifyPassword(body.password || "", cfgNow.passwordHash, cfgNow.passwordSalt)) {
-      const token = auth.createSession(cfgNow.sessionHours || 72);
+      const token = await auth.createSession(cfgNow.sessionHours || 72);
       setSessionCookie(res, token);
       return sendJson(res, 200, { ok: true });
     }
@@ -26,8 +26,8 @@ module.exports = function register(api) {
   });
 
   // POST /api/logout
-  routePublic("POST", "/api/logout", (req, res) => {
-    auth.destroySession(auth.extractToken(req));
+  routePublic("POST", "/api/logout", async (req, res) => {
+    await auth.destroySession(auth.extractToken(req));
     res.setHeader("Set-Cookie", "session=; Path=/; HttpOnly; Max-Age=0");
     return sendJson(res, 200, { ok: true });
   });
