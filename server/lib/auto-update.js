@@ -340,7 +340,7 @@ function scheduleRestart() {
   }, 2000);
 }
 
-/** 执行重启 */
+/** 执行重启：触发 ./start.sh restart 后退出本进程 */
 async function doRestart() {
   if (restarting) return;
   restarting = true;
@@ -350,9 +350,36 @@ async function doRestart() {
   } catch (e) {
     _log("重启回调异常: " + (e.message || String(e)));
   }
-  // 延迟 500ms 让 shutdown 完成
+  // 重启走 start.sh restart（项目唯一启停入口）：
+  //   延迟 detached 触发 `./start.sh restart` → stop(杀本进程) → start(拉起新进程)。
+  //   不能本进程 exit(0) 后指望外部拉起——start.sh 无守护循环；也不能自己 spawn——
+  //   与 start.sh 的 PID 管理冲突。先触发再退出，两不冲突。
+  const startSh = path.join(ROOT_DIR, "start.sh");
+  const logFile = path.join(SERVER_DIR, "server.log");
+  let launched = false;
+  try {
+    if (fs.existsSync(startSh)) {
+      fs.mkdirSync(SERVER_DIR, { recursive: true });
+      const out = fs.openSync(logFile, "a");
+      const child = spawn("sh", ["-c", `sleep 1; exec "${startSh}" restart >> "${logFile}" 2>&1`], {
+        cwd: ROOT_DIR,
+        detached: true,
+        stdio: ["ignore", out, out],
+        env: process.env
+      });
+      fs.closeSync(out);
+      child.unref();
+      launched = true;
+      _log(`已触发 ./start.sh restart（1 秒后执行，日志 ${logFile}）`);
+    } else {
+      _log("未找到 start.sh，跳过自动重启");
+    }
+  } catch (e) {
+    _log("触发 start.sh 失败: " + (e.message || String(e)));
+  }
+  // 延迟 500ms 让 shutdown 完成；start.sh restart 的 stop 阶段会 SIGTERM 本进程
   setTimeout(() => {
-    _log("执行 process.exit(0) 让 start.sh 重启");
+    _log("执行 process.exit(0)");
     process.exit(0);
   }, 500);
 }

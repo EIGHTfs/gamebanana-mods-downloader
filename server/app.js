@@ -216,7 +216,7 @@ const server = http.createServer(async (req, res) => {
     // 下次启动 restorePendingTask 自动恢复 paused/done 状态
     console.log("[auto-update] 重启回调：任务状态已保存");
   }, (msg) => {
-    console.log("[auto-update] " + msg);
+    // 状态回调：auto-update 内部 _log 已打印，这里不重复输出
   });
 
   server.listen(PORT, "0.0.0.0", () => {
