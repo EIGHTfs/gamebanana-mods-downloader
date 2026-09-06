@@ -19,7 +19,7 @@ module.exports = function register(api) {
   });
 
   // POST /api/auto-update/config
-  // { enabled, mode, interval }
+  // { enabled, mode, interval, githubRepo?, githubBranch?, githubToken? }
   route("POST", "/api/auto-update/config", async (req, res) => {
     const body = await readBody(req);
     const cfgNow = cfg.readConfig();
@@ -30,6 +30,11 @@ module.exports = function register(api) {
       mode: body.mode || cur.mode || "watch",
       interval: body.interval ? parseInt(body.interval, 10) : (cur.interval || 300)
     };
+    // github 模式可选字段：保留旧值，body 显式传入才覆盖
+    for (const k of ["githubRepo", "githubBranch", "githubToken"]) {
+      if (body[k] !== undefined) next[k] = body[k];
+      else if (cur[k] !== undefined) next[k] = cur[k];
+    }
 
     cfgNow.autoUpdate = next;
     cfg.writeConfig(cfgNow);
@@ -44,6 +49,18 @@ module.exports = function register(api) {
     });
 
     return sendJson(res, 200, { ok: true, autoUpdate: next });
+  });
+
+  // POST /api/auto-update/check
+  // 手动触发一次 github 模式检查（不等定时轮询）
+  route("POST", "/api/auto-update/check", async (req, res) => {
+    const cfgNow = cfg.readConfig();
+    const au = cfgNow.autoUpdate || {};
+    if (!au.enabled || au.mode !== "github") {
+      return sendJson(res, 400, { ok: false, error: "仅 github 模式支持手动检查" });
+    }
+    autoUpdate.checkGitHubUpdate(au);
+    return sendJson(res, 200, { ok: true, message: "已触发检查，请稍后查看状态/日志" });
   });
 
   // POST /api/auto-update/restart
