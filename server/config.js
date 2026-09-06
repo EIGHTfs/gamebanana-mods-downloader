@@ -50,7 +50,10 @@ const DEFAULT_CONFIG = {
   // 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
   // AI 思路：对齐旧扩展 toggles.files / toggles.images；gif 跟图片走；description.html 始终生成（索引/归位真相）。
   // 缺字段视为 true，旧 config.json 行为不变（三项全下）。
-  downloadToggles: { files: true, images: true }
+  downloadToggles: { files: true, images: true },
+  // 2026-09-06 自动更新：开发机推送后服务端自动拉取重启，不用手动同步代码
+  // enabled=false 默认关；mode=watch（文件监控）/ git（定时 pull）；interval=git 模式秒数
+  autoUpdate: { enabled: false, mode: "watch", interval: 300 }
 };
 
 // 下载内容开关归一：只认 files / images 两个布尔；缺省或非 false = 开。

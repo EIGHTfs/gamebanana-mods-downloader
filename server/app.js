@@ -28,6 +28,7 @@ const hashIndex = require("./lib/hash-index");
 const incompleteScan = require("./lib/incomplete-scan");
 const { sendJson, readBody, cleanCookie } = require("./utils/http");
 const { isBrowsableDir, isBlocked } = require("./utils/path-safe");
+const autoUpdate = require("./lib/auto-update");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 const MIME = {
@@ -119,7 +120,8 @@ const api = {
   cfg, auth, gbApi, downloader, search, searchDateRange, mergeDirs,
   dataBackup, hashIndex, incompleteScan,
   fs, path, os,
-  isBrowsableDir, isBlocked
+  isBrowsableDir, isBlocked,
+  autoUpdate
 };
 
 require("./routes/auth")(api);
@@ -132,6 +134,7 @@ require("./routes/hashindex")(api);
 require("./routes/browse")(api);
 require("./routes/data")(api);
 require("./routes/merge")(api);
+require("./routes/auto-update")(api);
 
 // ---------- 路由分发 ----------
 const server = http.createServer(async (req, res) => {
@@ -206,6 +209,15 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     console.log("[hash-index] 加载失败: " + (e && e.message));
   }
+
+  // 2026-09-06 自动更新：监控代码变更 → 防抖重启
+  autoUpdate.start(cfgNow.autoUpdate || { enabled: false }, async () => {
+    // 重启回调：当前任务已 saveTask（downloader 每次状态变更都写盘），
+    // 下次启动 restorePendingTask 自动恢复 paused/done 状态
+    console.log("[auto-update] 重启回调：任务状态已保存");
+  }, (msg) => {
+    console.log("[auto-update] " + msg);
+  });
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log("==============================================");
