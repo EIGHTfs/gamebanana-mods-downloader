@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GameBanana Mods Downloader</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1><img src="icons/logo.png" alt="GameBanana Mods Downloader" style="height:22px;vertical-align:middle"></h1>
+    <p class="sub">作者：EIGHTfs</p>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="search" type="button">🔍 搜索</button>
+    <button class="tab" data-tab="download" type="button">⬇ 下载</button>
+    <button class="tab" data-tab="settings" type="button">⚙ 设置</button>
+  </nav>
+
+  <main>
+    <!-- 搜索 -->
+    <section class="panel active" id="panel-search">
+      <div class="card">
+        <h2>搜索 Mod</h2>
+        <p class="hint">关键词（中文会尽量当英文关键词发）或按时间。模式③走服务端搜索；①/② 直连 GameBanana API。</p>
+        <div class="row">
+          <input type="text" id="searchGame" placeholder="游戏英文名（如 Genshin Impact）">
+        </div>
+        <div class="row">
+          <input type="text" id="kwInput" placeholder="关键词 / 角色名" style="flex:2">
+          <button id="kwSearchBtn" class="primary" type="button">关键词搜索</button>
+        </div>
+        <div class="row">
+          <label class="date-label">起始 <input type="date" id="searchStart"></label>
+          <label class="date-label">结束 <input type="date" id="searchEnd"></label>
+        </div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="filterNormal" checked> 普通</label>
+          <label class="chk"><input type="checkbox" id="filterNsfw" checked> NSFW</label>
+        </div>
+        <div class="row">
+          <button id="timeSearchBtn" class="primary" type="button">按时间搜索</button>
+          <button id="stopSearchBtn" class="ghost" type="button">停止</button>
+        </div>
+        <div id="searchStatus" class="status"></div>
+      </div>
+      <div class="card">
+        <h2>搜索结果</h2>
+        <div class="row">
+          <button id="searchSelectAll" class="ghost" type="button">全选</button>
+          <button id="searchSelectNone" class="ghost" type="button">全不选</button>
+          <button id="downloadSearchBtn" class="primary" type="button">下载勾选项</button>
+        </div>
+        <div id="searchResultList" class="search-list"></div>
+      </div>
+    </section>
+
+    <!-- 下载 -->
+    <section class="panel" id="panel-download">
+      <div class="card">
+        <h2>批量下载</h2>
+        <p class="hint">每行一个 Mod 链接或纯数字 id</p>
+        <textarea id="batchInput" rows="6" placeholder="https://gamebanana.com/mods/704164"></textarea>
+        <div class="mode-radios" id="downloadModeRadios">
+          <label class="mode-radio"><input type="radio" name="downloadMode" value="browser"> ① 浏览器下载</label>
+          <label class="mode-radio"><input type="radio" name="downloadMode" value="native"> ② 插件下载</label>
+          <label class="mode-radio"><input type="radio" name="downloadMode" value="server"> ③ 服务端下载</label>
+          <label class="mode-radio"><input type="radio" name="downloadMode" value="aria2"> ④ Aria2 下载</label>
+        </div>
+        <p class="hint" id="modeHint">能用的可点；灰掉的是当前环境不可用。</p>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="chkFiles" checked> 压缩包</label>
+          <label class="chk"><input type="checkbox" id="chkImages" checked> 预览图</label>
+        </div>
+        <div class="row">
+          <button id="batchBtn" class="primary" type="button">开始下载</button>
+          <button id="clearBtn" class="ghost" type="button">清空</button>
+        </div>
+        <div id="batchStatus" class="status"></div>
+      </div>
+      <div class="card">
+        <h2>任务</h2>
+        <div class="row">
+          <button id="removeCompletedBtn" class="ghost" type="button">清除完成</button>
+          <button id="sendCookieBtn" class="ghost" type="button">发送 Cookie 到服务端</button>
+          <button id="injectCookieBtn" class="ghost" type="button">注入服务端 Cookie</button>
+        </div>
+        <div id="taskList" class="search-list"></div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <h2>下载方式</h2>
+        <p class="hint">跟下载页同一组单选。选哪种只显示那种的设置。</p>
+        <div class="mode-radios" id="settingsModeRadios">
+          <label class="mode-radio"><input type="radio" name="settingsDownloadMode" value="browser"> ① 浏览器下载</label>
+          <label class="mode-radio"><input type="radio" name="settingsDownloadMode" value="native"> ② 插件下载</label>
+          <label class="mode-radio"><input type="radio" name="settingsDownloadMode" value="server"> ③ 服务端下载</label>
+          <label class="mode-radio"><input type="radio" name="settingsDownloadMode" value="aria2"> ④ Aria2 下载</label>
+        </div>
+      </div>
+      <div class="card settings-mode" data-mode="browser">
+        <h2>浏览器下载</h2>
+        <p class="hint">走浏览器自带下载目录，无需额外路径。</p>
+      </div>
+      <div class="card settings-mode" data-mode="native">
+        <h2>插件下载路径 / 并发</h2>
+        <p class="hint">仅 Native Host 可改路径。并发和路径放一起。</p>
+        <div class="row">
+          <input type="text" id="nativeDownloadPath" placeholder="本机目录">
+          <button id="browsePathBtn" class="ghost" type="button">浏览</button>
+        </div>
+        <div class="row">
+          <label>并发数 <input type="number" id="concurrency" min="1" max="16" value="4" style="width:70px"></label>
+        </div>
+      </div>
+      <div class="card settings-mode" data-mode="server">
+        <h2>服务端</h2>
+        <p class="hint">已保存的只能下拉选择或删除。要点「添加」才出填写框。</p>
+        <div class="row">
+          <select id="serverSelect"></select>
+          <button id="serverAddBtn" class="ghost" type="button">添加</button>
+          <button id="serverDelBtn" class="ghost" type="button">删除</button>
+        </div>
+        <div id="serverAddForm" style="display:none">
+          <div class="row"><input type="text" id="serverUrlNew" placeholder="http://IP:端口"></div>
+          <div class="row"><input type="password" id="serverPasswordNew" placeholder="访问密码（可空）"></div>
+          <div class="row">
+            <button id="serverAddConfirm" class="primary" type="button">确认添加</button>
+            <button id="serverAddCancel" class="ghost" type="button">取消</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="testServerBtn" class="ghost" type="button">检测连接</button>
+          <span id="serverStatus" class="status"></span>
+        </div>
+      </div>
+      <div class="card settings-mode" data-mode="aria2">
+        <h2>Aria2</h2>
+        <div class="row"><input type="text" id="aria2Path" placeholder="http://127.0.0.1:6800/jsonrpc"></div>
+        <div class="row"><input type="password" id="aria2Token" placeholder="RPC token（已保存则留空）"></div>
+        <div class="row">
+          <button id="testAria2Btn" class="ghost" type="button">检测 Aria2</button>
+          <span id="aria2Status" class="status"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>角色映射 JSON</h2>
+        <p class="hint">导入到本机项目 <code>mapping/</code>（需 Native Host）。列表可删除。</p>
+        <div class="row">
+          <button id="importMappingBtn" class="primary" type="button">导入映射 JSON</button>
+          <input type="file" id="importMappingFile" accept=".json,application/json" multiple style="display:none">
+        </div>
+        <div id="mappingList" class="map-list"></div>
+        <div id="mappingStatus" class="status"></div>
+      </div>
+      <div class="row">
+        <button id="saveBtn" class="primary" type="button">保存设置</button>
+        <span id="saveStatus"></span>
+      </div>
+    </section>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
