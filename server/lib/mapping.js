@@ -233,7 +233,7 @@ function buildTargetDir(mod) {
 
   const scVal = warehouseLookup(scRaw, game); // undefined=未映射；""=映射为空（Skins 跳过该层）
 
-  // 2026-08-26 用户要求：Skins 映射为 "X/.X"（mapping 文件：崩坏3 → 女武神/.女武神；代码默认 → 角色/.角色）
+  // 2026-08-26：Skins 映射为 "X/.X"（mapping 文件：崩坏3 → 女武神/.女武神；代码默认 → 角色/.角色）
   //   = 该层是「X 仓库的隐藏其他区」：无具体角色 → X/.X；category 是具体角色 → X/<角色>（该层视作跳过）；
   //   category 是其它仓库（如 Skins/Weapons）→ 该仓库的 .仓库名
   const ozMatch = String(scVal || "").match(/^(.+?)\s*\/\.\s*(.+)$/);
@@ -288,11 +288,11 @@ function buildTargetDir(mod) {
     item = itemDirName(catRaw, game);
   }
 
-  // 2026-08-26 用户要求：「把香蕉网上的分类 Characters / Skins 映射成 角色/.角色 文件夹（注意后面有点）」
+  // 2026-08-26：「把香蕉网上的分类 Characters / Skins 映射成 角色/.角色 文件夹（注意后面有点）」
   // 场景：角色大仓库下的「皮肤」子类、没有具体角色（super=Skins+cat=Characters，或复合串 "Characters / Skins"，
   //   或反之 Characters+Skins）→ 归 角色/.角色（角色仓库的隐藏其他区，前面有点）
   // 2026-08-26 AI 思路：warehouse 取该游戏「角色」仓库映射（原神/星铁=角色、崩坏3=女武神），item 留空，
-  //   目录用「仓库/.仓库名」形态（与旧项目无 item 落其他区一致，用户要求恢复此形态）
+  //   目录用「仓库/.仓库名」形态（与旧项目无 item 落其他区一致，恢复此形态）
   const scN = normKey(scRaw).replace(/\s+/g, "");
   const catN = normKey(catRaw).replace(/\s+/g, "");
   const isCharsSkins =
@@ -329,7 +329,7 @@ function buildTargetDir(mod) {
   let dir;
   if (it) dir = path.join(root, wh, it, folderName);
   else if (otherZone) dir = path.join(root, wh, "." + wh, folderName); // Characters/Skins → 角色/.角色（前面有点）
-  // 2026-08-26 用户要求（实测：装备/.装备 有 mod 却被重下到 武器/）：无具体 item 的 mod
+  // 2026-08-26（实测：装备/.装备 有 mod 却被重下到 武器/）：无具体 item 的 mod
   //   一律落 仓库/.仓库名（隐藏其他区，与旧项目「全部无item都进.仓库名」一致）；「其他」保持仓库根
   else if (wh !== "其他") dir = path.join(root, wh, "." + wh, folderName);
   else dir = path.join(root, wh, folderName);

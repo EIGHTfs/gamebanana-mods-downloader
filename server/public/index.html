@@ -9,7 +9,7 @@
 <title>GameBanana Mod Downloader</title>
 <link rel="stylesheet" href="style.css">
 <script>
-// 2026-08-26 用户要求：蓝白=白天模式（默认），香蕉风深色=夜间模式，可切换；进页面立即应用防闪烁
+// 2026-08-26：蓝白=白天模式（默认），香蕉风深色=夜间模式，可切换；进页面立即应用防闪烁
 try {
   const th = localStorage.getItem("gbmd-theme");
   if (th === "night") document.documentElement.setAttribute("data-theme", "night");
@@ -31,7 +31,7 @@ try {
   </div>
 </header>
 
-<!-- 2026-08-26 用户要求：未设置密码 → 只警告、可直接使用 -->
+<!-- 2026-08-26：未设置密码 → 只警告、可直接使用 -->
 <div id="noPwdWarn" style="display:none;background:#fff3cd;color:#664d03;padding:8px 16px;text-align:center;font-size:13px">
   ⚠️ 尚未设置访问密码 —— 当前局域网内任何人可访问本服务（设置页可修改密码）。
 </div>
@@ -50,7 +50,7 @@ try {
       <h2>下载 Mod</h2>
       <p class="hint">每行一个 Mod 链接或纯数字 id</p>
       <textarea id="batchInput" rows="8" placeholder="每行一个 Mod 链接或纯数字 id" style="width:100%"></textarea>
-      <!-- 2026-09-03 用户原话：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
+      <!-- 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
            AI 思路：下载页勾选、写入 config.json 全局记住；gif 跟图片；HTML 始终生成不设开关。默认两项都开。 -->
       <div class="row mt">
         <label><input type="checkbox" id="dlToggleFiles" checked> 压缩包（Mod 文件）</label>
@@ -83,7 +83,7 @@ try {
         <button id="stopBtn" type="button" disabled class="danger">终止</button>
         <button id="retryBtn" type="button" disabled class="ghost">重试失败</button>
         <button id="clearFailBtn" type="button" class="ghost" title="一键移除当前下载失败的列表（一次性，不影响之后新出现的失败）">清除失败</button>
-        <!-- 2026-09-02 用户要求（#16-B）：下载任务 json 导入/导出（存档备份 / 换端迁移） -->
+        <!-- 2026-09-02（#16-B）：下载任务 json 导入/导出（存档备份 / 换端迁移） -->
         <button id="taskExportBtn" type="button" class="ghost" title="导出当前下载任务为 json（含已排队的链接）">导出任务 json</button>
         <button id="taskImportBtn" type="button" class="ghost" title="从任务 json 导入链接加入下载队列">导入任务 json</button>
         <input type="file" id="taskImportFile" accept=".json,application/json" style="display:none">
@@ -113,7 +113,7 @@ try {
   <!-- ============ 搜索 ============ -->
   <div class="tab-panel" id="panel-search">
 
-    <!-- 2026-08-31 用户要求：关键词搜索 Mod 和 按时间搜索 Mod 合并为一个卡片，共用 游戏选择/普通 NSFW 筛选 -->
+    <!-- 2026-08-31：关键词搜索 Mod 和 按时间搜索 Mod 合并为一个卡片，共用 游戏选择/普通 NSFW 筛选 -->
     <div class="card">
       <h2>搜索 Mod</h2>
       <p class="hint">关键词搜索（中文/角色名/别号，自动归一到英文）或按时间搜索（新增/修改/更新任一命中），共用下方游戏与分级筛选</p>
@@ -172,7 +172,7 @@ try {
         <span class="status" id="gamesStatus"></span>
       </div>
 
-      <!-- 2026-08-26 用户要求：输入香蕉网 id 添加游戏，游戏名自动获取 -->
+      <!-- 2026-08-26：输入香蕉网 id 添加游戏，游戏名自动获取 -->
       <h3 style="margin:14px 0 8px;font-size:14px;color:var(--primary)">➕ 添加游戏（输入香蕉网 id，游戏名自动获取）</h3>
       <div class="row">
         <label>香蕉网游戏 id <input type="number" id="addGameId" placeholder="8552（原神）" style="width:110px"></label>
@@ -185,7 +185,7 @@ try {
       </div>
     </div>
 
-    <!-- 2026-09-02 用户要求（#17）：默认下载位置 +（#16-A）未完成任务扫描 -->
+    <!-- 2026-09-02（#17）：默认下载位置 +（#16-A）未完成任务扫描 -->
     <div class="card">
       <h2>默认下载位置</h2>
       <p class="hint">未在下方配置下载路径的游戏，下载时自动落到<b>该根目录/游戏名</b>文件夹（下载时自动创建游戏名目录）。留空则不启用默认位置（未配置的游戏下载会报错提示）。</p>
@@ -198,10 +198,10 @@ try {
       </div>
     </div>
 
-    <!-- 2026-08-26 用户要求：文件夹合并放进设置里面（2026-08-31 用户要求：调整为卡片第一个小功能标题） -->
+    <!-- 2026-08-26：文件夹合并放进设置里面（2026-08-31：调整为卡片第一个小功能标题） -->
     <div class="card">
 
-      <!-- 2026-08-31 用户要求：文件夹合并 = 卡片第一个功能（h3 小标题），🔄 重新获取角色 之后换行分隔 -->
+      <!-- 2026-08-31：文件夹合并 = 卡片第一个功能（h3 小标题），🔄 重新获取角色 之后换行分隔 -->
       <h3 style="margin:14px 0 8px;font-size:14px;color:var(--primary)">🔀 文件夹合并（按映射重命名角色目录）</h3>
       <p class="hint" style="margin:4px 0 8px">根据映射将文件夹重命名为「英文 – 中文」；同角色已有规范目录时内容并入，空目录进根目录 .trash（可恢复）</p>
       <div class="row">
@@ -216,7 +216,7 @@ try {
       </div>
       <div id="mmMergePlan"></div>
 
-      <!-- 2026-08-31 用户要求：清空空文件夹（空壳/仅含 HTML 也算，选游戏，带被清目录预览） -->
+      <!-- 2026-08-31：清空空文件夹（空壳/仅含 HTML 也算，选游戏，带被清目录预览） -->
       <h3 style="margin:14px 0 8px;font-size:14px;color:var(--primary)">🧹 清空空文件夹（空壳 / 仅含 HTML）</h3>
       <div class="row">
         <label>游戏
@@ -230,7 +230,7 @@ try {
       </div>
       <div id="mmEmptyPlan"></div>
 
-      <!-- 2026-08-26 用户要求：手动添加映射（选游戏/选仓库/填英文名+中文名 → 写入 mapping JSON） -->
+      <!-- 2026-08-26：手动添加映射（选游戏/选仓库/填英文名+中文名 → 写入 mapping JSON） -->
       <h3 style="margin:14px 0 8px;font-size:14px;color:var(--primary)">➕ 手动添加角色映射</h3>
       <div class="row">
         <label>游戏
@@ -270,13 +270,13 @@ try {
       <div class="row">
         <input type="text" id="hashInput" placeholder="hash 或图片短名" style="width:340px">
         <button id="hashQueryBtn" type="button">查询</button>
-        <!-- 2026-09-02 用户要求：重建索引支持选游戏（索引按游戏分文件存 json/index/<游戏名>.json） -->
+        <!-- 2026-09-02：重建索引支持选游戏（索引按游戏分文件存 json/index/<游戏名>.json） -->
         <select id="hashRebuildGame" title="选择要重建索引的游戏（默认全部）" style="max-width:230px">
           <option value="">全部游戏</option>
         </select>
         <button id="hashRebuildBtn" type="button" class="ghost" title="下载了新 mod 后重建索引（启动时也会自动建）；选某游戏则只重建该游戏索引">重建索引</button>
       </div>
-      <!-- 2026-09-02 用户要求（#16）：未完成任务扫描并入重建索引——重建时顺带扫描，
+      <!-- 2026-09-02（#16）：未完成任务扫描并入重建索引——重建时顺带扫描，
            找出含 .part 残留 / html 记录文件本地缺失的未下载完 mod，整理成任务 json -->
       <div class="row" style="margin-top:6px">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -285,7 +285,7 @@ try {
         </label>
         <span class="status" id="scanIncompleteStatus"></span>
       </div>
-      <!-- 2026-09-02 用户要求：导出按钮固定放这儿，扫描出 json 数据后才可点击（无数据禁用） -->
+      <!-- 2026-09-02：导出按钮固定放这儿，扫描出 json 数据后才可点击（无数据禁用） -->
       <div class="row" style="margin-top:6px">
         <button id="scanIncompleteDlBtn" type="button" class="ghost" disabled title="扫描出未完成任务后可一键加入下载队列">一键加入下载队列</button>
         <button id="scanIncompleteExportBtn" type="button" class="ghost" disabled title="扫描出任务 json 后可导出保存/换端迁移">导出任务 json</button>
@@ -326,7 +326,7 @@ try {
   </div>
 </div>
 
-<!-- 2026-09-01 用户要求：保存设置改悬浮按钮（右下角，仅设置页显示） -->
+<!-- 2026-09-01：保存设置改悬浮按钮（右下角，仅设置页显示） -->
 <div id="speedHud" class="speed-hud" hidden>⬇ 0 KB/s</div>
 <button id="saveSettingsFab" type="button" title="保存设置">💾</button>
 

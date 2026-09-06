@@ -19,7 +19,7 @@ module.exports = function register(api) {
       q = gbApi.normalizeKeyword(game, q); // 桑多涅 → Sandrone
       const perpage = Math.min(parseInt(parsed.query.perpage, 10) || 50, 100);
       const maxResults = Math.min(parseInt(parsed.query.max || 100, 10) || 100, 500);
-      // 2026-08-27 用户要求：合并搜索——搜角色名时自动补搜变体（短名/中文），合并去重。
+      // 2026-08-27：合并搜索——搜角色名时自动补搜变体（短名/中文），合并去重。
       const genVariants = (base) => {
         const vs = new Set();
         vs.add(base);
@@ -104,7 +104,7 @@ module.exports = function register(api) {
   route("POST", "/api/search/stop", (req, res) => sendJson(res, 200, search.stopSearch()));
   route("GET", "/api/search/cache", (req, res) => sendJson(res, 200, { ok: true, cache: search.getCache() }));
   route("POST", "/api/search/clear", (req, res) => sendJson(res, 200, search.clearCache()));
-  // 2026-08-26 用户要求：手动导入搜索记录（上传 JSON 数组，按 modId 合并，导入覆盖原有）
+  // 2026-08-26：手动导入搜索记录（上传 JSON 数组，按 modId 合并，导入覆盖原有）
   route("POST", "/api/search/import", async (req, res) => {
     const body = await readBody(req);
     let records = body && body.records;
@@ -116,13 +116,13 @@ module.exports = function register(api) {
     }
     return sendJson(res, 200, search.importCache(records));
   });
-  // 2026-08-31 用户要求：保存搜索结果（把前端当前结果覆盖写入 search_cache.json）
+  // 2026-08-31：保存搜索结果（把前端当前结果覆盖写入 search_cache.json）
   route("POST", "/api/search/save", async (req, res) => {
     const body = await readBody(req);
     const results = Array.isArray(body && body.results) ? body.results : [];
     return sendJson(res, 200, search.saveRecords(results));
   });
-  // 2026-08-26 用户要求：导出搜索记录（当前 cache 完整 JSON，前端下载为文件）
+  // 2026-08-26：导出搜索记录（当前 cache 完整 JSON，前端下载为文件）
   route("GET", "/api/search/export", (req, res) => {
     const cache = search.exportCache();
     res.setHeader("Content-Type", "application/json");

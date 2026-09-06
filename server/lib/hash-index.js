@@ -1,5 +1,5 @@
 // ============================================================
-// GameBanana Mod Downloader - hash 反查（按游戏分文件版，2026-09-02 用户要求改造）
+// GameBanana Mod Downloader - hash 反查（按游戏分文件版，2026-09-02改造）
 //   索引从全局 3 文件（gb/local/html-name）改为「每游戏一个文件」：
 //     json/index/<游戏名>.json  →  { game, gb: {...}, local: {...}, name: {...} }
 //   游戏名 = gb-api fetchGameInfo(gameId)._sName（GB 官方英文名，稳定权威）。
@@ -189,7 +189,7 @@ function queryByHash(hash) {
   return null;
 }
 
-// ---------- GB 表模糊搜索（2026-08-26 用户要求：当离线 mod 目录用）----------
+// ---------- GB 表模糊搜索（2026-08-26：当离线 mod 目录用）----------
 // 按 mod 名/作者 模糊匹配 GB 表，按 modId 去重；标注该 mod 是否本地已下载（本地表命中任一 hash）。
 // 返回 [{modId, modName, author, game, url, fileCount, hasLocal}]
 function searchGb(keyword, gameFilter) {
@@ -220,7 +220,7 @@ function searchGb(keyword, gameFilter) {
   return [...mods.values()].sort((a, b) => String(b.modName).localeCompare(String(a.modName), "en"));
 }
 
-// ---------- 下载时增量追加（2026-08-26 用户要求：每次新下载顺手更新）----------
+// ---------- 下载时增量追加（2026-08-26：每次新下载顺手更新）----------
 // 从单个 mod 目录的 description.html 提取，更新该游戏（obj.game）的索引文件（只增不删）
 function ingestModDir(modDir) {
   if (!modDir || !fs.existsSync(path.join(modDir, "description.html"))) return { gbAdded: 0, localAdded: 0 };
@@ -304,7 +304,7 @@ async function rebuild(gameFilter) {
         try { ents = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (_) { return; }
         for (const e of ents) {
           // 2026-08-31 修复：不再跳过 . 开头目录——.代理人/.NPC 等隐藏仓库区里的旧 HTML
-          //   也存绝对下载路径，重建时必须遍历并替换为相对路径（用户要求：所有 HTML）
+          //   也存绝对下载路径，重建时必须遍历并替换为相对路径（所有 HTML）
           if (e.name === ".trash" || e.name === ".git" || e.name === "@eaDir") continue;
           const p = path.join(dir, e.name);
           if (e.isDirectory()) {
@@ -313,7 +313,7 @@ async function rebuild(gameFilter) {
             const obj = readIndexObj(dir);
             if (obj) {
               htmls++;
-              // ---- 2026-08-31 用户要求：HTML 下载路径以相对路径记录；重建时按 HTML
+              // ---- 2026-08-31：HTML 下载路径以相对路径记录；重建时按 HTML
               //   当前所在相对路径替换（手动移动文件夹后重建可纠正）----
               try {
                 const relDir = path.relative(gameRoot, dir) || "";
@@ -360,11 +360,11 @@ async function rebuild(gameFilter) {
                   if (!g.local.has(dk)) g.local.set(dk, { modDir: dir, file: dn, hash: dk, gbMd5: dk, kind: "image", ...gbMeta });
                 }
               } catch (_) {}
-              // 2026-08-26 用户要求：手动建立 HTML 反查时顺带清理——不在 HTML 列表的
+              // 2026-08-26：手动建立 HTML 反查时顺带清理——不在 HTML 列表的
               //   外部 mod 遗留文件 → 移入本游戏根垃圾桶（.trash）。移入保留原名，
               //   将来下载其真正所属 mod 时 trash-restore 按原名自动找回归位。
               try {
-                // 2026-08-26 用户要求：垃圾桶保留来源目录结构
+                // 2026-08-26：垃圾桶保留来源目录结构
                 let relDir = "";
                 try { relDir = path.relative(gameRoot, dir); } catch (_) {}
                 const org = cfg.readConfig().autoOrganize ? organize.organizeDir(dir, path.join(gameRoot, ".trash"), gbMeta.modId, relDir) : { moved: [] };

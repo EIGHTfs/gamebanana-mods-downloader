@@ -60,7 +60,7 @@ module.exports = function register(api) {
   });
   route("GET", "/api/task/restore-mode", (req, res) => sendJson(res, 200, { ok: true, restoreOnly: downloader.getRestoreMode() }));
 
-  // ---- 下载任务 json 导入/导出（#16-B，2026-09-02 用户要求）----
+  // ---- 下载任务 json 导入/导出（#16-B，2026-09-02）----
   route("GET", "/api/task/export", (req, res) => {
     try {
       const t = downloader.getTask() || {};
@@ -97,14 +97,14 @@ module.exports = function register(api) {
     }
   });
 
-  // ---- 跳过失败项（单条）/ 一键清除失败（全部）（2026-08-26 用户要求加回）----
+  // ---- 跳过失败项（单条）/ 一键清除失败（全部）（2026-08-26 加回）----
   route("POST", "/api/skip", async (req, res) => {
     const body = await readBody(req);
     return sendJson(res, 200, downloader.skipItem({ path: body.path, url: body.url }));
   });
   route("POST", "/api/skip-all-failed", (req, res) => sendJson(res, 200, downloader.skipAllFailed()));
 
-  // ---- 未完成任务扫描（#16-A，2026-09-02 用户要求）----
+  // ---- 未完成任务扫描（#16-A，2026-09-02）----
   route("POST", "/api/scan-incomplete", async (req, res) => {
     try {
       const results = await incompleteScan.scanIncomplete();

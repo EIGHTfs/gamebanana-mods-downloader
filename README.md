@@ -71,9 +71,9 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 
 ```
 gamebanana-mods-downloader/
-├── boot.cjs                  # 入口：CJS 强制引导（零依赖，解决 ESM 父目录问题）
 ├── start.sh                  # 启停脚本（start/stop/restart/status/set-password）
 ├── server/
+│   ├── boot.cjs              # 入口：CJS 强制引导（零依赖，解决 ESM 父目录问题）
 │   ├── app.js                # HTTP 入口：注册路由 + 静态页面 + 启动序列
 │   ├── config.js             # 配置管理（config.json 自动初始化；读取游戏/映射）
 │   ├── auth.js               # 密码 scrypt 哈希 + 会话（HttpOnly Cookie，清过期 token）

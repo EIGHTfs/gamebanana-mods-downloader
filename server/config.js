@@ -11,7 +11,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const jsonDir = require("./lib/json-dir");
-// config.json 例外：留在 server/。用户原话：「config.json是例外本来就应该在server文件夹」
+// config.json 例外：留在 server/。「config.json是例外本来就应该在server文件夹」
 const CONFIG_PATH = path.join(__dirname, "config.json"); //userdata-manifest.json file server/config.json 服务配置（例外留在 server/）
 (function restoreConfigFromJsonDir() {
   const misplaced = jsonDir.jsonFile("config.json");
@@ -42,19 +42,19 @@ const DEFAULT_CONFIG = {
   downloadConcurrency: 4,
   // 2026-08-27 找回模式：开启后不实际下载，只归位/找回/生成 HTML
   restoreOnly: false,
-  // 2026-08-30 用户要求：自动整理（organizeDir 移出外部文件）默认禁用
+  // 2026-08-30：自动整理（organizeDir 移出外部文件）默认禁用
   autoOrganize: false,
-  // 2026-09-02 用户要求（#17）：默认下载位置——未在 gamebanana.com.json 配置 downloadPath
+  // 2026-09-02（#17）：默认下载位置——未在 gamebanana.com.json 配置 downloadPath
   //   的游戏，下载时自动落到「该根目录/<游戏名>」作为下载路径（gameRootOf fallback）。
   defaultDownloadPath: "",
-  // 2026-09-03 用户原话：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
+  // 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
   // AI 思路：对齐旧扩展 toggles.files / toggles.images；gif 跟图片走；description.html 始终生成（索引/归位真相）。
   // 缺字段视为 true，旧 config.json 行为不变（三项全下）。
   downloadToggles: { files: true, images: true }
 };
 
 // 下载内容开关归一：只认 files / images 两个布尔；缺省或非 false = 开。
-// 用户原话：「压缩包 + 预览图 两个勾选；gif 跟图片；HTML 始终生成」
+// 「压缩包 + 预览图 两个勾选；gif 跟图片；HTML 始终生成」
 function normalizeDownloadToggles(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   return {
@@ -156,7 +156,7 @@ function findGameEntry(gameNameOrId) {
 }
 
 // 取游戏下载根目录（gamebanana.com.json downloadPath）
-// 2026-09-02 用户要求（#17）：未配置 downloadPath 的游戏 → fallback 到「默认下载位置/游戏名」，
+// 2026-09-02（#17）：未配置 downloadPath 的游戏 → fallback 到「默认下载位置/游戏名」，
 //   下载时 buildTargetDir 自动落到该根目录（下载时创建游戏名文件夹）。
 function gameRootOf(gameName) {
   const e = findGameEntry(gameName);
@@ -176,7 +176,7 @@ function gameIdOf(gameName) {
 // ---------- 映射（mapping/<游戏名>.json）----------
 // 代码内部默认映射（仅在没有对应游戏的 mapping JSON 时生效）：
 //   Characters → 角色 / Weapons → 武器 / Skins → 角色/.角色
-//   （2026-08-26 用户要求：Skins 映射为 角色/.角色——角色仓库隐藏其他区；mapping 文件存在时以文件为准，
+//   （2026-08-26：Skins 映射为 角色/.角色——角色仓库隐藏其他区；mapping 文件存在时以文件为准，
 //     如崩坏3 skins → 女武神/.女武神）
 const CODE_WAREHOUSE_DEFAULTS = {
   characters: "角色",
@@ -232,7 +232,7 @@ function readGameMapping(gameName) {
   }
 }
 
-// 2026-08-26 用户要求（文件夹合并新增功能）：手动添加角色映射 → 写入 mapping/<游戏名>.json
+// 2026-08-26（文件夹合并新增功能）：手动添加角色映射 → 写入 mapping/<游戏名>.json
 // 参数：game 游戏名、en 英文名、zh 中文名；写入 roles[en]=zh + variants[zh]=en（搜索归一）
 function addRoleMapping(game, en, zh) {
   en = String(en || "").trim();

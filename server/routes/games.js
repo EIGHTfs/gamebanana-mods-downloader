@@ -27,7 +27,7 @@ module.exports = function register(api) {
     }
     return sendJson(res, 200, { ok: true, mapping: out });
   });
-  // ---- 手动添加角色映射（文件夹合并新增功能，2026-08-26 用户要求）----
+  // ---- 手动添加角色映射（文件夹合并新增功能，2026-08-26）----
   // POST {game, warehouse, en, zh} → 写入 mapping/<游戏名>.json 的 roles + variants
   route("POST", "/api/mapping/add-role", async (req, res) => {
     const body = await readBody(req);
@@ -39,7 +39,7 @@ module.exports = function register(api) {
     }
   });
 
-  // ---- 香蕉网获取游戏角色列表（手动添加映射时英文名下拉选择，2026-08-26 用户要求）----
+  // ---- 香蕉网获取游戏角色列表（手动添加映射时英文名下拉选择，2026-08-26）----
   route("GET", "/api/gb-characters", async (req, res, parsed) => {
     const game = String(parsed.query.game || "").trim();
     if (!game) return sendJson(res, 400, { ok: false, error: "missing game" });
@@ -55,7 +55,7 @@ module.exports = function register(api) {
     }
   });
 
-  // ---- 香蕉网游戏信息：按 id 取游戏名 + 根分类（仓库）（2026-08-26 用户要求）----
+  // ---- 香蕉网游戏信息：按 id 取游戏名 + 根分类（仓库）（2026-08-26）----
   route("GET", "/api/gb-game-info", async (req, res, parsed) => {
     const id = parseInt(parsed.query.id, 10);
     if (!id || id <= 0) return sendJson(res, 400, { ok: false, error: "无效的香蕉网游戏 id" });

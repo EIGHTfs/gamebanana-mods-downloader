@@ -38,7 +38,7 @@ module.exports = function register(api) {
       if (cleaned) body.gbCookie = cleaned; // 非空才写，避免空值覆盖
     }
     // 【原代码】const allowed = ["gbCookie", "downloadConcurrency", "sessionHours", "port", "defaultDownloadPath"];
-    // 【改为】2026-09-03 用户原话：「这两项我想给现在的server版本加回去」——允许写 downloadToggles
+    // 【改为】2026-09-03：「这两项我想给现在的server版本加回去」——允许写 downloadToggles
     const allowed = ["gbCookie", "downloadConcurrency", "sessionHours", "port", "defaultDownloadPath", "downloadToggles"];
     for (const k of allowed) {
       if (body[k] === undefined) continue;

@@ -16,7 +16,7 @@ function collect(file) {
     cfg: null, auth: null, gbApi: null, downloader: null, search: null,
     searchDateRange: null, mergeDirs: null, dataBackup: null, hashIndex: null,
     incompleteScan: null, fs: null, path: null, os: null,
-    downloadRoots: null, isWithinRoots: null, isBrowsableDir: null
+    isBrowsableDir: null, isBlocked: null
   };
   require("../server/routes/" + file)(api);
   return { authed, pub };
@@ -59,16 +59,23 @@ loggedTest(log, "bug#6 cleanCookie 清洗三种脏形态", () => {
 });
 
 // ---------- bug#2 ----------
-const { isBrowsableDir } = require("../server/utils/path-safe");
-loggedTest(log, "bug#2 isBrowsableDir 白名单（根/祖先/后代放行，无关拒绝）", () => {
-  const roots = ["/vol/Mods/Genshin"];
-  assert.equal(isBrowsableDir("/vol/Mods/Genshin", roots), true);   // 下载根本身
-  assert.equal(isBrowsableDir("/vol/Mods/Genshin/Char", roots), true); // 根内后代
-  assert.equal(isBrowsableDir("/vol/Mods", roots), true);           // 祖先（下钻必经）
-  assert.equal(isBrowsableDir("/vol", roots), true);                // 更上祖先
-  assert.equal(isBrowsableDir("/etc", roots), false);               // 无关分支
-  assert.equal(isBrowsableDir("/vol/Other", roots), false);         // 无关兄弟
-  assert.equal(isBrowsableDir("/etc", []), true);                   // 无下载根时不限制
+const { isBrowsableDir, isBlocked } = require("../server/utils/path-safe");
+loggedTest(log, "bug#2 isBrowsableDir 黑名单（系统目录拉黑，其余放行）", () => {
+  // 系统目录 → 拉黑
+  assert.equal(isBrowsableDir("/etc"), false);
+  assert.equal(isBrowsableDir("/etc/passwd"), false);
+  assert.equal(isBrowsableDir("/proc"), false);
+  assert.equal(isBrowsableDir("/sys"), false);
+  assert.equal(isBrowsableDir("/root"), false);
+  // 非系统目录 → 放行（局域网自用，无需白名单收敛）
+  assert.equal(isBrowsableDir("/vol/Mods/Genshin"), true);
+  assert.equal(isBrowsableDir("/vol/Mods/Genshin/Char"), true);
+  assert.equal(isBrowsableDir("/vol"), true);
+  assert.equal(isBrowsableDir("/vol/Other"), true);  // 兄弟目录也放行
+  assert.equal(isBrowsableDir("/"), true);
+  // isBlocked 直接判断
+  assert.equal(isBlocked("/etc"), true);
+  assert.equal(isBlocked("/vol/Mods"), false);
 });
 
 // ---------- bug#3 ----------

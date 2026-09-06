@@ -27,7 +27,7 @@ const dataBackup = require("./lib/data-backup");
 const hashIndex = require("./lib/hash-index");
 const incompleteScan = require("./lib/incomplete-scan");
 const { sendJson, readBody, cleanCookie } = require("./utils/http");
-const { downloadRoots, isWithinRoots, isBrowsableDir } = require("./utils/path-safe");
+const { isBrowsableDir, isBlocked } = require("./utils/path-safe");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 const MIME = {
@@ -65,7 +65,7 @@ async function requireAuth(req) {
 }
 
 function injectAssetVersion(html, publicDir) {
-  // 用户原话：「固化skill 不要求用户强刷网页，而是升级页面版本」
+  // 「固化skill 不要求用户强刷网页，而是升级页面版本」
   return String(html).replace(
     /(<(?:link|script)\b[^>]*(?:href|src)=["'])([^"']+\.(?:css|js))(\?[^"']*)?(["'][^>]*>)/gi,
     function (_, pre, url, query, post) {
@@ -119,7 +119,7 @@ const api = {
   cfg, auth, gbApi, downloader, search, searchDateRange, mergeDirs,
   dataBackup, hashIndex, incompleteScan,
   fs, path, os,
-  downloadRoots, isWithinRoots, isBrowsableDir
+  isBrowsableDir, isBlocked
 };
 
 require("./routes/auth")(api);

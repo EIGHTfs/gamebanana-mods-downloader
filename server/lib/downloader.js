@@ -94,7 +94,7 @@ function localGifName(url, file) {
   return prefix ? prefix + "_" + file : file;
 }
 
-// 2026-08-30 用户要求：gif 下载前先 HEAD 获取文件大小（Content-Length），
+// 2026-08-30：gif 下载前先 HEAD 获取文件大小（Content-Length），
 //   本地名 = 原名_大小MB(≥2位小数)（同名不同 URL 不覆盖）。失败返回 0（调用方兜底）
 function httpHeadContentLength(url, timeoutMs) {
   return new Promise((resolve) => {
@@ -123,7 +123,7 @@ function gifLocalName(safe, size, url) {
   return size > 0 ? `${base}_${(size / 1048576).toFixed(2)}MB${ext}` : localGifName(url, safe);
 }
 
-// 2026-08-30 用户要求：一个 part 文件只需要一个线程修改（避免同名文件并发写互相覆盖）
+// 2026-08-30：一个 part 文件只需要一个线程修改（避免同名文件并发写互相覆盖）
 const partLocks = new Map(); // partPath -> Promise（前序任务完成信号）
 function withPartLock(partPath, fn) {
   const prev = partLocks.get(partPath) || Promise.resolve();
@@ -146,7 +146,7 @@ function isImageExt(name) {
 // INDEX_TAG_ID / buildIndexBlock / parseIndexObj / readIndexObj 抽到 utils/index-html.js（P2 去重）
 
 // ---------- 第一步：生成 HTML ----------
-// 可见部分按用户规定的结构：
+// 可见部分按的结构：
 //   <h1>mod名</h1>
 //   <p class="meta">作者 / 游戏 / 分类 / 版本 / 时间 / 原链接 / 下载路径</p>
 //   + 文件列表（文件名/大小/MD5）+ 图片 + 描述（gif 外链替换为本地重命名名 localFile）
@@ -236,19 +236,19 @@ async function genIndexHtml(url) {
     superCategory: mod.superCategory || "",
     warehouse: target.warehouse || "",
     item: target.item || "",
-    // 2026-08-31 用户要求：HTML 只记录相对路径（相对游戏根），完整路径由
+    // 2026-08-31：HTML 只记录相对路径（相对游戏根），完整路径由
     //   重建索引时按 HTML 所在相对位置实时计算替换——手动移动文件夹后重建可纠正
     dir: target.root ? (path.relative(target.root, target.dir) || "") : (target.dir || ""),
     version: mod.version || "",
     dateAdded: mod.dateAdded,
     dateModified: mod.dateModified,
     text: mod.text || "",
-    // 2026-08-26 用户要求：HTML 追加合并——本地旧 HTML 的文件记录保留（含作者删掉/历史遗留的），
+    // 2026-08-26：HTML 追加合并——本地旧 HTML 的文件记录保留（含作者删掉/历史遗留的），
     //   网上获取的新文件记录追加/更新（不直接覆盖）。这样作者删掉的文件仍有记录可寻回。
     files: (() => {
       const merged = [];
       const seen = new Set();
-      // ① 旧 HTML 记录——2026-08-30 用户要求：只保留「有下载地址记录」的旧文件（url 非空），
+      // ① 旧 HTML 记录——2026-08-30：只保留「有下载地址记录」的旧文件（url 非空），
       //   追加进新 HTML；纯本地已失去记录的旧文件不记录（文件不移动不删除）
       for (const oldF of (existing && existing.files) || []) {
         if (!oldF || !oldF.file || !oldF.url) continue;
@@ -302,7 +302,7 @@ async function genIndexHtml(url) {
 // ---------- 第二步：查重归位 ----------
 // 在整个游戏根目录范围搜索「压缩包名、图片名」；存在于其他文件夹
 // → 直接 mv 该文件夹为计算出的完整下载路径（文件夹内全部文件完整保留），HTML 存入
-// 规则（用户原话）：「找到文件路径不对的已下载文件，正式下载时跳过这些文件」
+// 规则：「找到文件路径不对的已下载文件，正式下载时跳过这些文件」
 // 候选文件夹判定：
 //   · 排除隐藏/.trash/根目录本身
 //   · 排除仓库层目录（名字是已知仓库名：角色/光锥/武器/UI/NPC/Objects/.Mods 等）——不能整体移动仓库
@@ -458,7 +458,7 @@ function moveDirTo(src, dst, trashRoot) {
       // 只剩 HTML 的空壳 → 删除壳
       try { fs.rmSync(path.join(src, "description.html"), { force: true }); fs.rmdirSync(src); } catch (_) {}
     } else {
-      // 2026-08-26 用户要求「移动所有旧目录」：残留（目标已有同名=重复）→ 旧目录整体进游戏根垃圾桶（可恢复）
+      // 2026-08-26「移动所有旧目录」：残留（目标已有同名=重复）→ 旧目录整体进游戏根垃圾桶（可恢复）
       const allDup = rest.every((n) => {
         try { return fs.existsSync(path.join(dst, n)) && fs.statSync(path.join(src, n)).size === fs.statSync(path.join(dst, n)).size; } catch (_) { return false; }
       });
@@ -466,7 +466,7 @@ function moveDirTo(src, dst, trashRoot) {
         const trashDir = trashRoot || path.join(path.dirname(dst), ".trash");
         try {
           fs.mkdirSync(trashDir, { recursive: true });
-          // 2026-08-31 用户要求：垃圾桶保留原始目录结构 —— trashDir/<相对根层级>/<原名>，不拍平
+          // 2026-08-31：垃圾桶保留原始目录结构 —— trashDir/<相对根层级>/<原名>，不拍平
           const tb = path.dirname(trashDir); // trashDir 形如 <根>/.trash → 根
           let t = path.join(trashDir, path.relative(tb, src));
           if (fs.existsSync(t)) t = t + "-" + Date.now();
@@ -505,7 +505,7 @@ async function integrityCheck(finalDir, obj, root) {
 }
 
 // ---------- 第四步：构建下载项（正式下载由消费者执行）----------
-// 2026-09-03 用户原话：「浏览器插件以前可以选择下载内容比如图片，压缩包」
+// 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包」
 // AI 思路：对齐旧扩展 buildModDownloadItems 的 if (settings.toggles.files/images)；
 //   HTML 第一步仍全量记录（查重/反查不丢），这里才按开关决定要不要入队下载。
 //   gif 跟图片走（用户确认）；关掉 images 时预览图和 gif 都不下。
@@ -624,7 +624,7 @@ async function prepareMod(url) {
           // 目标已有同名 → 移到垃圾桶（重复）
           try {
             fs.mkdirSync(trashRoot, { recursive: true });
-            // 2026-08-31 用户要求：垃圾桶保留原始目录结构 —— trashRoot/<仓库相对路径>/<原文件名>
+            // 2026-08-31：垃圾桶保留原始目录结构 —— trashRoot/<仓库相对路径>/<原文件名>
             let tx = path.join(trashRoot, w.relDir || "", e.name);
             if (fs.existsSync(tx)) tx = tx + "-" + Date.now();
             fs.mkdirSync(path.dirname(tx), { recursive: true });
@@ -663,7 +663,7 @@ async function prepareMod(url) {
     writeIndexHtml(finalDir, obj);
   }
 
-  // ---- 2026-08-26 用户要求：垃圾桶找回（压缩包/图片）----
+  // ---- 2026-08-26：垃圾桶找回（压缩包/图片）----
   // 已下载完的 mod 里文件被拿走（比如误进垃圾桶）→ 重新下载时先从垃圾桶找回：
   //   · 压缩包（zip/rar/7z）：垃圾桶里常见「dup-归位-xxx.zip」/「dup-仓库散落-ts-xxx.zip」
   //     前缀名（moveDirTo 归位重复产生的），按**目标文件名**（GB 原名）反查找回，改名移回目标目录
@@ -772,8 +772,8 @@ async function prepareMod(url) {
     console.log("[trash-restore]", (finalDir.split("/Mods/")[1] || finalDir).slice(0, 40), "←", restored.length, "个文件");
   }
 
-  // ---- 2026-08-26 用户要求：下载时自动整理（不在 HTML 文件列表的文件 → 移入垃圾桶）----
-  // 判定（用户原话）：HTML 现在会记住历史文件（legacy 追加合并），真正属于本 mod 的文件
+  // ---- 2026-08-26：下载时自动整理（不在 HTML 文件列表的文件 → 移入垃圾桶）----
+  // 判定：HTML 现在会记住历史文件（legacy 追加合并），真正属于本 mod 的文件
   //   都在列表里；不在列表的 = 错误归类的外部 mod 遗留 → 移入游戏根垃圾桶（.trash）。
   //   移入时保留 GB 原名 → 将来下载其真正所属 mod 时 trash-restore 按原名自动找回归位。
   //   2026-08-26 修复（实测 696913）：必须在 trash-restore 之后执行——否则 auto-organize
@@ -784,7 +784,7 @@ async function prepareMod(url) {
   //   organizeDir 传当前 modId，name-index 反查命中同 modId 的旧版本文件保留（org.kept），
   //   并追加进 HTML files legacy 记录——下次不再被当外部文件清理。
   try {
-    // 2026-08-26 用户要求：垃圾桶保留来源目录结构——传 finalDir 相对游戏根的路径
+    // 2026-08-26：垃圾桶保留来源目录结构——传 finalDir 相对游戏根的路径
     let relDir = "";
     try { relDir = path.relative(target.root, finalDir); } catch (_) {}
     const org = organize.organizeDir(finalDir, trashRoot, mod.modId, relDir);
@@ -822,7 +822,7 @@ async function prepareMod(url) {
   } catch (_) {}
 
   // ---- 第四步：构建下载项（标记已存在）----
-  // 2026-08-30 用户要求：下载时遇到旧 gif 也改名——本地存在旧原名 gif（无后缀）而新
+  // 2026-08-30：下载时遇到旧 gif 也改名——本地存在旧原名 gif（无后缀）而新
   //   localFile 不存在 → rename 原名 → localFile（统一新名，避免重复下载 + 同名覆盖）
   for (const g of obj.gifs || []) {
     if (!g || !g.localFile || g.localFile === g.file) continue;
@@ -839,12 +839,12 @@ async function prepareMod(url) {
       if (!it.path || !fs.existsSync(it.path)) continue;
       const st = fs.statSync(it.path);
       if (st.size <= 0) continue;
-      // 2026-08-30 用户要求：gif 本地文件大小与记录不符 → 重新下（记录同名而本地无后缀也重下）
+      // 2026-08-30：gif 本地文件大小与记录不符 → 重新下（记录同名而本地无后缀也重下）
       if (it.isGif && it.size > 0 && st.size !== it.size) continue;
       exists.add(it.path);
     } catch (_) {}
   }
-  // 2026-08-26 修复（用户要求：文件名一律按 GB 原名）：
+  // 2026-08-26 修复（文件名一律按 GB 原名）：
   //   · 文件/图片按 GB 原名（_sFile 短名）落盘 → 目标路径存在即跳过（不看 hash）
   //   · 图片额外兼容：内容 hash 记录存在且同内容 md5 名文件在 → 也跳过（旧数据迁移场景）
   //   · 仅 part 存在 → 不跳过（断点续传）
@@ -1003,7 +1003,7 @@ async function executeDownloadItem(item, settings, onProgress) {
     return { path: item.path, ok: true, skipped: true, exists: true };
   }
   let lastErr = null;
-  // 2026-08-26 用户要求：自动跳过**仅限 gif**（gif 不强求，失败直接跳过不显示失败）；
+  // 2026-08-26：自动跳过**仅限 gif**（gif 不强求，失败直接跳过不显示失败）；
   //   压缩包/图片失败 → 正常重试并显示失败（可手动重试/跳过）
   const maxAttempt = item.isGif ? 1 : (MAX_RETRY + 1);
   for (let attempt = 0; attempt < maxAttempt; attempt++) {
@@ -1118,7 +1118,7 @@ async function doDownloadLoop() {
         const myIdx = task.buildIndex;
         task.buildIndex++;
         const modRef = task.pendingMods[myIdx];
-        // 2026-08-30 用户要求：准备阶段去重——该 mod 已在下载列表（排队中/已成功/已跳过）→
+        // 2026-08-30：准备阶段去重——该 mod 已在下载列表（排队中/已成功/已跳过）→
         //   不再准备，直接记录去重跳过项（items 计数保持，结果标记 skip 原因）
         if (modInTask(modRef.profileUrl, myIdx)) {
           task.items = task.items || [];
@@ -1154,13 +1154,16 @@ async function doDownloadLoop() {
     };
 
     // ---------- 消费者：并发下载 ----------
+    // 2026-09-06 修复（用户反馈：并发数增加后不立即生效）：
+    //   原设计：消费者数量在任务启动时按初始并发数定死（L1220），中途改 task.concurrency
+    //   只能调小（消费者等 cur 限流），无法调大——因为消费者数量不增加，实际并发上限=初始值。
+    //   现改为：始终启动 MAX_CONCURRENCY(32) 个消费者，每个消费者取项前按「当前并发数」限流。
+    //   调大 → 空闲消费者立即醒来多开（活跃数 < cur 就不等）；调小 → 消费者自动等待。
+    //   开销：32 个 idle setTimeout 轮询 ≈ 28×300ms 循环，CPU 占用 < 0.01% 核。
+    const MAX_CONCURRENCY = 32;
     const consume = async () => {
       while (task && !task.abort && !task.pause) {
-        // 2026-08-26 修复（用户反馈：应用并发数不立即生效）：
-        //   并发数原来在任务开始时定死（消费者数量固定），中途改 task.concurrency 无效。
-        //   现在每个消费者取项前先按「当前并发数」限流——活跃下载数 ≥ 当前并发则等待，
-        //   应用后立即按新并发生效（调大→马上多开；调小→不再开新的，正在下的完成）
-        const cur = Math.max(1, Math.min(32, parseInt(task.concurrency, 10) || 4));
+        const cur = Math.max(1, Math.min(MAX_CONCURRENCY, parseInt(task.concurrency, 10) || 4));
         if ((task.activeItems || []).length >= cur) {
           await new Promise((r) => setTimeout(r, 300));
           continue;
@@ -1216,8 +1219,9 @@ async function doDownloadLoop() {
       }
     };
 
+    // 始终启动 MAX_CONCURRENCY 个消费者，按当前 task.concurrency 限流
     const consumers = [];
-    for (let i = 0; i < Math.max(1, concurrency); i++) consumers.push(consume());
+    for (let i = 0; i < MAX_CONCURRENCY; i++) consumers.push(consume());
     await Promise.all([produce(), ...consumers]);
 
     // ---------- 收尾 ----------
@@ -1283,7 +1287,7 @@ async function finalizeHtmls() {
       let obj = g.obj || readIndexObj(finalDir);
       if (!obj) continue;
       let changed = false;
-      // 2026-08-26 用户要求：HTML 只显示「下载完成的」+「追加旧文件」
+      // 2026-08-26：HTML 只显示「下载完成的」+「追加旧文件」
       //   · 只把本次实际成功下载的文件写进 HTML（失败项不记录，UI 也不显示失败）
       //   · 追加旧文件：GB 页面上没有、但目录里实际存在的旧 mod 压缩包/图片也写进 HTML
       //     （用目标目录磁盘扫描补齐——避免「已下载但不认识」的文件被漏记）
@@ -1330,9 +1334,9 @@ async function finalizeHtmls() {
         }
       } catch (_) {}
       if (md5Reverted > 0) console.log(`[md5-revert] ${finalDir.split("/Mods/")[1] || finalDir} ← 还原 ${md5Reverted} 张 md5 名图片为 GB 原名`);
-      // 2026-08-30 用户要求：整组完成时计算图片/gif md5 重新修改 HTML——对 hash 为空的
+      // 2026-08-30：整组完成时计算图片/gif md5 重新修改 HTML——对 hash 为空的
       //   图片/gif（含已存在/跳过的）补算内容 md5 写回 HTML。
-      // 2026-08-30 用户要求：纯本地已失去记录的旧文件不再「磁盘扫描追加记录」（不移动不删除）
+      // 2026-08-30：纯本地已失去记录的旧文件不再「磁盘扫描追加记录」（不移动不删除）
       let md5Filled = 0;
       for (const im of obj.images || []) {
         if (!im || im.hash) continue;
@@ -1364,7 +1368,7 @@ async function finalizeHtmls() {
 }
 
 // ---------- 对外控制 ----------
-// 2026-08-30 用户要求（简化）：去重不看状态——只要重复的 modId 就跳过。
+// 2026-08-30（简化）：去重不看状态——只要重复的 modId 就跳过。
 // 判定范围：task.pendingMods（排队/已处理）与 task.items（构建过，含成功/失败/跳过/error）中出现过同 modId → 跳过。
 function modInTask(url, excludePendingIdx) {
   if (!task) return false;
@@ -1556,7 +1560,7 @@ function stopTask() {
 function setConcurrency(n) {
   let v = parseInt(n, 10);
   if (isNaN(v) || v < 1) v = 1;
-  // 2026-08-26 用户要求：并发上限 16 → 32（大任务批量下载时可开到 32）
+  // 2026-08-26：并发上限 16 → 32（大任务批量下载时可开到 32）
   if (v > 32) v = 32;
   if (task) {
     task.concurrency = v;
@@ -1586,7 +1590,7 @@ function getRestoreMode() {
   return !!cfg.readConfig().restoreOnly;
 }
 
-// 2026-08-26 用户要求加回：跳过失败项——按 path 或 url 匹配，标记 skipped
+// 2026-08-26 加回：跳过失败项——按 path 或 url 匹配，标记 skipped
 // （前端立即消失；不写 skip-list，下次重新发起下载会再尝试——与旧项目最终行为一致）
 // 2026-08-26 修复（用户反馈跳过/重试不能正常使用）：
 //   · 结果表同时看 resultsByIndex 与 task.resultsMap（重启/重试后 resultsByIndex 可能不全）

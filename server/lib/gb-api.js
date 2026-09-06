@@ -113,7 +113,7 @@ function parseProfile(profile, modId) {
     gifs.push({ url: clean, file: fname });
   }
 
-  // 2026-08-26 用户要求：旧归档版本也要全部下载——GB ProfilePage 的 _aArchivedFiles
+  // 2026-08-26：旧归档版本也要全部下载——GB ProfilePage 的 _aArchivedFiles
   //   记录被替换掉的旧版文件（如 weebovz_..._sfw_7e4c1.rar），下载器一并拉取，
   //   避免用户手里有归档文件却因为「文件名与当前版不同」被跳过/重复下载。
   //   归档文件标记 archived: true（HTML 记录、步骤流程与普通文件一致）。
@@ -318,7 +318,7 @@ async function fetchOnePage(gameId, page, signal) {
   return { records, hasMore: records.length >= PAGE_SIZE };
 }
 
-// ---------- 按角色/分类浏览（2026-08-27 用户要求）----------
+// ---------- 按角色/分类浏览（2026-08-27）----------
 // GB Index API 支持 _aFilters[Generic_Category]=<catId> 过滤（catId 从
 //   _aSubCategory._sProfileUrl 的 /mods/cats/<id> 提取）。关键词搜索只按标题匹配，
 //   角色分类浏览能拉出该角色全部 mod（如 Jane Doe → cat 30580 → 144 个）。
@@ -373,13 +373,13 @@ async function fetchRoleCatIds(gameId) {
   return map;
 }
 
-// ---------- 游戏角色列表（GB 获取，2026-08-26 用户要求）----------
+// ---------- 游戏角色列表（GB 获取，2026-08-26）----------
 // 翻该游戏最新若干页 Mod/Index，收集 _aSubCategory（角色/具体项名，如 Sandrone/Odette）；
 // 合并本地 mapping roles 的英文 key（补全无近期 mod 的角色）。内存缓存 10 分钟。
 const charCache = new Map(); // gameId -> { at, chars: [string] }
 const CHAR_PAGE_CAP = 10; // 最多翻 10 页（500 个最新 mod，足够覆盖近期活跃角色）
 const CHAR_CACHE_MS = 10 * 60 * 1000;
-// 2026-08-27 用户要求：角色列表持久化到 json/role/ 文件夹，每个游戏一个 JSON 文件
+// 2026-08-27：角色列表持久化到 json/role/ 文件夹，每个游戏一个 JSON 文件
 //   （文件名 = 游戏名，如 json/role/Genshin Impact.json / json/role/Zenless Zone Zero.json）。
 //   搜索页/设置页复用，默认读文件（不用每次翻 GB 页），设置页按钮手动刷新（forceRefresh）。
 const CHAR_CACHE_DIR = path.join(__dirname, "..", "..", "json", "role"); //userdata-manifest.json dir json/role .json 角色缓存
@@ -462,7 +462,7 @@ async function fetchGameCharacterList(gameId, gameName, forceRefresh) {
   return list;
 }
 
-// ---------- 游戏信息 + 根分类（仓库）（2026-08-26 用户要求）----------
+// ---------- 游戏信息 + 根分类（仓库）（2026-08-26）----------
 // Game/<id>/ProfilePage 的 _aModRootCategories = 香蕉网根分类（仓库），如 Skins/UI/Objects…
 // 缓存 10 分钟
 const gameInfoCache = new Map(); // gameId -> { at, info }

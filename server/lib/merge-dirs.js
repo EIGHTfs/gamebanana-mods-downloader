@@ -1,6 +1,6 @@
 // ============================================================
-// gbmd-v3 - 文件夹合并（自旧项目保留，用户要求保留的功能）
-// 用户原话：「文件夹合并功能是比如文件夹 Sandrone 根据映射重命名为 Sandrone – 桑多涅」
+// gbmd-v3 - 文件夹合并（自旧项目保留，保留的功能）
+// 「文件夹合并功能是比如文件夹 Sandrone 根据映射重命名为 Sandrone – 桑多涅」
 // 场景：同一角色有两个目录——「Sandrone – 桑多涅」（英文–中文规范）和「Sandrone」（纯英文）
 // 合并规则：
 //   · 纯英文目录名在 mapping roles 里查到中文 → 该目录是角色目录
@@ -29,9 +29,9 @@ function normDirName(name) {
 // 返回 [{ en, zh, cat, canonical, plain: [目录路径] }]
 // ============================================================
 // 重写 findRoleDuplicates（2026-08-31）：支持 variants 变体目录 → 合并到 roles 标准目录
-// 用户原话：「文件夹合并功能有问题，文件夹是变体里的不能合并成按roles」「有 – 分割就是文件夹两边
+// 「文件夹合并功能有问题，文件夹是变体里的不能合并成按roles」「有 – 分割就是文件夹两边
 //   任意一个在变体里就是不符合，没有 – 分割就是文件夹整体要在变体里（一般这种就是纯英文，纯中文情况）」
-// 用户原话：「包括Nekomiya Mana – 猫又·玛娜，我json手动修改成了 "Nekomiya Mana": "猫宫又奈"，
+// 「包括Nekomiya Mana – 猫又·玛娜，我json手动修改成了 "Nekomiya Mana": "猫宫又奈"，
 //   Nekomiya Mana – 猫又·玛娜也会被合并成Nekomiya Mana – 猫宫又奈」
 // 判定规则：
 //   · 目录名有「–」格式：拆 en/zh 两部分；en 命中 roles key 或 variants 英文条目 → 归属该角色；
@@ -43,7 +43,7 @@ function normDirName(name) {
 // 生效范围不变：只扫 root/cat/*（角色分类层直接子目录），不进入 mod 文件夹
 // ============================================================
 // 构建「角色名(标准/变体) → 标准角色 {en, zh}」查找表
-// 用户原话：变体「就是为了让你找到标准roles合并」——表的作用就是把任意变体名映射回标准组合
+// 变体「就是为了让你找到标准roles合并」——表的作用就是把任意变体名映射回标准组合
 function buildRoleLookup(game) {
   const gameMap = cfg.readGameMapping(game) || {};
   const roles = (gameMap.roles) || {};
@@ -87,7 +87,7 @@ function findRoleDuplicates(root, game) {
       if (!role && zhPart) role = byZh.get(norm(zhPart)) || null; // 中文侧兜底
       if (!role && !enPart) role = byEn.get(norm(d.name)) || byZh.get(norm(d.name)) || null; // 无 – 整体查
       if (!role) continue; // 不匹配任何角色 → 跳过（放错位置的 mod 目录不动）
-      // 2026-09-02 用户要求：合并目标目录名必须与下载路径一致（含非法字符清洗）。
+      // 2026-09-02：合并目标目录名必须与下载路径一致（含非法字符清洗）。
       //   canonicalName 用 mapping.itemDirName 生成（内部 applyIllegalChars 清洗，
       //   如 Yangyang: Xuanling → Yangyang：Xuanling – 秧秧·玄翎），不再手动拼 role.en – role.zh
       const canonicalName = mapping.itemDirName(role.en, game);
@@ -192,7 +192,7 @@ function executeMerge(dups, dryRun, root) {
           fs.renameSync(src, dst);
           files++;
         }
-        // 空目录进 .trash（可恢复，不直接删）——2026-08-31 用户要求：垃圾桶保留原始目录结构
+        // 空目录进 .trash（可恢复，不直接删）——2026-08-31：垃圾桶保留原始目录结构
         const rest = fs.readdirSync(plain).filter((n) => n !== "@eaDir");
         if (rest.length === 0) {
           fs.mkdirSync(trashRoot, { recursive: true });
@@ -212,11 +212,11 @@ function executeMerge(dups, dryRun, root) {
 }
 
 // ============================================================
-// 清空空文件夹（2026-08-31 用户要求增加网页手动功能）
-// 用户原话：「设置里面 文件夹合并（按映射重命名角色目录）里面加个手动功能，清空空文件夹
+// 清空空文件夹（2026-08-31增加网页手动功能）
+// 「设置里面 文件夹合并（按映射重命名角色目录）里面加个手动功能，清空空文件夹
 //   （仅含HTML也算），也是选择游戏，要带被清空目录预览」
 // 空壳定义：目录内除 @eaDir（群晖元数据目录）外没有任何条目 = 完全空；
-//   或仅含 .html/.htm 文件（如 description.html）= 仅含HTML空壳（用户：仅含HTML也算）
+//   或仅含 .html/.htm 文件（如 description.html）= 仅含HTML空壳（仅含HTML也算）
 // 安全：不直接删除，一律 rename 进 root/.trash（可恢复，符合 safe-delete-trash 铁律）
 // 递归扫描整个游戏根，跳过 .trash 与 @eaDir；后序遍历（先处理子目录再判断父级）
 function findEmptyDirs(root) {
@@ -234,7 +234,7 @@ function findEmptyDirs(root) {
     // 再判断本目录：除 @eaDir 外无任何条目 = 完全空
     const real = entries.filter((e) => e.name !== "@eaDir");
     if (real.length === 0) { empty.push(dir); return; }
-    // 仅含 HTML 文件（无子目录、无其他文件）= 空壳也算（用户：仅含HTML也算）
+    // 仅含 HTML 文件（无子目录、无其他文件）= 空壳也算（仅含HTML也算）
     const allHTML = real.every((e) => !e.isDirectory() && isHTML(e.name));
     if (allHTML) { empty.push(dir); }
   };
@@ -243,8 +243,8 @@ function findEmptyDirs(root) {
 }
 
 // 执行清空：把空壳目录整体 rename 进「游戏 Mods 根」.trash（可恢复）
-// 2026-08-31 用户要求：清空必须保留文件夹层级——
-//   用户原话：「你清空没有保留文件夹层级，比如.Mods/(gamebanana)/(gamebanana)/NPC/.NPC/
+// 2026-08-31：清空必须保留文件夹层级——
+//   「你清空没有保留文件夹层级，比如.Mods/(gamebanana)/(gamebanana)/NPC/.NPC/
 //     NPC Half Nude - Fontaine Elegant Dress NPC 清到垃圾桶也应该是
 //     .trash/.Mods/(gamebanana)/(gamebanana)/NPC/.NPC/NPC Half Nude - Fontaine Elegant Dress NPC」
 // 实现：trashRoot = 游戏根上级（Mods）/.trash；目标路径 = trashRoot + 相对完整路径

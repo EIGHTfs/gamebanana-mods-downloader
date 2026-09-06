@@ -122,7 +122,7 @@ function switchTab(name) {
 }
 
 // ---------- 批量下载 ----------
-// 2026-09-03 用户原话：「浏览器插件以前可以选择下载内容比如图片，压缩包」
+// 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包」
 // AI 思路：勾选即时写入 /api/settings 的 downloadToggles；搜索「下载勾选项」也走同一份 config，不必每次 POST 再带。
 function currentDownloadToggles() {
   const filesEl = $("#dlToggleFiles");
@@ -276,7 +276,7 @@ function bindSearch() {
     $("#searchStatus").textContent = "列表已清空";
   });
 
-  // 2026-08-26 用户要求：导出/导入搜索记录（备份、迁移、手动恢复）
+  // 2026-08-26：导出/导入搜索记录（备份、迁移、手动恢复）
   $("#exportSearchBtn").addEventListener("click", async () => {
     try {
       const r = await fetch("/api/search/export");
@@ -323,7 +323,7 @@ function bindSearch() {
     }
   });
 
-  // 2026-08-31 用户要求：全选也依据上面搜索功能部分的 普通/NSFW 筛选（只勾选符合筛选的）
+  // 2026-08-31：全选也依据上面搜索功能部分的 普通/NSFW 筛选（只勾选符合筛选的）
   $("#selectAllBtn").addEventListener("click", () => {
     const wantNormal = $("#filterNormal").checked;
     const wantNsfw = $("#filterNsfw").checked;
@@ -337,7 +337,7 @@ function bindSearch() {
     document.querySelectorAll("#searchResultList input[type=checkbox]").forEach((cb) => (cb.checked = false));
   });
 
-  // 2026-08-31 用户要求：保存（搜索结果覆盖写入 search_cache.json）
+  // 2026-08-31：保存（搜索结果覆盖写入 search_cache.json）
   $("#saveSearchBtn").addEventListener("click", async () => {
     try {
       const r = await api("/api/search/save", "POST", { results: searchResults });
@@ -382,7 +382,7 @@ async function keywordSearch() {
       const r = await api("/api/keyword-search?q=" + encodeURIComponent(q) + "&game=" + encodeURIComponent(game) + "&perpage=50&max=100");
       if (!r || !r.ok) throw new Error((r && r.error) || "search failed");
       searchResults = r.results || [];
-      // 2026-08-31 用户要求：关键词搜索也按 普通/NSFW 筛选（与时间搜索共用筛选）
+      // 2026-08-31：关键词搜索也按 普通/NSFW 筛选（与时间搜索共用筛选）
       const wantNormal = $("#filterNormal") ? $("#filterNormal").checked : true;
       const wantNsfw = $("#filterNsfw") ? $("#filterNsfw").checked : true;
       if (!(wantNormal && wantNsfw)) {
@@ -406,7 +406,7 @@ function bindKeywordSearch() {
   $("#kwSearchBtn").addEventListener("click", keywordSearch);
   $("#kwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") keywordSearch(); });
 
-  // ---- 2026-08-27 用户要求：搜索页「选角色」——从香蕉网获取角色列表（同设置页手动添加映射的机制，仓库目录写死"角色"）----
+  // ---- 2026-08-27：搜索页「选角色」——从香蕉网获取角色列表（同设置页手动添加映射的机制，仓库目录写死"角色"）----
   const roleInput = $("#kwRoleInput");
   const roleCombo = $("#kwRoleCombo");
   let kwRoleChars = [];
@@ -542,13 +542,13 @@ function bindProgress() {
     if (r && r.ok) { if (r.message) showFeedback(r.message, "ok"); try { const t = await api("/api/task"); renderTask(t.task); } catch (_) {} }
     else showFeedback((r && r.error) || "重试失败", "err");
   });
-  // 2026-08-26 用户要求加回：一键清除下载失败（失败项标记跳过，前端立即消失）
+  // 2026-08-26 加回：一键清除下载失败（失败项标记跳过，前端立即消失）
   $("#clearFailBtn").addEventListener("click", async () => {
     const r = await api("/api/skip-all-failed", "POST", {});
     if (r && r.ok) { if (r.skipped > 0 && r.message) showFeedback(r.message, "ok"); try { const t = await api("/api/task"); renderTask(t.task); } catch (_) {} }
     else showFeedback((r && r.error) || "清除失败失败", "err");
   });
-  // 2026-08-26 用户要求加回：失败行 🔄重试 / 🚫跳过 按钮（事件委托）
+  // 2026-08-26 加回：失败行 🔄重试 / 🚫跳过 按钮（事件委托）
   document.addEventListener("click", async (ev) => {
     // 2026-09-02 新增：错误文本点击复制（.mm-err-copy）
     const errCopy = ev.target.closest(".mm-err-copy");
@@ -818,7 +818,7 @@ function renderTask(task) {
   (task.activeItems || []).forEach((a) => {
     if (a && a.idx != null) activeMap[a.idx] = { received: a.received || 0, total: a.total || 0, speed: a.speed || 0 };
   });
-  // 2026-08-26 用户要求：每组 mod 一组出现在下载列表，整组下载完才从任务列表移除；
+  // 2026-08-26：每组 mod 一组出现在下载列表，整组下载完才从任务列表移除；
   //   组内还有未处理(下载中/准备) → 整组显示全部行（各带状态）；
   //   全部处理完但含失败 → 只留失败行（可 🔄重试 / 🚫跳过）；
   //   全成功/全跳过 → 整组移除不再显示
@@ -841,11 +841,11 @@ function renderTask(task) {
         else if (r.ok) { cls = "ok"; icon = "✓"; statusText = "成功"; }
         else { cls = "fail"; icon = "✗"; statusText = r.error || "失败"; }
       }
-      // 2026-09-02 用户要求：忽略/跳过原因（如「游戏未配置下载路径」）显示在 UI 上
+      // 2026-09-02：忽略/跳过原因（如「游戏未配置下载路径」）显示在 UI 上
       if (item.skipReason) statusText += `（${item.skipReason}）`;
       // 2026-09-02 错误项（构建失败，无 path）原因也显示
       else if (item.buildError) statusText += `（${item.buildError}）`;
-      // 2026-08-26 用户要求加回：失败行 🔄重试 / 🚫跳过 按钮；
+      // 2026-08-26 加回：失败行 🔄重试 / 🚫跳过 按钮；
       //   2026-08-26 修复：卡住行（无结果且任务非运行中）也显示按钮（重试/跳过后才能处理它）
       //   2026-09-02 新增：type=error 且 path="" 的错误项（构建失败，只有 mod url）
       //     ——无法重试（无文件可下），但可清除（标记跳过）；显示「🚫 清除」
@@ -858,7 +858,7 @@ function renderTask(task) {
         // 无 path 的错误项：无文件可重试，只提供清除（标记跳过，避免反复显示错误）
         actBtns = ` <button class="mm-skip-btn" data-url="${esc(item.url || "")}" data-path="" title="清除此错误（下次请求可再尝试此 mod）">🚫 清除</button>`;
       }
-      // 2026-08-26 用户要求：跳过的图片也显示预览图（已存在/已下载的图片项都显示缩略图）
+      // 2026-08-26：跳过的图片也显示预览图（已存在/已下载的图片项都显示缩略图）
       const hasFile = r && (r.ok || (r.skipped && r.exists)) && item.path;
       const isImgOk = item.type === "image" && !item.isGif && hasFile;
       const thumb = isImgOk ? `<img class="row-thumb" src="/api/image?path=${encodeURIComponent(item.path)}" loading="lazy" alt="${esc(item.displayName || "")}">` : "";
@@ -890,7 +890,7 @@ function renderTask(task) {
   $("#taskList").innerHTML = html || '<div class="empty">暂无任务</div>';
 }
 
-// ---------- 主题切换（2026-08-26 用户要求：蓝白=白天模式，香蕉风深色=夜间模式）----------
+// ---------- 主题切换（2026-08-26：蓝白=白天模式，香蕉风深色=夜间模式）----------
 function bindTheme() {
   const btn = $("#themeBtn");
   const apply = () => {
@@ -925,7 +925,7 @@ function makeRootRow(name, entry) {
 }
 
 // ---------- 目录选择弹窗：统一由 path-picker.js 小模块提供（PathPicker.attach / bindEvents）----------
-// 任何「下载路径」输入框一行接入：PathPicker.attach(inputEl)。历史函数 openBrowse/loadBrowse/bindBrowse 已移除（2026-09-02 用户要求封装小模块复用）。
+// 任何「下载路径」输入框一行接入：PathPicker.attach(inputEl)。历史函数 openBrowse/loadBrowse/bindBrowse 已移除（2026-09-02封装小模块复用）。
 
 function renderGamesRows() {
   const wrap = $("#rootMapRows");
@@ -961,7 +961,7 @@ function bindSettings() {
     }
   });
 
-  // 2026-08-26 用户要求：输入香蕉网 id 添加游戏，游戏名自动获取
+  // 2026-08-26：输入香蕉网 id 添加游戏，游戏名自动获取
   $("#fetchGameBtn").addEventListener("click", async () => {
     const id = parseInt($("#addGameId").value, 10);
     const st = $("#addGameStatus");
@@ -1000,10 +1000,10 @@ function bindSettings() {
     }
   });
 
-  // 2026-09-01 用户要求：保存设置改悬浮按钮（右下角 💾，仅设置页显示）
+  // 2026-09-01：保存设置改悬浮按钮（右下角 💾，仅设置页显示）
   const saveFab = $("#saveSettingsFab");
   if (saveFab) saveFab.addEventListener("click", async () => {
-    // 2026-08-26 用户要求：设置里不要并发数（只在「下载进度」页改并发）——payload 只存 gbCookie
+    // 2026-08-26：设置里不要并发数（只在「下载进度」页改并发）——payload 只存 gbCookie
     const payload = {
       gbCookie: $("#gbCookie").value.trim()
     };
@@ -1018,7 +1018,7 @@ function bindSettings() {
         cookieEl.placeholder = "已保存（再贴新凭证才会覆盖；留空不改）";
         cookieEl.dataset.filled = "1";
       }
-      // 2026-09-01 用户要求：保存反馈改悬浮窗，不再用页面内嵌状态行
+      // 2026-09-01：保存反馈改悬浮窗，不再用页面内嵌状态行
       showToast("✅ 已保存设置", "ok");
       updateGbUserBadge(); // 保存后顶部用户名即时刷新
     } catch (e) {
@@ -1026,7 +1026,7 @@ function bindSettings() {
     }
   });
 
-  // 2026-09-02 用户要求（#17）：默认下载位置保存（写入 config.json defaultDownloadPath）
+  // 2026-09-02（#17）：默认下载位置保存（写入 config.json defaultDownloadPath）
   const saveDefPathBtn = $("#saveDefaultPathBtn");
   if (saveDefPathBtn) saveDefPathBtn.addEventListener("click", async () => {
     const st = $("#defaultPathStatus");
@@ -1041,15 +1041,15 @@ function bindSettings() {
     }
   });
 
-  // 2026-09-02 用户要求（#16-A）：未完成任务扫描（.part 残留 / html 记录文件缺失）
-  // 2026-09-02 用户要求（#16）：未完成任务扫描 = 重建索引的顺带开关（并入 HTML 反查卡片），
+  // 2026-09-02（#16-A）：未完成任务扫描（.part 残留 / html 记录文件缺失）
+  // 2026-09-02（#16）：未完成任务扫描 = 重建索引的顺带开关（并入 HTML 反查卡片），
   //   不再独立卡片。重建完成后勾选时自动扫描 .part 残留 / html 记录文件本地缺失 → 任务 json。
   let lastScanTaskJson = null;
   async function runScanIncomplete() {
     const st = $("#scanIncompleteStatus");
     const out = $("#scanIncompleteResult");
     if (!st || !out) return;
-    // 2026-09-02 用户要求：导出/加入按钮固定放卡片里，未扫描出结果前禁用
+    // 2026-09-02：导出/加入按钮固定放卡片里，未扫描出结果前禁用
     const dlBtn = $("#scanIncompleteDlBtn");
     const exBtn = $("#scanIncompleteExportBtn");
     if (dlBtn) dlBtn.disabled = true;
@@ -1103,7 +1103,7 @@ function bindSettings() {
     downloadJsonFile(lastScanTaskJson, `未完成任务-${new Date().toISOString().slice(0, 10)}.json`);
   });
 
-  // 2026-09-02 用户要求（#16-B）：下载任务 json 导出 / 导入
+  // 2026-09-02（#16-B）：下载任务 json 导出 / 导入
   const taskExportBtn = $("#taskExportBtn");
   if (taskExportBtn) taskExportBtn.addEventListener("click", async () => {
     const st = $("#taskJsonStatus");
@@ -1160,7 +1160,7 @@ function bindSettings() {
     }
   });
 
-  // ---- 数据备份/恢复（2026-08-31 用户要求：zip 导出/导入全部用户数据）----
+  // ---- 数据备份/恢复（2026-08-31：zip 导出/导入全部用户数据）----
   $("#exportDataBtn").addEventListener("click", async () => {
     const st = $("#dataStatus");
     st.textContent = "正在导出…";
@@ -1291,7 +1291,7 @@ function bindSettings() {
           ? `✅ 「${game}」索引已重建：GB 表 ${gInfo ? gInfo.gb : "?"} 条，本地表 ${gInfo ? gInfo.local : "?"} 条`
           : "✅ 索引已重建：GB 表 " + (s ? s.gb : "?") + " 条，本地表 " + (s ? s.local : "?") + " 条（" + (s ? s.htmls : "?") + " 个 HTML）";
         st.className = "status ok";
-        // 2026-09-02 用户要求（#16）：重建索引顺带开关——勾选则重建后自动扫描未完成任务
+        // 2026-09-02（#16）：重建索引顺带开关——勾选则重建后自动扫描未完成任务
         if (doScan) { try { await runScanIncomplete(); } catch (_) {} }
       };
       setTimeout(poll, 1200);
@@ -1313,7 +1313,7 @@ function bindSettings() {
     }
   }).catch(() => {});
 
-  // ---- GB 表模糊搜索（2026-08-26 用户要求：离线 mod 目录，按 mod 名/作者查）----
+  // ---- GB 表模糊搜索（2026-08-26：离线 mod 目录，按 mod 名/作者查）----
   async function hashSearch() {
     const q = String($("#hashSearchInput").value || "").trim();
     const st = $("#hashSearchStatus"), res = $("#hashSearchResult");
@@ -1420,7 +1420,7 @@ async function checkGbLoginStatus() {
   }
 }
 
-// 2026-09-01 用户要求：顶部时间前面显示当前登录的用户名（复用 /api/gb-login-status 的 username）
+// 2026-09-01：顶部时间前面显示当前登录的用户名（复用 /api/gb-login-status 的 username）
 // 2026-09-01 参照 iwara updateIwaraUserBadge：r 可传入复用（检测按钮点完直接刷新），否则自取
 async function updateGbUserBadge(r) {
   const el = $("#gbUserBadge");
@@ -1464,7 +1464,7 @@ async function loadSettings() {
     if (defPathEl && settings.defaultDownloadPath) defPathEl.value = settings.defaultDownloadPath || "";
     // 2026-09-02 默认下载位置同样挂目录选择（path-picker.js 小模块一行接入，幂等）
     if (defPathEl && window.PathPicker) PathPicker.attach(defPathEl);
-    // 2026-08-26 用户要求：设置里不要并发数（只在「下载进度」页改）——不再回填 dlConcurrency
+    // 2026-08-26：设置里不要并发数（只在「下载进度」页改）——不再回填 dlConcurrency
     // 2026-09-01 后端脱敏：不回传 gbCookie 明文，改用 hasGbCookie 提示 + dataset.filled 只填一次
     const cookieEl = $("#gbCookie");
     if (cookieEl && cookieEl.dataset.filled !== "1" && !cookieEl.value.trim()) {
@@ -1520,7 +1520,7 @@ async function mergeRolesRun() {
   mergePlan = [];
 }
 
-// ---------- 清空空文件夹（2026-08-31 用户要求：空壳/仅含HTML也算，选游戏，带被清目录预览）----------
+// ---------- 清空空文件夹（2026-08-31：空壳/仅含HTML也算，选游戏，带被清目录预览）----------
 let emptyPlan = [];
 async function emptyDirsPreview() {
   const game = $("#mmEmptyGame").value;
@@ -1560,12 +1560,12 @@ function bindMerge() {
   $("#mmMergeBtn").addEventListener("click", mergeRolesPreview);
   $("#mmMergeGoBtn").addEventListener("click", mergeRolesRun);
 
-  // ---- 2026-08-31 用户要求：清空空文件夹（空壳/仅含HTML也算，选游戏，带预览）----
+  // ---- 2026-08-31：清空空文件夹（空壳/仅含HTML也算，选游戏，带预览）----
   $("#mmEmptyBtn").addEventListener("click", emptyDirsPreview);
   $("#mmEmptyGoBtn").addEventListener("click", emptyDirsRun);
 
-  // ---- 2026-08-26 用户要求：手动添加映射（选游戏/仓库 → 从香蕉网获取角色列表 → 写入 mapping JSON）----
-  // 级联（2026-08-26 用户要求）：先选游戏 → 才能选仓库；先选仓库 → 才能选角色（英文名）
+  // ---- 2026-08-26：手动添加映射（选游戏/仓库 → 从香蕉网获取角色列表 → 写入 mapping JSON）----
+  // 级联（2026-08-26）：先选游戏 → 才能选仓库；先选仓库 → 才能选角色（英文名）
   $("#mmAddGame").addEventListener("change", async () => {
     const game = $("#mmAddGame").value;
     const wh = $("#mmAddWarehouse");
@@ -1623,7 +1623,7 @@ function bindMerge() {
       }
     }
   }
-  // 2026-08-27 用户要求：设置页「重新获取角色」按钮——强制从香蕉网拉取并保存 JSON
+  // 2026-08-27：设置页「重新获取角色」按钮——强制从香蕉网拉取并保存 JSON
   $("#mmRefreshChars").addEventListener("click", () => {
     if (!$("#mmAddGame").value) { const st = $("#mmAddStatus"); if (st) setStatus(st, "请先选择游戏", "err"); return; }
     loadGbCharacters(true);
@@ -1696,7 +1696,7 @@ function bindLogout() {
 async function init() {
   try {
     const st = await api("/api/status");
-    // 2026-08-26 用户要求：未设置密码 → 不强制跳 setup，直接可用（页面顶部警告）
+    // 2026-08-26：未设置密码 → 不强制跳 setup，直接可用（页面顶部警告）
     if (st.needsSetup) {
       const w = $("#noPwdWarn");
       if (w) w.style.display = "block";
@@ -1733,7 +1733,7 @@ async function init() {
   await loadSettings();
   updateGbUserBadge(); // 2026-09-01 顶部显示当前登录用户名（时间前）
   try {
-    // 2026-08-26 恢复显示最近一次搜索结果（用户要求：重启后恢复显示，不被覆盖）
+    // 2026-08-26 恢复显示最近一次搜索结果（重启后恢复显示，不被覆盖）
     const c = await api("/api/search/cache");
     if (c.cache && c.cache.results && c.cache.results.length) {
       searchResults = c.cache.results;

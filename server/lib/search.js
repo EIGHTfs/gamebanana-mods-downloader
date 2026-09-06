@@ -189,13 +189,13 @@ function stopSearch() {
   return { ok: true };
 }
 
-// 2026-08-26 用户要求：导出搜索记录（配合手动导入，备份/迁移用）
+// 2026-08-26：导出搜索记录（配合手动导入，备份/迁移用）
 // 返回完整 cache：{ results, startDate, endDate, contentFilter, queryTime, importedAt }
 function exportCache() {
   return getCache() || { results: [], startDate: "", endDate: "", contentFilter: ["normal", "nsfw"], queryTime: 0 };
 }
 
-// 2026-08-26 用户要求：手动导入搜索记录（上传 JSON 文件）
+// 2026-08-26：手动导入搜索记录（上传 JSON 文件）
 // 合并进 search_cache.json：按 modId 去重，**导入的覆盖原有的**（同名 modId 用导入数据替换），
 // 新 modId 追加。保存后刷新页面/恢复显示时会展示合并后的记录，不被后续新搜索覆盖。
 function importCache(records) {
@@ -248,8 +248,8 @@ function clearCache() {
   return { ok: true };
 }
 
-// 2026-08-31 用户要求：保存搜索结果（覆盖写入 search_cache.json）
-//   保存功能作用（用户原话）：「搜索结果覆盖写入 search_cache.json」
+// 2026-08-31：保存搜索结果（覆盖写入 search_cache.json）
+//   保存功能作用：「搜索结果覆盖写入 search_cache.json」
 function saveRecords(results) {
   const list = Array.isArray(results) ? results : [];
   // 规范化关键字段（与 importCache 一致），保证后续恢复显示/下载可用

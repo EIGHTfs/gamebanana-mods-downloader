@@ -49,7 +49,7 @@ if (!gameArg) {
 const normEn = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const normZh = (s) => String(s || "").replace(/[\s·・]/g, "");
 
-// ---------- 非法字符映射（2026-09-02 用户要求：生成脚本处理映射文件里的非法字符）----------
+// ---------- 非法字符映射（2026-09-02：生成脚本处理映射文件里的非法字符）----------
 // 读取全局 mapping/illegalChars.json；key=非法字符 → value=合规字符。
 // 用途：
 //   1) 官方英文名含非法字符（如半角冒号 Yangyang: Xuanling）→ 自动补清洗后的全角变体进 variants，
@@ -155,7 +155,7 @@ if (scanRoot && !fs.existsSync(scanRoot)) {
 // 匹配：`<英文> – <中文>`（GB 规范目录名 = itemDirName 输出格式）
 const dirHits = new Map(); // 规范英文 → 目录反查中文（首个命中）
 let scannedDirs = 0;
-// 2026-09-02 用户要求：只扫 2 层——仓库层（角色/武器/敌人…）一遍 + 里面角色目录一遍，
+// 2026-09-02：只扫 2 层——仓库层（角色/武器/敌人…）一遍 + 里面角色目录一遍，
 //   不要深挖整个目录树（原来扫 6 层会把 4k~5k 个目录都扫一遍，慢且没必要）。
 //   角色目录就在 根目录/仓库层/角色目录 这层，更深的全是 mod 内容目录，反查无意义。
 // depth 语义：scanDirs(root, 0) 扫 root 子项=仓库层；depth=1 扫仓库层子项=角色目录；
@@ -248,7 +248,7 @@ for (const en of official) {
   variants[zh].add(zh);
   variants[zh].add(en);
 
-  // ③ 官方英文名含非法字符（半角冒号等）→ 补清洗后的全角变体（2026-09-02 用户要求）
+  // ③ 官方英文名含非法字符（半角冒号等）→ 补清洗后的全角变体（2026-09-02）
   const cleaned = cleanedVariantOf(en);
   if (cleaned) variants[zh].add(cleaned);
 

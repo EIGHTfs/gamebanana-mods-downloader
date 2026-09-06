@@ -1,6 +1,6 @@
 // ============================================================
-// GameBanana Mod Downloader - 自动整理（2026-08-26 用户要求）
-//   判定规则（用户原话）：扫描 mod 目录，不在 HTML 文件列表（files/images/gifs 文件名）
+// GameBanana Mod Downloader - 自动整理（2026-08-26）
+//   判定规则：扫描 mod 目录，不在 HTML 文件列表（files/images/gifs 文件名）
 //   里的文件 = 错误归类的外部 mod 遗留 → 移入游戏根垃圾桶（<根>/.trash）。
 //   HTML 现在会 append-merge 记住历史文件（legacy），真正属于本 mod 的文件都在列表里，
 //   所以误杀率很低（仅很久以前无 HTML 记录的老 mod 文件可能误移，且垃圾桶可找回）。
@@ -16,7 +16,7 @@
 //       差异）或别 mod 文件（其所属 mod 下载时自会处理），误清损失大
 //     · 仅图片类（jpg/png/gif/webp 等）不在列表且反查不到（或属别 mod）→ 移入垃圾桶
 //       （md5 名图、image_001.jpg 序列名图等历史遗留，体积小且垃圾桶可找回）
-//   2026-08-26 用户要求（完善）：空文件夹处理——完全空目录 / 仅含 description.html
+//   2026-08-26（完善）：空文件夹处理——完全空目录 / 仅含 description.html
 //     的目录（文件被移走/下载失败/解包残留的空壳）→ 整个移入垃圾桶（可恢复，不直接删）。
 //     由 rebuild 全库扫描时清理（cleanEmptyDirs）；仓库层目录（角色/代理人/UI 等）受保护。
 //   零依赖（fs/path），供 downloader.js / hash-index.js 复用。
@@ -88,7 +88,7 @@ function isShellDir(dir) {
 }
 
 // 扫描 root 全树，把空壳目录（完全空）移入 trashDir，**保留原相对路径结构**
-//   （用户要求：清理进垃圾桶保留原目录结构——trashDir/<相对路径>，可恢复、可追溯）
+//   （清理进垃圾桶保留原目录结构——trashDir/<相对路径>，可恢复、可追溯）
 // 自底向上（先清深层，避免父目录因子目录存在不判定为空）；仓库层受保护
 // 返回 { moved: [relPath...] }
 function cleanEmptyDirs(root, trashDir) {
@@ -123,7 +123,7 @@ function cleanEmptyDirs(root, trashDir) {
 // 扫描 modDir：不在 HTML 文件列表里的文件 → 移入 trashDir（保留原名，同名冲突加前缀）
 // modId 参数：当前 mod 的 modId；反查命中同 modId 的文件视为旧版本，保留（返回 kept）
 // relDir 参数（可选）：modDir 相对游戏根的路径，移入垃圾桶时镜像到 trashDir/<relDir>/<文件名>，
-//   保留来源目录结构（2026-08-26 用户要求，吸取教训：平铺丢层级难还原）
+//   保留来源目录结构（2026-08-26，吸取教训：平铺丢层级难还原）
 // 返回 { moved: [文件名], kept: [文件名], skipped: bool, reason: string }
 function organizeDir(modDir, trashDir, modId, relDir) {
   const obj = readIndexObj(modDir);
@@ -172,7 +172,7 @@ function organizeDir(modDir, trashDir, modId, relDir) {
     // ③ 仅图片类（jpg/png/gif/webp 等）不在列表 → 移入垃圾桶（md5 名图、序列名图、
     //    别 mod 预览图等历史遗留；保留原名供 trash-restore 找回）
     const src = path.join(modDir, name);
-    // 2026-08-26 用户要求：垃圾桶保留来源目录结构（trashDir/<relDir>/<文件名>）
+    // 2026-08-26：垃圾桶保留来源目录结构（trashDir/<relDir>/<文件名>）
     const baseTrashDir = relDir ? path.join(trashDir, relDir) : trashDir;
     let dst = path.join(baseTrashDir, name);
     if (fs.existsSync(dst)) dst = path.join(baseTrashDir, `auto-整理-${Date.now()}-${name}`);
