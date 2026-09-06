@@ -1682,6 +1682,65 @@ function bindMerge() {
       if (st) setStatus(st, "添加失败: " + e.message, "err");
     }
   });
+
+  // ---- 自动更新（2026-09-06：服务端代码自动更新 + 优雅重启）----
+  // 加载当前配置
+  async function loadAutoUpdateStatus() {
+    try {
+      const r = await api("/api/auto-update/status");
+      if (!r.ok) return;
+      const c = r.config || {};
+      const s = r.status || {};
+      $("#autoUpdateToggle").checked = !!c.enabled;
+      $("#autoUpdateMode").value = c.mode || "watch";
+      $("#autoUpdateInterval").value = c.interval || 300;
+      $("#autoUpdateIntervalRow").style.display = (c.mode === "git") ? "flex" : "none";
+      if (s.enabled) {
+        setStatus($("#autoUpdateInfo"), `✅ 监控中（mode=${s.mode}${s.mode === "git" ? ", 定时 pull" : ", 文件监控"}）`, "ok");
+      } else {
+        setStatus($("#autoUpdateInfo"), "⏸ 未启用", "");
+      }
+    } catch (_) {}
+  }
+  loadAutoUpdateStatus();
+
+  // 模式切换时显示/隐藏间隔输入框
+  $("#autoUpdateMode").addEventListener("change", () => {
+    const isGit = $("#autoUpdateMode").value === "git";
+    $("#autoUpdateIntervalRow").style.display = isGit ? "flex" : "none";
+  });
+
+  // 保存自动更新配置
+  $("#autoUpdateSaveBtn").addEventListener("click", async () => {
+    const st = $("#autoUpdateStatus");
+    const enabled = $("#autoUpdateToggle").checked;
+    const mode = $("#autoUpdateMode").value;
+    const interval = parseInt($("#autoUpdateInterval").value, 10) || 300;
+    try {
+      const r = await api("/api/auto-update/config", "POST", { enabled, mode, interval });
+      if (!r.ok) throw new Error(r.error || "保存失败");
+      setStatus(st, "✅ 已保存" + (enabled ? "，监控已启动" : "，监控已停止"), "ok");
+      loadAutoUpdateStatus();
+    } catch (e) {
+      setStatus(st, "保存失败: " + e.message, "err");
+    }
+  });
+
+  // 手动重启
+  $("#autoUpdateRestartBtn").addEventListener("click", async () => {
+    const st = $("#autoUpdateStatus");
+    if (!confirm("确认立即重启服务端？当前下载任务将暂停，重启后自动恢复。")) return;
+    try {
+      const r = await api("/api/auto-update/restart", "POST");
+      if (!r.ok) throw new Error(r.error || "重启失败");
+      setStatus(st, "🔄 2 秒后重启...", "ok");
+      setTimeout(() => {
+        setStatus($("#autoUpdateInfo"), "⏳ 服务端重启中...", "");
+      }, 1500);
+    } catch (e) {
+      setStatus(st, "重启失败: " + e.message, "err");
+    }
+  });
 }
 
 // ---------- 退出 ----------
