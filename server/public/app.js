@@ -1694,9 +1694,15 @@ function bindMerge() {
       $("#autoUpdateToggle").checked = !!c.enabled;
       $("#autoUpdateMode").value = c.mode || "watch";
       $("#autoUpdateInterval").value = c.interval || 300;
-      $("#autoUpdateIntervalRow").style.display = (c.mode === "git") ? "flex" : "none";
+      $("#autoUpdateRepo").value = c.githubRepo || "";
+      $("#autoUpdateBranch").value = c.githubBranch || "";
+      $("#autoUpdateToken").value = c.githubToken || "";
+      const isPull = (c.mode === "git" || c.mode === "github");
+      $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
+      $("#autoUpdateRepoRow").style.display = (c.mode === "github") ? "flex" : "none";
       if (s.enabled) {
-        setStatus($("#autoUpdateInfo"), `✅ 监控中（mode=${s.mode}${s.mode === "git" ? ", 定时 pull" : ", 文件监控"}）`, "ok");
+        const modeText = { watch: "文件监控", git: "定时 git pull", github: `GitHub 拉取${s.lastSha ? "（当前 " + s.lastSha.slice(0, 8) + "）" : ""}` };
+        setStatus($("#autoUpdateInfo"), `✅ 监控中（mode=${s.mode}, ${modeText[s.mode] || s.mode}）`, "ok");
       } else {
         setStatus($("#autoUpdateInfo"), "⏸ 未启用", "");
       }
@@ -1706,8 +1712,10 @@ function bindMerge() {
 
   // 模式切换时显示/隐藏间隔输入框
   $("#autoUpdateMode").addEventListener("change", () => {
-    const isGit = $("#autoUpdateMode").value === "git";
-    $("#autoUpdateIntervalRow").style.display = isGit ? "flex" : "none";
+    const mode = $("#autoUpdateMode").value;
+    const isPull = (mode === "git" || mode === "github");
+    $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
+    $("#autoUpdateRepoRow").style.display = (mode === "github") ? "flex" : "none";
   });
 
   // 保存自动更新配置
@@ -1716,13 +1724,32 @@ function bindMerge() {
     const enabled = $("#autoUpdateToggle").checked;
     const mode = $("#autoUpdateMode").value;
     const interval = parseInt($("#autoUpdateInterval").value, 10) || 300;
+    const payload = { enabled, mode, interval };
+    if (mode === "github") {
+      payload.githubRepo = $("#autoUpdateRepo").value.trim() || undefined;
+      payload.githubBranch = $("#autoUpdateBranch").value.trim() || undefined;
+      payload.githubToken = $("#autoUpdateToken").value.trim() || undefined;
+    }
     try {
-      const r = await api("/api/auto-update/config", "POST", { enabled, mode, interval });
+      const r = await api("/api/auto-update/config", "POST", payload);
       if (!r.ok) throw new Error(r.error || "保存失败");
       setStatus(st, "✅ 已保存" + (enabled ? "，监控已启动" : "，监控已停止"), "ok");
       loadAutoUpdateStatus();
     } catch (e) {
       setStatus(st, "保存失败: " + e.message, "err");
+    }
+  });
+
+  // 手动触发 github 检查
+  $("#autoUpdateCheckBtn").addEventListener("click", async () => {
+    const st = $("#autoUpdateStatus");
+    try {
+      const r = await api("/api/auto-update/check", "POST");
+      if (!r.ok) throw new Error(r.error || "检查失败");
+      setStatus(st, "🔍 已触发检查，稍后查看下方状态", "ok");
+      setTimeout(loadAutoUpdateStatus, 3000);
+    } catch (e) {
+      setStatus(st, "检查失败: " + e.message, "err");
     }
   });
 
