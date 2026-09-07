@@ -55,15 +55,25 @@ module.exports = function register(api) {
   });
 
   // POST /api/auto-update/check
-  // 手动触发一次 github 模式检查（不等定时轮询）
+  // 手动触发一次 github 模式检查（不等定时轮询），等待完成后返回检查结果
   route("POST", "/api/auto-update/check", async (req, res) => {
     const cfgNow = cfg.readConfig();
     const au = cfgNow.autoUpdate || {};
     if (!au.enabled || au.mode !== "github") {
       return sendJson(res, 400, { ok: false, error: "仅 github 模式支持手动检查" });
     }
+    const before = autoUpdate.getStatus().lastCheck || null;
     autoUpdate.checkGitHubUpdate(au);
-    return sendJson(res, 200, { ok: true, message: "已触发检查，请稍后查看状态/日志" });
+    // 轮询等待检查完成（网络/下载/应用最长约 10 秒），完成后把结果回给前端
+    let result = null;
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      const now = autoUpdate.getStatus().lastCheck || null;
+      if (now && now !== before && now.time !== (before && before.time)) { result = now; break; }
+      // 若进程已重启（lastCheck 内存态清空），退出等待
+      if (autoUpdate.getStatus().restarting && now === null) break;
+    }
+    return sendJson(res, 200, { ok: true, check: result });
   });
 
   // POST /api/auto-update/restart

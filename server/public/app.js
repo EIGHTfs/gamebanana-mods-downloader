@@ -1744,14 +1744,24 @@ function bindMerge() {
     }
   });
 
-  // 手动触发 github 检查
+  // 手动触发 github 检查（后端等待检查完成，直接返回结果）
   $("#autoUpdateCheckBtn").addEventListener("click", async () => {
     const st = $("#autoUpdateStatus");
+    setStatus(st, "🔍 检查中...", "");
     try {
       const r = await api("/api/auto-update/check", "POST");
       if (!r.ok) throw new Error(r.error || "检查失败");
-      setStatus(st, "🔍 已触发检查，稍后查看下方状态", "ok");
-      setTimeout(loadAutoUpdateStatus, 3000);
+      const c = r.check || null;
+      if (c && c.result === "latest") {
+        setStatus(st, "✅ " + c.message, "ok");
+      } else if (c && c.result === "updated") {
+        setStatus(st, "🔄 " + c.message, "ok");
+      } else if (c && c.result === "error") {
+        setStatus(st, "❌ " + c.message, "err");
+      } else {
+        setStatus(st, "🔍 已触发检查（进程可能已重启，请刷新页面查看）", "");
+      }
+      setTimeout(loadAutoUpdateStatus, 1500);
     } catch (e) {
       setStatus(st, "检查失败: " + e.message, "err");
     }

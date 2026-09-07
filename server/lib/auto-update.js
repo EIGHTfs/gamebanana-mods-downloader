@@ -63,6 +63,8 @@ let githubInterval = null;
 let restarting = false;
 let _onRestart = null;
 let _onStatus = null;
+// github 模式最近一次检查结果（内存态，供 /api/auto-update/check 与前端展示）
+let lastCheck = null;
 
 /** 启动监控 */
 function start(cfg, onRestart, onStatus) {
@@ -163,16 +165,23 @@ function startGitHubWatch(cfg) {
   githubInterval = setInterval(doCheck, intervalSec * 1000);
 }
 
-/** 检查一次 GitHub 更新（可被 /api/auto-update/check 手动触发） */
+/** 检查一次 GitHub 更新（可被 /api/auto-update/check 手动触发，结果记录到 lastCheck） */
 function checkGitHubUpdate(cfg) {
-  if (restarting) return;
+  if (restarting) {
+    _log("github 检查跳过：正在重启中");
+    lastCheck = { time: Date.now(), result: "skip", message: "正在重启中，跳过检查" };
+    return;
+  }
   const repo = (cfg && cfg.githubRepo) || DEFAULT_REPO;
   const branch = (cfg && cfg.githubBranch) || DEFAULT_BRANCH;
   const token = (cfg && cfg.githubToken) || "";
   _log(`github 模式检查更新: ${repo}@${branch}`);
   const state = readState();
   getGitHubLatest(repo, branch, token).then((latest) => {
-    if (!latest || !latest.sha) return;
+    if (!latest || !latest.sha) {
+      lastCheck = { time: Date.now(), result: "error", message: "查询 GitHub 失败（无返回）" };
+      return;
+    }
     const newSha = latest.sha;
     const newDate = latest.committedAt || "";
     // 判新：优先按提交时间比较（直观、不怕分叉/远端回退——时间更早或相同不拉取）；
@@ -184,7 +193,9 @@ function checkGitHubUpdate(cfg) {
       isNew = state.lastSha !== newSha;
     }
     if (!isNew) {
+      const msg = `已是最新（本地 ${fmtVersion(state)} vs 远端 ${newSha.slice(0, 8)} ${fmtDateCn(newDate)}，北京时间）`;
       _log(`github 无新版本（本地 ${fmtVersion(state)} vs 远端 ${newSha.slice(0, 8)}${newDate ? " " + fmtDateCn(newDate) : ""}，北京时间）`);
+      lastCheck = { time: Date.now(), result: "latest", message: msg, latestSha: newSha, latestCommitDate: newDate };
       // 兼容升级：旧状态只有 lastSha 无 lastCommitDate，补记一次以便下次用时间比较
       if (!state.lastCommitDate && state.lastSha === newSha) {
         saveState({ lastSha: newSha, lastCommitDate: newDate || "", updatedAt: Date.now() });
@@ -194,12 +205,16 @@ function checkGitHubUpdate(cfg) {
     _log(`github 检测到新版本: ${fmtVersion(state)} → ${newSha.slice(0, 8)}${newDate ? " (" + fmtDateCn(newDate) + " 北京时间)" : ""}`);
     applyGitHubUpdate(repo, branch, token, newSha).then(() => {
       saveState({ lastSha: newSha, lastCommitDate: newDate, updatedAt: Date.now() });
+      const msg = `已更新到 ${newSha.slice(0, 8)}（${fmtDateCn(newDate)} 北京时间），2 秒后重启`;
       _log("github 代码已更新，2 秒后重启");
+      lastCheck = { time: Date.now(), result: "updated", message: msg, latestSha: newSha, latestCommitDate: newDate };
       scheduleRestart();
     }).catch((e) => {
+      lastCheck = { time: Date.now(), result: "error", message: "更新应用失败: " + (e && e.message || String(e)).slice(0, 200) };
       _log("github 更新应用失败: " + (e && e.message || String(e)).slice(0, 200));
     });
   }).catch((e) => {
+    lastCheck = { time: Date.now(), result: "error", message: "检查失败: " + (e && e.message || String(e)).slice(0, 200) };
     _log("github 检查失败: " + (e && e.message || String(e)).slice(0, 200));
   });
 }
@@ -445,10 +460,11 @@ function getStatus() {
     mode: watcher ? "watch" : (gitInterval ? "git" : (githubInterval ? "github" : "none")),
     restarting,
     hasDebounce: !!debounceTimer,
-    // github 模式：上次应用 sha / 提交时间 / 检查时间
+    // github 模式：上次应用 sha / 提交时间 / 检查时间 / 最近一次检查结果
     lastSha: state.lastSha || "",
     lastCommitDate: state.lastCommitDate || "",
-    lastUpdatedAt: state.updatedAt || 0
+    lastUpdatedAt: state.updatedAt || 0,
+    lastCheck: lastCheck
   };
 }
 
