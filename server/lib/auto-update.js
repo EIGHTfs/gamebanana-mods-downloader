@@ -171,15 +171,29 @@ function checkGitHubUpdate(cfg) {
   const token = (cfg && cfg.githubToken) || "";
   _log(`github 模式检查更新: ${repo}@${branch}`);
   const state = readState();
-  getGitHubRefSha(repo, branch, token).then((sha) => {
-    if (!sha) return;
-    if (state.lastSha === sha) {
-      _log(`github 无新版本（${sha.slice(0, 8)}）`);
+  getGitHubLatest(repo, branch, token).then((latest) => {
+    if (!latest || !latest.sha) return;
+    const newSha = latest.sha;
+    const newDate = latest.committedAt || "";
+    // 判新：优先按提交时间比较（直观、不怕分叉/远端回退——时间更早或相同不拉取）；
+    // 旧状态文件没有 lastCommitDate 时降级为 sha 比较，保证兼容。
+    let isNew;
+    if (state.lastCommitDate && newDate) {
+      isNew = Date.parse(newDate) > Date.parse(state.lastCommitDate);
+    } else {
+      isNew = state.lastSha !== newSha;
+    }
+    if (!isNew) {
+      _log(`github 无新版本（本地 ${fmtVersion(state)} vs 远端 ${newSha.slice(0, 8)}${newDate ? " " + newDate : ""}）`);
+      // 兼容升级：旧状态只有 lastSha 无 lastCommitDate，补记一次以便下次用时间比较
+      if (!state.lastCommitDate && state.lastSha === newSha) {
+        saveState({ lastSha: newSha, lastCommitDate: newDate || "", updatedAt: Date.now() });
+      }
       return;
     }
-    _log(`github 检测到新版本: ${(state.lastSha || "无").slice(0, 8)} → ${sha.slice(0, 8)}`);
+    _log(`github 检测到新版本: ${fmtVersion(state)} → ${newSha.slice(0, 8)}${newDate ? " (" + newDate + ")" : ""}`);
     applyGitHubUpdate(repo, branch, token).then(() => {
-      saveState({ lastSha: sha, updatedAt: Date.now() });
+      saveState({ lastSha: newSha, lastCommitDate: newDate, updatedAt: Date.now() });
       _log("github 代码已更新，2 秒后重启");
       scheduleRestart();
     }).catch((e) => {
@@ -187,6 +201,30 @@ function checkGitHubUpdate(cfg) {
     });
   }).catch((e) => {
     _log("github 检查失败: " + (e && e.message || String(e)).slice(0, 200));
+  });
+}
+
+/** 状态版本的可读描述（有提交时间用时间，否则退回 sha 前缀） */
+function fmtVersion(state) {
+  if (state.lastCommitDate) return state.lastCommitDate;
+  return state.lastSha ? state.lastSha.slice(0, 8) : "无";
+}
+
+/** 查仓库指定分支最新 commit 的 sha + 提交时间（api.github.com Commits API） */
+function getGitHubLatest(repo, branch, token) {
+  const url = `https://api.github.com/repos/${repo}/commits/${encodeURIComponent(branch)}`;
+  const headers = {
+    "User-Agent": "gbmd-auto-update",
+    "Accept": "application/vnd.github+json"
+  };
+  if (token) headers["Authorization"] = "token " + token;
+  return httpsGet(url, headers).then((buf) => {
+    try {
+      const j = JSON.parse(buf.toString("utf8"));
+      if (!j || !j.sha) return null;
+      const date = j.commit && j.commit.committer && j.commit.committer.date;
+      return { sha: j.sha, committedAt: (date && String(date)) || "" };
+    } catch (_) { return null; }
   });
 }
 
@@ -391,8 +429,9 @@ function getStatus() {
     mode: watcher ? "watch" : (gitInterval ? "git" : (githubInterval ? "github" : "none")),
     restarting,
     hasDebounce: !!debounceTimer,
-    // github 模式：上次应用 sha / 检查时间
+    // github 模式：上次应用 sha / 提交时间 / 检查时间
     lastSha: state.lastSha || "",
+    lastCommitDate: state.lastCommitDate || "",
     lastUpdatedAt: state.updatedAt || 0
   };
 }
@@ -402,4 +441,4 @@ function _log(msg) {
   if (_onStatus) _onStatus(msg);
 }
 
-module.exports = { start, stop, getStatus, scheduleRestart, doRestart, checkGitHubUpdate, getGitHubRefSha, applyGitHubUpdate, isExcluded, copyTreeSafe };
+module.exports = { start, stop, getStatus, scheduleRestart, doRestart, checkGitHubUpdate, getGitHubRefSha, getGitHubLatest, applyGitHubUpdate, isExcluded, copyTreeSafe };

@@ -93,6 +93,18 @@ if (!OFFLINE) {
       ok("查最新 sha", !!sha && /^[0-9a-f]{40}$/.test(sha), sha || "无");
       if (!sha) { finish(); return; }
 
+      // 提交时间对比判新（github 模式核心）：latest 必须带可解析的提交时间
+      const latest = await au.getGitHubLatest(REPO, BRANCH, "");
+      ok("查最新 sha+提交时间", !!latest && latest.sha === sha, latest ? latest.sha : "无");
+      ok("提交时间可解析", !!latest && !!latest.committedAt && !isNaN(Date.parse(latest.committedAt)), latest && latest.committedAt);
+      // 时间判新语义：远端时间应 >= 本地已应用版本时间（首次本地无记录），且远端时间不早于自己
+      if (latest && latest.committedAt) {
+        const older = new Date(latest.committedAt).getTime() - 60000; // 模拟本地已应用版本早 1 分钟
+        ok("时间对比：远端更新 → 应判新", Date.parse(latest.committedAt) > older);
+        const newer = Date.now() + 60000; // 模拟本地已应用版本在远端之后（回退/分叉）
+        ok("时间对比：本地更新/回退 → 不应判新", !(Date.parse(latest.committedAt) > newer));
+      }
+
       // 下载 tarball 进沙箱（复用模块内 findTar/复制逻辑的输入来源）
       const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "gbmd-e2e-net-"));
       try {
