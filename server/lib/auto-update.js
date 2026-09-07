@@ -184,14 +184,14 @@ function checkGitHubUpdate(cfg) {
       isNew = state.lastSha !== newSha;
     }
     if (!isNew) {
-      _log(`github 无新版本（本地 ${fmtVersion(state)} vs 远端 ${newSha.slice(0, 8)}${newDate ? " " + newDate : ""}）`);
+      _log(`github 无新版本（本地 ${fmtVersion(state)} vs 远端 ${newSha.slice(0, 8)}${newDate ? " " + fmtDateCn(newDate) : ""}，北京时间）`);
       // 兼容升级：旧状态只有 lastSha 无 lastCommitDate，补记一次以便下次用时间比较
       if (!state.lastCommitDate && state.lastSha === newSha) {
         saveState({ lastSha: newSha, lastCommitDate: newDate || "", updatedAt: Date.now() });
       }
       return;
     }
-    _log(`github 检测到新版本: ${fmtVersion(state)} → ${newSha.slice(0, 8)}${newDate ? " (" + newDate + ")" : ""}`);
+    _log(`github 检测到新版本: ${fmtVersion(state)} → ${newSha.slice(0, 8)}${newDate ? " (" + fmtDateCn(newDate) + " 北京时间)" : ""}`);
     applyGitHubUpdate(repo, branch, token).then(() => {
       saveState({ lastSha: newSha, lastCommitDate: newDate, updatedAt: Date.now() });
       _log("github 代码已更新，2 秒后重启");
@@ -204,10 +204,20 @@ function checkGitHubUpdate(cfg) {
   });
 }
 
-/** 状态版本的可读描述（有提交时间用时间，否则退回 sha 前缀） */
+/** 状态版本的可读描述（提交时间统一北京时间，否则退回 sha 前缀） */
 function fmtVersion(state) {
-  if (state.lastCommitDate) return state.lastCommitDate;
+  if (state.lastCommitDate) return fmtDateCn(state.lastCommitDate);
   return state.lastSha ? state.lastSha.slice(0, 8) : "无";
+}
+
+/** ISO 时间 → 北京时间（UTC+8）"YYYY-MM-DD HH:mm"，固定时区不随服务器/浏览器变化 */
+function fmtDateCn(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const bj = new Date(d.getTime() + 8 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${bj.getUTCFullYear()}-${p(bj.getUTCMonth() + 1)}-${p(bj.getUTCDate())} ${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}`;
 }
 
 /** 查仓库指定分支最新 commit 的 sha + 提交时间（api.github.com Commits API） */

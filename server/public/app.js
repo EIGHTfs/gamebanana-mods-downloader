@@ -1686,12 +1686,14 @@ function bindMerge() {
   // ---- 自动更新（2026-09-06：服务端代码自动更新 + 优雅重启）----
   // 加载当前配置（github 模式的仓库/分支/Token 不在前端显示，只存配置文件手改）
   // github 模式按提交时间对比版本：显示本地已应用版本时间，更新时对比远端时间
+  // 时间统一显示北京时间（UTC+8），固定时区不随浏览器所在时区变化
   function fmtCommitDate(iso) {
     if (!iso) return "";
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
+    const bj = new Date(d.getTime() + 8 * 3600 * 1000);
     const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return `${bj.getUTCFullYear()}-${p(bj.getUTCMonth() + 1)}-${p(bj.getUTCDate())} ${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}`;
   }
   async function loadAutoUpdateStatus() {
     try {
@@ -1705,7 +1707,7 @@ function bindMerge() {
       const isPull = (c.mode === "git" || c.mode === "github");
       $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
       if (s.enabled) {
-        const localVer = s.lastCommitDate ? fmtCommitDate(s.lastCommitDate) : (s.lastSha ? s.lastSha.slice(0, 8) : "");
+        const localVer = s.lastCommitDate ? fmtCommitDate(s.lastCommitDate) + "（北京时间）" : (s.lastSha ? s.lastSha.slice(0, 8) : "");
         const modeText = {
           watch: "文件监控",
           git: "定时 git pull",
