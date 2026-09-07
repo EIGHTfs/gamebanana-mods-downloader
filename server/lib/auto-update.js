@@ -32,6 +32,10 @@ const STATE_FILE = path.join(ROOT_DIR, ".auto-update-state.json");
 const DEFAULT_REPO = "EIGHTfs/gamebanana-mods-downloader";
 const DEFAULT_BRANCH = "main";
 // github 模式下禁止覆盖的运行态/敏感文件（相对项目根，前缀或精确匹配）
+// 排除规则分三类（isExcluded 按类匹配，避免「以 . 开头一律当后缀」的误判）：
+//   GITHUB_EXCLUDE        —— 精确文件路径 / 目录前缀（含运行态配置，SA6400 权威，绝不覆盖）
+//   GITHUB_EXCLUDE_DIR    —— 任意层级目录名（路径中任一段等于该名即排除，如群晖 @eaDir）
+//   GITHUB_EXCLUDE_SUFFIX —— 后缀规则（任意路径段结尾匹配）
 const GITHUB_EXCLUDE = [
   // 运行态配置（含密码/gbCookie/下载路径，SA6400 权威，绝不覆盖）
   "server/config.json",
@@ -43,21 +47,14 @@ const GITHUB_EXCLUDE = [
   "json/search_cache.json",
   "json/search_task.json",
   "json/userdata-manifest.json",
-  // 日志 / PID / 测试日志
-  ".log",
-  ".pid",
+  // 测试日志目录 / 本模式状态文件
   "test/logs",
-  // 群晖元数据 / 依赖 / 构建产物 / 本模式临时目录
-  "@eaDir",
-  "node_modules",
-  "_test-download",
-  "dist",
-  "release",
-  ".auto-update-tmp",
-  ".auto-update-state.json",
-  // 备份残留
-  ".bak"
+  ".auto-update-state.json"
 ];
+// 任意层级目录名（群晖元数据 / 依赖 / 构建产物 / 本模式临时目录）
+const GITHUB_EXCLUDE_DIR = ["@eaDir", "node_modules", "_test-download", "dist", "release", ".auto-update-tmp"];
+// 后缀规则（日志 / PID / 备份残留）
+const GITHUB_EXCLUDE_SUFFIX = [".log", ".pid", ".bak"];
 
 let watcher = null;
 let debounceTimer = null;
@@ -248,6 +245,8 @@ function findTar() {
 
 /** 安全复制：把 src 下的代码树复制到 dst（覆盖/新增），跳过运行态与敏感路径 */
 function copyTreeSafe(src, dst, relBase) {
+  // dst 可能不存在（顶层首个条目是文件时 copyFileSync 会 ENOENT），先建目录
+  try { fs.mkdirSync(dst, { recursive: true }); } catch (_) {}
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const ent of entries) {
     // 相对路径要累积（排除规则按完整相对路径匹配，如 json/userdata-manifest.json）
@@ -265,16 +264,16 @@ function copyTreeSafe(src, dst, relBase) {
 }
 
 /** 判断相对路径是否命中排除清单（精确匹配或前缀匹配） */
+/** 是否排除：任意层级目录名 / 后缀 / 精确路径或目录前缀 */
 function isExcluded(relPath) {
   const p = relPath.replace(/\\/g, "/");
-  return GITHUB_EXCLUDE.some((rule) => {
-    if (rule.startsWith(".")) {
-      // 扩展名/文件内规则：精确文件名或后缀
-      return p === rule || p.endsWith(rule);
-    }
-    // 目录/前缀规则：路径段或前缀
-    return p === rule || p.startsWith(rule + "/") || p.startsWith(rule + "\\");
-  });
+  // 1) 任意层级目录名：路径中任一段等于该名（如 json/@eaDir/x.json 里的 @eaDir）
+  const segs = p.split("/");
+  if (GITHUB_EXCLUDE_DIR.some((d) => segs.includes(d))) return true;
+  // 2) 后缀规则：任意路径段结尾匹配
+  if (GITHUB_EXCLUDE_SUFFIX.some((s) => p.endsWith(s))) return true;
+  // 3) 精确文件路径 / 目录前缀
+  return GITHUB_EXCLUDE.some((rule) => p === rule || p.startsWith(rule + "/"));
 }
 
 /** 恢复 *.sh 与 scripts/installer 可执行位（tarball 里可能丢失） */
