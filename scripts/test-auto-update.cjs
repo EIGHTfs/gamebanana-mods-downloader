@@ -105,14 +105,14 @@ if (!OFFLINE) {
         ok("时间对比：本地更新/回退 → 不应判新", !(Date.parse(latest.committedAt) > newer));
       }
 
-      // 下载 tarball 进沙箱（复用模块内 findTar/复制逻辑的输入来源）
+      // 下载 tarball 进沙箱（与产品代码一致：sha 形式 URL，内容不可变，防 CDN 缓存拉旧包）
       const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "gbmd-e2e-net-"));
       try {
         const tmpDir = path.join(sandbox, ".auto-update-tmp");
         const extractDir = path.join(tmpDir, "extract");
         fs.mkdirSync(extractDir, { recursive: true });
         const tarGz = path.join(tmpDir, "repo.tar.gz");
-        const url = `https://codeload.github.com/${REPO}/tar.gz/refs/heads/${BRANCH}`;
+        const url = `https://codeload.github.com/${REPO}/tar.gz/${sha}`;
         const https = require("https");
         const dl = await new Promise((resolve, reject) => {
           https.get(url, { headers: { "User-Agent": "gbmd-test" } }, (r) => {
@@ -123,7 +123,10 @@ if (!OFFLINE) {
           }).on("error", reject);
         });
         fs.writeFileSync(tarGz, dl);
-        ok("tarball 下载 (" + (dl.length / 1024 / 1024).toFixed(2) + " MB)", dl.length > 10000);
+        ok("tarball 下载 (sha 形式) (" + (dl.length / 1024 / 1024).toFixed(2) + " MB)", dl.length > 10000);
+        // 校验顶层目录含 sha（immutable 特征，分支形式顶层只含分支名）
+        const top = execFileSync("tar", ["-tzf", tarGz], { timeout: 30000 }).toString().split("\n")[0] || "";
+        ok("tarball 顶层目录含 sha", top.includes(sha.slice(0, 8)), top);
         execFileSync("tar", ["-xzf", tarGz, "-C", extractDir, "--strip-components=1"], { timeout: 60000 });
         ok("tarball 解压", fs.existsSync(path.join(extractDir, "server", "app.js")));
 
