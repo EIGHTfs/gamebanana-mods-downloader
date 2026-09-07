@@ -192,7 +192,7 @@ function checkGitHubUpdate(cfg) {
       return;
     }
     _log(`github 检测到新版本: ${fmtVersion(state)} → ${newSha.slice(0, 8)}${newDate ? " (" + fmtDateCn(newDate) + " 北京时间)" : ""}`);
-    applyGitHubUpdate(repo, branch, token).then(() => {
+    applyGitHubUpdate(repo, branch, token, newSha).then(() => {
       saveState({ lastSha: newSha, lastCommitDate: newDate, updatedAt: Date.now() });
       _log("github 代码已更新，2 秒后重启");
       scheduleRestart();
@@ -254,17 +254,23 @@ function getGitHubRefSha(repo, branch, token) {
   });
 }
 
-/** 下载 tarball → 解压 → 安全复制到项目根 */
-function applyGitHubUpdate(repo, branch, token) {
+/** 下载 tarball → 解压 → 安全复制到项目根
+ *  sha 形式 URL（/tar.gz/<sha>）按 commit 寻址、内容不可变，避免分支形式
+ *  （/tar.gz/refs/heads/<branch>）在推送后 CDN 缓存未刷新时拉到旧包；失败回退分支形式 */
+function applyGitHubUpdate(repo, branch, token, sha) {
   const tmpDir = path.join(ROOT_DIR, ".auto-update-tmp");
   const tgzPath = path.join(tmpDir, "repo.tar.gz");
   const extractDir = path.join(tmpDir, "extract");
   fs.mkdirSync(extractDir, { recursive: true });
-  const tarUrl = `https://codeload.github.com/${repo}/tar.gz/refs/heads/${branch}`;
+  const shaUrl = `https://codeload.github.com/${repo}/tar.gz/${sha}`;
+  const branchUrl = `https://codeload.github.com/${repo}/tar.gz/refs/heads/${branch}`;
   const headers = { "User-Agent": "gbmd-auto-update", "Accept": "application/octet-stream" };
   if (token) headers["Authorization"] = "token " + token;
-  return httpsGet(tarUrl, headers).then((buf) => {
+  const fetchTar = (url) => httpsGet(url, headers).then((buf) => {
     fs.writeFileSync(tgzPath, buf);
+    return buf;
+  });
+  return fetchTar(shaUrl).catch(() => fetchTar(branchUrl)).then((buf) => {
     _log(`tarball 下载完成: ${buf.length} bytes`);
     // 解压（strip 顶层 EIGHTfs-gamebanana-mods-downloader-<sha>/ 目录）
     const tar = findTar();
