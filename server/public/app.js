@@ -1684,7 +1684,7 @@ function bindMerge() {
   });
 
   // ---- 自动更新（2026-09-06：服务端代码自动更新 + 优雅重启）----
-  // 加载当前配置
+  // 加载当前配置（github 模式的仓库/分支/Token 不在前端显示，只存配置文件手改）
   async function loadAutoUpdateStatus() {
     try {
       const r = await api("/api/auto-update/status");
@@ -1694,12 +1694,8 @@ function bindMerge() {
       $("#autoUpdateToggle").checked = !!c.enabled;
       $("#autoUpdateMode").value = c.mode || "watch";
       $("#autoUpdateInterval").value = c.interval || 300;
-      $("#autoUpdateRepo").value = c.githubRepo || "";
-      $("#autoUpdateBranch").value = c.githubBranch || "";
-      $("#autoUpdateToken").value = c.githubToken || "";
       const isPull = (c.mode === "git" || c.mode === "github");
       $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
-      $("#autoUpdateRepoRow").style.display = (c.mode === "github") ? "flex" : "none";
       if (s.enabled) {
         const modeText = { watch: "文件监控", git: "定时 git pull", github: `GitHub 拉取${s.lastSha ? "（当前 " + s.lastSha.slice(0, 8) + "）" : ""}` };
         setStatus($("#autoUpdateInfo"), `✅ 监控中（mode=${s.mode}, ${modeText[s.mode] || s.mode}）`, "ok");
@@ -1715,23 +1711,16 @@ function bindMerge() {
     const mode = $("#autoUpdateMode").value;
     const isPull = (mode === "git" || mode === "github");
     $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
-    $("#autoUpdateRepoRow").style.display = (mode === "github") ? "flex" : "none";
   });
 
-  // 保存自动更新配置
+  // 保存自动更新配置（github 模式的仓库/分支/Token 由 server/config.json 手改，前端不提交）
   $("#autoUpdateSaveBtn").addEventListener("click", async () => {
     const st = $("#autoUpdateStatus");
     const enabled = $("#autoUpdateToggle").checked;
     const mode = $("#autoUpdateMode").value;
     const interval = parseInt($("#autoUpdateInterval").value, 10) || 300;
-    const payload = { enabled, mode, interval };
-    if (mode === "github") {
-      payload.githubRepo = $("#autoUpdateRepo").value.trim() || undefined;
-      payload.githubBranch = $("#autoUpdateBranch").value.trim() || undefined;
-      payload.githubToken = $("#autoUpdateToken").value.trim() || undefined;
-    }
     try {
-      const r = await api("/api/auto-update/config", "POST", payload);
+      const r = await api("/api/auto-update/config", "POST", { enabled, mode, interval });
       if (!r.ok) throw new Error(r.error || "保存失败");
       setStatus(st, "✅ 已保存" + (enabled ? "，监控已启动" : "，监控已停止"), "ok");
       loadAutoUpdateStatus();

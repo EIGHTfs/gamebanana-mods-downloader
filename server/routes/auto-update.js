@@ -11,15 +11,19 @@ module.exports = function register(api) {
   route("GET", "/api/auto-update/status", (req, res) => {
     const cfgNow = cfg.readConfig();
     const status = autoUpdate.getStatus();
+    // githubToken 仅存配置文件手改，不回传前端（脱敏为空串）
+    const config = Object.assign({}, cfgNow.autoUpdate || {});
+    delete config.githubToken;
     return sendJson(res, 200, {
       ok: true,
-      config: cfgNow.autoUpdate || {},
+      config: config,
       status: status
     });
   });
 
   // POST /api/auto-update/config
-  // { enabled, mode, interval, githubRepo?, githubBranch?, githubToken? }
+  // { enabled, mode, interval } —— github 模式的仓库/分支/Token 不在前端设置，
+  // 只存 server/config.json 手改；本端点不接收也不覆盖这三个字段。
   route("POST", "/api/auto-update/config", async (req, res) => {
     const body = await readBody(req);
     const cfgNow = cfg.readConfig();
@@ -30,10 +34,9 @@ module.exports = function register(api) {
       mode: body.mode || cur.mode || "watch",
       interval: body.interval ? parseInt(body.interval, 10) : (cur.interval || 300)
     };
-    // github 模式可选字段：保留旧值，body 显式传入才覆盖
+    // github 模式字段仅从配置文件继承（前端不提交，也不允许通过 body 覆盖）
     for (const k of ["githubRepo", "githubBranch", "githubToken"]) {
-      if (body[k] !== undefined) next[k] = body[k];
-      else if (cur[k] !== undefined) next[k] = cur[k];
+      if (cur[k] !== undefined) next[k] = cur[k];
     }
 
     cfgNow.autoUpdate = next;
