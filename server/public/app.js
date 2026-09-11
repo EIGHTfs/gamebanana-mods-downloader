@@ -1003,9 +1003,11 @@ function bindSettings() {
   // 2026-09-01：保存设置改悬浮按钮（右下角 💾，仅设置页显示）
   const saveFab = $("#saveSettingsFab");
   if (saveFab) saveFab.addEventListener("click", async () => {
-    // 2026-08-26：设置里不要并发数（只在「下载进度」页改并发）——payload 只存 gbCookie
+    // 2026-08-26：设置里不要并发数（只在「下载进度」页改并发）——payload 存 gbCookie + gbUserAgent
+    // 2026-09-11 bugfix：GB 会话绑定登录浏览器完整 UA，保存 cookie 时自动同步当前浏览器 UA
     const payload = {
-      gbCookie: $("#gbCookie").value.trim()
+      gbCookie: $("#gbCookie").value.trim(),
+      gbUserAgent: navigator.userAgent
     };
     try {
       const r = await api("/api/settings", "POST", payload);
