@@ -1,3 +1,4 @@
+// dsh-skip-residue 服务端 Node.js 测试，非浏览器代码
 // test/p2-dedup.test.cjs —— P2 去重：parseIndexObj/buildIndexBlock/readIndexObj 抽 utils/index-html，escapeHtml 抽 utils/html
 //   1) 往返行为不变（build→parse→原对象；readIndexObj 读 description.html）
 //   2) organize.parseIndexObj 同源 utils（去重生效，非本地副本）

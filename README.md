@@ -274,3 +274,4 @@ A: 不会。导入 = 纯追加；只有点「终止」才清空队列（终止�
 | 1.1.0 | P5 改密校验旧密码 + P6 导入=纯追加、任务事件日志、便携测试、文档重写 |
 | 1.2.0 | 自动更新（watch / git / github 三模式 + 防抖重启 + 前端开关 UI）；github 模式无需服务端 .git，定时从 GitHub 拉取并安全更新代码 |
 | 1.2.1 | bugfix：GB 登录检测修复——GB 会话绑定浏览器完整 UA（OS+版本号），保存 Cookie 时自动同步当前浏览器 UA 到 `gbUserAgent`，解决 UA 不匹配导致 `_bIsLoggedIn` 始终返回 false 的问题 |
+| 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |

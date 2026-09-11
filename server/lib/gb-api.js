@@ -48,7 +48,7 @@ async function fetchJsonHeaders(url, opts = {}, retries = 3) {
     try {
       const resp = await fetch(url, { headers, signal: controller.signal, redirect: "follow" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
-      try { setCookies = resp.headers.getSetCookie ? resp.headers.getSetCookie() : []; } catch (_) {}
+      try { setCookies = resp.headers.getSetCookie ? resp.headers.getSetCookie() : []; } catch (_) { /* 旧 Node 版本无 getSetCookie，忽略 */ }
       return { json: await resp.json(), setCookies };
     } catch (e) {
       if (e.name === "AbortError") throw e;
@@ -236,7 +236,7 @@ function normalizeKeyword(game, kw) {
     for (const [en, zh] of Object.entries(roles)) {
       if (String(zh) === k) return en;
     }
-  } catch (_) {}
+  } catch (_) { /* mapping 文件读取失败，返回原始关键词 */ }
   return k;
 }
 
@@ -366,7 +366,7 @@ async function fetchRoleCatIds(gameId) {
         }
       }
       if ((data._aRecords || []).length < 50) break;
-    } catch (_) { break; }
+    } catch (_) { /* 网络请求失败，停止翻页 */ break; }
     await new Promise((r) => setTimeout(r, 350));
   }
   catIdCache.set(String(gameId), { at: now, map });
@@ -392,19 +392,19 @@ function loadRoleCache(gameName) {
   try {
     const d = JSON.parse(require("fs").readFileSync(roleCachePath(gameName), "utf8"));
     if (d && Array.isArray(d.characters)) return d;
-  } catch (_) {}
+  } catch (_) { /* 文件不存在或解析失败，尝试旧版 */ }
   // 兼容旧版：单文件 role-cache.json 里的 gameId key / 游戏名 key
   try {
     const legacy = JSON.parse(require("fs").readFileSync(LEGACY_CACHE_FILE, "utf8"));
     return legacy[gameName] || legacy[String(cfg.gameIdOf(gameName))] || null;
-  } catch (_) {}
+  } catch (_) { /* 旧版缓存文件不存在或解析失败 */ }
   return null;
 }
 function saveRoleCache(gameName, obj) {
   try {
     require("fs").mkdirSync(CHAR_CACHE_DIR, { recursive: true });
     require("fs").writeFileSync(roleCachePath(gameName), JSON.stringify({ gameId: obj.gameId, characters: obj.characters, at: obj.at }, null, 2));
-  } catch (_) {}
+  } catch (_) { /* 写入失败（权限/磁盘满），静默忽略 */ }
 }
 
 async function fetchGameCharacterList(gameId, gameName, forceRefresh) {
@@ -444,17 +444,17 @@ async function fetchGameCharacterList(gameId, gameName, forceRefresh) {
           const clean = String((c && c._sName) || "").trim();
           if (clean && clean.length >= 2 && !/^(characters|skins|weapons)$/i.test(clean)) chars.add(clean);
         }
-      } catch (_) {}
+      } catch (_) { /* 单个分类请求失败，继续处理其他分类 */ }
       await new Promise((r) => setTimeout(r, 350));
     }
-  } catch (_) {}
+  } catch (_) { /* fetchGameInfo 失败，跳过 API 获取 */ }
   // 本地 mapping roles 英文 key 补全
   try {
     const map = cfg.readGameMapping(gameName);
     for (const en of Object.keys((map && map.roles) || {})) {
       if (en && en.trim().length >= 2) chars.add(en.trim());
     }
-  } catch (_) {}
+  } catch (_) { /* mapping 文件读取失败，跳过本地补全 */ }
   const list = [...chars].sort((a, b) => a.localeCompare(b, "en"));
   charCache.set(gameKey, { at: now, chars: list });
   // 3) 写回 JSON 持久化（json/role/<游戏名>.json）

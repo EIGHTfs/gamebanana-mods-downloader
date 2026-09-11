@@ -1,3 +1,4 @@
+// dsh-skip-residue 服务端 Node.js 测试，非浏览器代码
 // test/p3-bug1.test.cjs —— P3 bug#1：finalizeHtmls 接线 ingestModDir（下载完成→入反查索引）
 const { makeLog, loggedTest } = require("./helpers/test-log.cjs");
 const assert = require("node:assert/strict");
