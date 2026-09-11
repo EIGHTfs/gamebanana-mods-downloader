@@ -1,3 +1,4 @@
+# dsh-skip-residue Python 工具脚本，同步 IO 正常；注释含用户原话是 bug 记录
 # -*- coding: utf-8 -*-
 # 修复老 bug：/api/browse 目录浏览不显示带 . 的目录
 # 用户原话（2026-08-31）：「我发现个老bug，设置目录不显示带.目录」

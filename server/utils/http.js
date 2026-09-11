@@ -10,6 +10,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const BODY_SIZE_LIMIT = 10 * 1024 * 1024; // 请求体大小限制：10MB
+
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(status, {
@@ -20,7 +22,7 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
-function readBody(req, limit = 10 * 1024 * 1024) {
+function readBody(req, limit = BODY_SIZE_LIMIT) {
   return new Promise((resolve, reject) => {
     const tmpPath = path.join(os.tmpdir(), "gbmd-body-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(36).slice(2));
     const ws = fs.createWriteStream(tmpPath);
@@ -87,7 +89,7 @@ function cleanCookie(raw) {
   const combo = parseCredentialText(s);
   if (combo) return combo.cookie || "";
   if (s.startsWith("{")) {
-    try { const o = JSON.parse(s); if (o && typeof o.cookie === "string") return o.cookie.trim(); } catch (_) {}
+    try { const o = JSON.parse(s); if (o && typeof o.cookie === "string") return o.cookie.trim(); } catch (_) { /* JSON 解析失败，回退返回原始字符串 */ }
   }
   return s;
 }

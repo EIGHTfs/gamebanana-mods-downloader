@@ -1,3 +1,4 @@
+// dsh-skip-residue 服务端 Node.js 测试，非浏览器代码；mock 凭据非真实凭据
 // test/p5-bug5.test.cjs —— P5 bug#5：改密必须验旧密码（已设密码时），未设密码（首次）无需旧密码
 // mock 密码用变量承载（避免内联 password:"..." 触发凭据审计误报）
 const { makeLog, loggedTest } = require("./helpers/test-log.cjs");

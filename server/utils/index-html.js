@@ -24,11 +24,12 @@ function parseIndexObj(html) {
   try {
     const obj = JSON.parse(m[1]);
     if (obj && obj.schema === 1) return obj;
-  } catch (_) {}
+  } catch (_) { /* JSON 解析失败，返回 null */ }
   return null;
 }
 
 // 读 modDir/description.html 并解析（不存在/解析失败返回 null）
+// 注意：使用同步 IO 是因为此函数在批量扫描中调用，文件通常很小（<10KB）
 function readIndexObj(modDir) {
   const p = path.join(modDir, "description.html");
   if (!fs.existsSync(p)) return null;

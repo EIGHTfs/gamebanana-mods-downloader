@@ -60,14 +60,14 @@ function fileMd5(filePath) {
       stream.on("data", (c) => hash.update(c));
       stream.on("end", () => resolve(hash.digest("hex")));
       stream.on("error", () => resolve(""));
-    } catch (_) { resolve(""); }
+    } catch (_) { resolve(""); /* 文件不存在或读取失败，返回空字符串 */ }
   });
 }
 
 function fileMd5Sync(filePath) {
   try {
     return crypto.createHash("md5").update(fs.readFileSync(filePath)).digest("hex");
-  } catch (_) { return ""; }
+  } catch (_) { return ""; /* 文件不存在或读取失败，返回空字符串 */ }
 }
 
 function fmtSize(bytes) {
@@ -99,7 +99,7 @@ function localGifName(url, file) {
 function httpHeadContentLength(url, timeoutMs) {
   return new Promise((resolve) => {
     let u;
-    try { u = new URL(url); } catch (_) { return resolve(0); }
+    try { u = new URL(url); } catch (_) { return resolve(0); /* URL 格式错误，返回 0 */ }
     const mod = u.protocol === "https:" ? https : http;
     const req = mod.request(u, {
       method: "HEAD",
@@ -110,7 +110,7 @@ function httpHeadContentLength(url, timeoutMs) {
       res.resume();
       resolve(isFinite(len) && len > 0 ? len : 0);
     });
-    req.on("timeout", () => { try { req.destroy(); } catch (_) {} resolve(0); });
+    req.on("timeout", () => { try { req.destroy(); } catch (_) { /* 请求已超时，destroy 可能失败 */ } resolve(0); });
     req.on("error", () => resolve(0));
     req.end();
   });
@@ -563,20 +563,11 @@ function buildDownloadItems(mod, finalDir, obj) {
 }
 
 // 单 mod 准备（第一步→第二步→第三步），返回 { items, obj, finalDir, report }
-async function prepareMod(url) {
-  const settings = cfg.readConfig();
-  const report = { step1: {}, step2: {}, step3: {} };
+// ---- prepareMod 子步骤拆分（原 298 行拆为 5 个子函数）----
 
-  // ---- 第一步：生成 HTML + 算下载路径 ----
-  const { mod, target, obj } = await genIndexHtml(url);
-  const finalDir = target.dir;
-  report.step1 = { game: mod.game, warehouse: target.warehouse, item: target.item, dir: finalDir };
-
-  // ---- 第二步：根目录范围搜索压缩包名/图片名，存在则 mv 文件夹 ----
-  // gif 不参与第二步反查——gif 落盘名 原名_大小MB，但原名（如多个 anigif.gif）跨 mod 重复，
-  //   用它去全根反查会把含同名 gif 的无关目录误判为「旧目录」整体移入，破坏文件结构。
-  //   只有压缩包（GB 原名）和预览图（GB 短名 _sFile）参与反查。
-  const wantFiles = {}; // lower文件名 -> { kind: "archive" | "image" }
+/** 第二步：查重归位——搜索旧目录/散落文件，移动到目标路径 */
+async function step2FindAndMove(target, mod, obj, finalDir, trashRoot) {
+  const wantFiles = {};
   for (const f of obj.files || []) {
     if (f && f.file) wantFiles[String(f.file).toLowerCase()] = { kind: "archive" };
   }
@@ -586,13 +577,10 @@ async function prepareMod(url) {
       if (!wantFiles[k]) wantFiles[k] = { kind: "image" };
     }
   }
-  // 2026-08-26 用户澄清：第二步 = 按全根文件名索引反查，移动**所有**旧目录（判定不是裸仓库目录）；
-  //   裸仓库目录里的匹配文件 → 移动文件本身，并删除该裸仓库目录下的 description.html
-  const trashRoot = path.join(target.root, ".trash");
   const found = findExistingDir(target.root, finalDir, mod, wantFiles);
   const foundDirs = (found && found.dirs) || [];
   const warehouseFiles = (found && found.warehouseFiles) || [];
-  const moveFilesOnly = (found && found.moveFilesOnly) || []; // 2026-08-26 非 mod 名目录 → 只移匹配文件本身
+  const moveFilesOnly = (found && found.moveFilesOnly) || [];
   const movedList = [];
   if (foundDirs.length) {
     for (const f of foundDirs) {
@@ -601,52 +589,174 @@ async function prepareMod(url) {
       else if (mv.reason === "same") movedList.push(f.relDir + "(已在目标)");
     }
   }
-  // 裸仓库目录/非 mod 名目录里的匹配文件：移动文件本身到目标；
-  //   裸仓库（warehouseFiles.deleteHtml）→ 顺带删仓库根 HTML；
-  //   非 mod 名目录（moveFilesOnly）→ 只移文件，不删其 HTML（那是别的 mod 的目录）
   const moveOnlyAll = [...warehouseFiles, ...moveFilesOnly];
   if (moveOnlyAll.length) {
     for (const w of moveOnlyAll) {
-      // 2026-08-26 用户规则：抽文件前检查源目录有没有 description.html——
-      //   有 HTML = 完整 mod 目录，里面的同名图片可能被多个 mod 共用（同一 GB 短名
-      //   预览图），抽走会破坏其他 mod → 跳过不抽；无 HTML = 残留/散落目录，才抽。
-      //   （实测：Necomiya Uncensored 无 HTML，抽走无碍；有 HTML 的目录保守保留）
       const srcHasHtml = fs.existsSync(path.join(w.dir, "description.html"));
       let ents = [];
       try { ents = fs.readdirSync(w.dir, { withFileTypes: true }); } catch (_) { continue; }
       for (const e of ents) {
         if (!e.isFile() || e.name.startsWith(".")) continue;
         if (!wantFiles[String(e.name).toLowerCase()]) continue;
-        if (srcHasHtml) continue; // 源目录有 HTML（完整 mod）→ 不抽，防共用图被抢
+        if (srcHasHtml) continue;
         const s = path.join(w.dir, e.name);
         const d = path.join(finalDir, e.name);
         if (fs.existsSync(d)) {
-          // 目标已有同名 → 移到垃圾桶（重复）
           try {
             fs.mkdirSync(trashRoot, { recursive: true });
-            // 2026-08-31：垃圾桶保留原始目录结构 —— trashRoot/<仓库相对路径>/<原文件名>
             let tx = path.join(trashRoot, w.relDir || "", e.name);
             if (fs.existsSync(tx)) tx = tx + "-" + Date.now();
             fs.mkdirSync(path.dirname(tx), { recursive: true });
             fs.renameSync(s, tx);
             movedList.push(w.relDir + "/" + e.name + "(重复→trash)");
-          } catch (_) {}
+          } catch (_) { /* 移动失败，跳过 */ }
         } else {
-          try { fs.renameSync(s, d); movedList.push(w.relDir + "/" + e.name); } catch (_) {}
+          try { fs.renameSync(s, d); movedList.push(w.relDir + "/" + e.name); } catch (_) { /* 移动失败，跳过 */ }
         }
       }
-      // 2026-08-26 用户规则：仅裸仓库目录（deleteHtml）删 HTML（残留壳）；非 mod 名目录不删
       if (w.deleteHtml) {
-        try { const h = path.join(w.dir, "description.html"); if (fs.existsSync(h)) { fs.unlinkSync(h); console.log("[step2-warehouse-html] 删除仓库根HTML:", h.replace(target.root + "/", "")); } } catch (_) {}
+        try { const h = path.join(w.dir, "description.html"); if (fs.existsSync(h)) { fs.unlinkSync(h); console.log("[step2-warehouse-html] 删除仓库根HTML:", h.replace(target.root + "/", "")); } } catch (_) { /* 删除失败，跳过 */ }
       }
     }
   }
+  return { foundDirs, warehouseFiles, movedList };
+}
+
+/** 第三步后半：垃圾桶找回——从 .trash 找回丢失的文件 */
+function step3TrashRestore(target, obj, finalDir, trashRoot) {
+  const trashDir = path.join(target.root, ".trash");
+  const restored = [];
+  if (!fs.existsSync(trashDir)) return restored;
+  const trashNames = [];
+  const collectTrash = (td, prefix) => {
+    let ents = [];
+    try { ents = fs.readdirSync(td, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of ents) {
+      if (e.name.startsWith(".")) continue;
+      const full = path.join(td, e.name);
+      if (e.isDirectory()) collectTrash(full, prefix + e.name + path.sep);
+      else if (e.isFile()) trashNames.push(prefix + e.name);
+    }
+  };
+  collectTrash(trashDir, "");
+  const trashSet = new Set(trashNames);
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const coreName = (name) =>
+    String(name || "")
+      .replace(/\.(zip|rar|7z)$/i, "")
+      .replace(/^\d{4}_/, "")
+      .replace(/_?[0-9a-f]{4,8}$/i, "")
+      .replace(/[_\-\s]+/g, "")
+      .toLowerCase();
+  const isTrashName = (candidate) => {
+    if (!candidate) return false;
+    if (trashSet.has(candidate)) return true;
+    const candCore = coreName(candidate);
+    return trashNames.some((n) => {
+      const base = path.basename(String(n));
+      const re = new RegExp("^dup-归位-([^\-]+)-" + esc(candidate) + "$");
+      if (re.test(base)) return true;
+      const re2 = new RegExp("^dup-仓库散落-\d+-" + esc(candidate) + "$");
+      if (re2.test(base)) return true;
+      if (candCore && coreName(base) === candCore) return true;
+      return false;
+    });
+  };
+  const wantList = [];
+  for (const f of obj.files || []) {
+    if (f && f.file) wantList.push({ name: f.file, md5s: [f.hash, f.gbMd5].filter(Boolean) });
+  }
+  for (const im of obj.images || []) {
+    if (im && im.file) wantList.push({ name: im.file, md5s: [im.hash].filter(Boolean) });
+  }
+  for (const w of wantList) {
+    const dst = path.join(finalDir, w.name);
+    if (fs.existsSync(dst)) continue;
+    let done = false;
+    if (isTrashName(w.name)) {
+      const exact = path.join(trashDir, w.name);
+      let srcPick = null;
+      if (fs.existsSync(exact)) srcPick = exact;
+      else {
+        const esc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const hitName = trashNames.find((n) => {
+          const base = path.basename(n);
+          const re = new RegExp("^dup-归位-([^\-]+)-" + esc2(w.name) + "$");
+          const re2 = new RegExp("^dup-仓库散落-\d+-" + esc2(w.name) + "$");
+          if (re.test(base) || re2.test(base)) return true;
+          if (coreName(base) && coreName(base) === coreName(w.name)) return true;
+          return false;
+        });
+        if (hitName) srcPick = path.join(trashDir, hitName);
+      }
+      if (srcPick) {
+        try { fs.renameSync(srcPick, dst); restored.push(w.name); done = true; } catch (_) { /* 找回失败 */ }
+      }
+    }
+    if (!done) {
+      for (const md5 of w.md5s) {
+        const md5lower = String(md5).toLowerCase();
+        if (!md5lower) continue;
+        if (fs.existsSync(path.join(finalDir, md5lower + path.extname(w.name)))) { done = true; break; }
+        const src = path.join(trashDir, md5lower + path.extname(w.name));
+        if (fs.existsSync(src)) {
+          try { fs.renameSync(src, dst); restored.push(w.name); done = true; break; } catch (_) { /* 找回失败 */ }
+        }
+      }
+    }
+  }
+  return restored;
+}
+
+/** 第四步后半：标记已存在文件（跳过已下载） */
+function step4MarkExists(mod, finalDir, obj, items) {
+  for (const g of obj.gifs || []) {
+    if (!g || !g.localFile || g.localFile === g.file) continue;
+    const oldP = path.join(finalDir, g.file);
+    const newP = path.join(finalDir, g.localFile);
+    if (fs.existsSync(oldP) && !fs.existsSync(newP)) {
+      try { fs.renameSync(oldP, newP); console.log("[gif-rename]", g.file, "→", g.localFile); } catch (_) { /* 重命名失败 */ }
+    }
+  }
+  const exists = new Set();
+  for (const it of items) {
+    try {
+      if (!it.path || !fs.existsSync(it.path)) continue;
+      const st = fs.statSync(it.path);
+      if (st.size <= 0) continue;
+      if (it.isGif && it.size > 0 && st.size !== it.size) continue;
+      exists.add(it.path);
+    } catch (_) { /* stat 失败，跳过 */ }
+  }
+  const imgHashFileExists = (it) => {
+    const im = (obj.images || []).find((x) => x && (x.file === it.displayName || x.gbFile === it.displayName));
+    if (!im || !im.hash) return false;
+    const md5name = String(im.hash).toLowerCase() + (path.extname(it.displayName) || "");
+    return fs.existsSync(path.join(finalDir, md5name));
+  };
+  for (const it of items) {
+    if (exists.has(it.path)) { it._skip = true; it.exists = true; }
+    else if (it.type === "image" && !it.isGif && imgHashFileExists(it)) { it._skip = true; it.exists = true; }
+  }
+}
+
+async function prepareMod(url) {
+  const settings = cfg.readConfig();
+  const report = { step1: {}, step2: {}, step3: {} };
+
+  // ---- 第一步：生成 HTML + 算下载路径 ----
+  const { mod, target, obj } = await genIndexHtml(url);
+  const finalDir = target.dir;
+  report.step1 = { game: mod.game, warehouse: target.warehouse, item: target.item, dir: finalDir };
+
+  // ---- 第二步：查重归位 ----
+  const trashRoot = path.join(target.root, ".trash");
+  const { foundDirs, warehouseFiles, movedList } = await step2FindAndMove(target, mod, obj, finalDir, trashRoot);
   report.step2 = { found: [...foundDirs.map((f) => f.relDir), ...warehouseFiles.map((w) => w.relDir)], moved: movedList.length, movedList };
   if (movedList.length) console.log("[step2-mv]", movedList.length, "个旧目录/散落文件 →", (finalDir.split("/Mods/")[1] || finalDir).slice(0, 50));
 
   // ---- 写入 HTML（第二步规定：HTML 存于该文件夹，原有 HTML 覆盖）----
   fs.mkdirSync(finalDir, { recursive: true });
-  // 合并旧 HTML 已记录的本地 hash（重下时保留已下载文件的 hash）
   const oldObj = readIndexObj(finalDir);
   if (oldObj && oldObj.files) {
     for (const f of obj.files) {
@@ -663,133 +773,19 @@ async function prepareMod(url) {
     writeIndexHtml(finalDir, obj);
   }
 
-  // ---- 2026-08-26：垃圾桶找回（压缩包/图片）----
-  // 已下载完的 mod 里文件被拿走（比如误进垃圾桶）→ 重新下载时先从垃圾桶找回：
-  //   · 压缩包（zip/rar/7z）：垃圾桶里常见「dup-归位-xxx.zip」/「dup-仓库散落-ts-xxx.zip」
-  //     前缀名（moveDirTo 归位重复产生的），按**目标文件名**（GB 原名）反查找回，改名移回目标目录
-  //   · 图片：按 GB 原名（_sFile）在垃圾桶找同名文件；内容 hash 匹配也补找一次
-  //   找回成功 → 该文件不再重新下载（标记已存在）
-  const trashDir = path.join(root, ".trash");
-  const restored = [];
-  if (fs.existsSync(trashDir)) {
-    // 垃圾桶文件清单：递归扫描全部子目录（2026-08-26 修复——垃圾桶保留 relDir
-    //   结构后文件可能在 trash/角色/Test/[作者] Mod/img.jpg 多层深，必须递归收集，
-    //   找回时只按文件名匹配，不判断文件夹层级/深度）
-    const trashNames = [];
-    const collectTrash = (td, prefix) => {
-      let ents = [];
-      try { ents = fs.readdirSync(td, { withFileTypes: true }); } catch (_) { return; }
-      for (const e of ents) {
-        if (e.name.startsWith(".")) continue; // 隐藏文件跳过
-        const full = path.join(td, e.name);
-        if (e.isDirectory()) collectTrash(full, prefix + e.name + path.sep);
-        else if (e.isFile()) trashNames.push(prefix + e.name);
-      }
-    };
-    collectTrash(trashDir, "");
-    const trashSet = new Set(trashNames);
-    // 2026-08-26 修复（实测 bottom_heavy_furina_top_heavy_）：垃圾桶旧版名与 GB 当前名
-    //   不同（GB 加 2026_ 年份前缀 + _哈希后缀），精确匹配找回失败 → 加「核心名模糊匹配」。
-    //   兼容：直接同名、dup- 前缀、核心名一致（去年份前缀/哈希后缀/去符号）。
-    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const coreName = (name) =>
-      String(name || "")
-        .replace(/\.(zip|rar|7z)$/i, "")
-        .replace(/^\d{4}_/, "")
-        .replace(/_?[0-9a-f]{4,8}$/i, "")
-        .replace(/[_\-\s]+/g, "")
-        .toLowerCase();
-    const isTrashName = (candidate) => {
-      if (!candidate) return false;
-      if (trashSet.has(candidate)) return true;
-      const candCore = coreName(candidate);
-      return trashNames.some((n) => {
-        const base = path.basename(String(n)); // 子路径（dup-归位-xxx/文件）取文件名匹配
-        const re = new RegExp("^dup-归位-([^\-]+)-" + esc(candidate) + "$");
-        if (re.test(base)) return true;
-        const re2 = new RegExp("^dup-仓库散落-\d+-" + esc(candidate) + "$");
-        if (re2.test(base)) return true;
-        // 核心名模糊匹配：垃圾桶名(去年份前缀/哈希后缀/符号) == GB 当前名核心 → 可找回
-        if (candCore && coreName(base) === candCore) return true;
-        return false;
-      });
-    };
-    const wantList = [];
-    for (const f of obj.files || []) {
-      if (f && f.file) wantList.push({ name: f.file, md5s: [f.hash, f.gbMd5].filter(Boolean) });
-    }
-    for (const im of obj.images || []) {
-      if (im && im.file) wantList.push({ name: im.file, md5s: [im.hash].filter(Boolean) });
-    }
-    // 旧 HTML 图片记录也纳入匹配（GB 原名可能在旧记录里）
-    const oldImgs = (oldObj && oldObj.images) || [];
-    for (const im of oldImgs) {
-      if (im && im.file) wantList.push({ name: im.file, md5s: [im.hash].filter(Boolean) });
-    }
-    for (const w of wantList) {
-      const dst = path.join(finalDir, w.name);
-      if (fs.existsSync(dst)) continue;
-      let done = false;
-      // ① 按目标文件名（GB 原名）找：直接同名 or dup- 前缀尾（严格正则，防子串误匹配）
-      //    2026-08-26 旧版找回：GB 文件名与垃圾桶名版本后缀不同 → 去后缀匹配，找回改名 GB 当前名
-      if (isTrashName(w.name)) {
-        const exact = path.join(trashDir, w.name);
-        let srcPick = null;
-        if (fs.existsSync(exact)) srcPick = exact; // 直接同名（完整路径）
-        else {
-          const esc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const hitName = trashNames.find((n) => {
-            const base = path.basename(n); // 子路径取文件名部分匹配
-            const re = new RegExp("^dup-归位-([^\-]+)-" + esc2(w.name) + "$");
-            const re2 = new RegExp("^dup-仓库散落-\d+-" + esc2(w.name) + "$");
-            if (re.test(base) || re2.test(base)) return true;
-            // 核心名模糊匹配（2026-08-26 修复）：垃圾桶旧版名核心 == GB 当前名核心
-            if (coreName(base) && coreName(base) === coreName(w.name)) return true;
-            return false;
-          });
-          if (hitName) srcPick = path.join(trashDir, hitName); // 可能是子路径 → 完整拼接
-        }
-        if (srcPick) {
-          try { fs.renameSync(srcPick, dst); restored.push(w.name); done = true; } catch (_) {}
-        }
-      }
-      // ② 按内容 hash 找（md5 名文件）
-      if (!done) {
-        for (const md5 of w.md5s) {
-          const md5lower = String(md5).toLowerCase();
-          if (!md5lower) continue;
-          if (fs.existsSync(path.join(finalDir, md5lower + path.extname(w.name)))) { done = true; break; }
-          const src = path.join(trashDir, md5lower + path.extname(w.name));
-          if (fs.existsSync(src)) {
-            try { fs.renameSync(src, dst); restored.push(w.name); done = true; break; } catch (_) {}
-          }
-        }
-      }
-    }
-  }
+  // ---- 垃圾桶找回 ----
+  const restored = step3TrashRestore(target, obj, finalDir, trashRoot);
   if (restored.length) {
     report.step3.restored = restored;
     console.log("[trash-restore]", (finalDir.split("/Mods/")[1] || finalDir).slice(0, 40), "←", restored.length, "个文件");
   }
 
-  // ---- 2026-08-26：下载时自动整理（不在 HTML 文件列表的文件 → 移入垃圾桶）----
-  // 判定：HTML 现在会记住历史文件（legacy 追加合并），真正属于本 mod 的文件
-  //   都在列表里；不在列表的 = 错误归类的外部 mod 遗留 → 移入游戏根垃圾桶（.trash）。
-  //   移入时保留 GB 原名 → 将来下载其真正所属 mod 时 trash-restore 按原名自动找回归位。
-  //   2026-08-26 修复（实测 696913）：必须在 trash-restore 之后执行——否则 auto-organize
-  //   移入垃圾桶的历史 md5 名文件会被 trash-restore 按内容 hash 当成「本 mod 丢失文件」捞回，
-  //   导致移出又找回（autoOrganized 报告为 0，目录残留 md5 名副本）。先找回本 mod 的、
-  //   再清走外部遗留，互不干扰。
-  //   2026-08-26 修复（用户指出严重问题：作者更新只保留新版本，旧版本 zip 被误清）：
-  //   organizeDir 传当前 modId，name-index 反查命中同 modId 的旧版本文件保留（org.kept），
-  //   并追加进 HTML files legacy 记录——下次不再被当外部文件清理。
+  // ---- 自动整理（不在 HTML 文件列表的文件 → 移入垃圾桶）----
   try {
-    // 2026-08-26：垃圾桶保留来源目录结构——传 finalDir 相对游戏根的路径
     let relDir = "";
-    try { relDir = path.relative(target.root, finalDir); } catch (_) {}
+    try { relDir = path.relative(target.root, finalDir); } catch (_) { /* 相对路径计算失败 */ }
     const org = organize.organizeDir(finalDir, trashRoot, mod.modId, relDir);
     if (org.kept && org.kept.length) {
-      // 旧版本文件（GB 页面已下架，但本地保留）→ 追加进 HTML 记录
       let htmlChanged = false;
       const diskObj = readIndexObj(finalDir) || obj;
       for (const k of org.kept) {
@@ -800,7 +796,7 @@ async function prepareMod(url) {
         const inGifs = (diskObj.gifs || []).some((x) => x && (String(x.file || "").toLowerCase() === lower || String(x.localFile || "").toLowerCase() === lower));
         if (!inFiles && !inImgs && !inGifs) {
           let st = null;
-          try { st = fs.statSync(path.join(finalDir, base)); } catch (_) {}
+          try { st = fs.statSync(path.join(finalDir, base)); } catch (_) { /* 文件不存在 */ }
           if (/.(zip|rar|7z|tar|gz)$/i.test(base)) {
             diskObj.files = diskObj.files || [];
             diskObj.files.push({ file: base, url: "", size: st ? st.size : 0, gbMd5: "", hash: "", description: "旧版本文件（GB 已下架，本地保留）", legacy: true });
@@ -819,46 +815,11 @@ async function prepareMod(url) {
       report.step3.autoOrganized = org.moved;
       console.log("[auto-organize]", (finalDir.split("/Mods/")[1] || finalDir).slice(0, 50), "→ 移出", org.moved.length, "个外部文件");
     }
-  } catch (_) {}
+  } catch (_) { /* organizeDir 失败，静默跳过 */ }
 
   // ---- 第四步：构建下载项（标记已存在）----
-  // 2026-08-30：下载时遇到旧 gif 也改名——本地存在旧原名 gif（无后缀）而新
-  //   localFile 不存在 → rename 原名 → localFile（统一新名，避免重复下载 + 同名覆盖）
-  for (const g of obj.gifs || []) {
-    if (!g || !g.localFile || g.localFile === g.file) continue;
-    const oldP = path.join(finalDir, g.file);
-    const newP = path.join(finalDir, g.localFile);
-    if (fs.existsSync(oldP) && !fs.existsSync(newP)) {
-      try { fs.renameSync(oldP, newP); console.log("[gif-rename]", g.file, "→", g.localFile); } catch (_) {}
-    }
-  }
   const items = buildDownloadItems(mod, finalDir, obj);
-  const exists = new Set();
-  for (const it of items) {
-    try {
-      if (!it.path || !fs.existsSync(it.path)) continue;
-      const st = fs.statSync(it.path);
-      if (st.size <= 0) continue;
-      // 2026-08-30：gif 本地文件大小与记录不符 → 重新下（记录同名而本地无后缀也重下）
-      if (it.isGif && it.size > 0 && st.size !== it.size) continue;
-      exists.add(it.path);
-    } catch (_) {}
-  }
-  // 2026-08-26 修复（文件名一律按 GB 原名）：
-  //   · 文件/图片按 GB 原名（_sFile 短名）落盘 → 目标路径存在即跳过（不看 hash）
-  //   · 图片额外兼容：内容 hash 记录存在且同内容 md5 名文件在 → 也跳过（旧数据迁移场景）
-  //   · 仅 part 存在 → 不跳过（断点续传）
-  const imgHashFileExists = (it) => {
-    const im = (obj.images || []).find((x) => x && (x.file === it.displayName || x.gbFile === it.displayName));
-    if (!im || !im.hash) return false;
-    const md5name = String(im.hash).toLowerCase() + (path.extname(it.displayName) || "");
-    return fs.existsSync(path.join(finalDir, md5name)); // 仅本文件夹内同内容 → 跳过
-  };
-  for (const it of items) {
-    if (exists.has(it.path)) { it._skip = true; it.exists = true; }
-    else if (it.type === "image" && !it.isGif && imgHashFileExists(it)) { it._skip = true; it.exists = true; }
-    // 仅 part 存在 → 不跳过（断点续传）
-  }
+  step4MarkExists(mod, finalDir, obj, items);
   return { mod, obj, finalDir, items, report };
 }
 
