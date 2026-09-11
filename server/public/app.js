@@ -936,8 +936,10 @@ function renderGamesRows() {
   }
 }
 
-function bindSettings() {
-  // 保存下载路径
+// ---- bindSettings 子步骤拆分（原430行拆为6个子函数）----
+
+/** 设置-游戏管理：保存/添加游戏 */
+function bindSettingsGames() {
   $("#saveGamesBtn").addEventListener("click", async () => {
     const games = {};
     document.querySelectorAll("#rootMapRows .grid-map-row").forEach((row) => {
@@ -960,8 +962,6 @@ function bindSettings() {
       $("#gamesStatus").className = "status err";
     }
   });
-
-  // 2026-08-26：输入香蕉网 id 添加游戏，游戏名自动获取
   $("#fetchGameBtn").addEventListener("click", async () => {
     const id = parseInt($("#addGameId").value, 10);
     const st = $("#addGameStatus");
@@ -999,12 +999,12 @@ function bindSettings() {
       st.className = "status err";
     }
   });
+}
 
-  // 2026-09-01：保存设置改悬浮按钮（右下角 💾，仅设置页显示）
+/** 设置-Cookie/默认路径 */
+function bindSettingsCookie() {
   const saveFab = $("#saveSettingsFab");
   if (saveFab) saveFab.addEventListener("click", async () => {
-    // 2026-08-26：设置里不要并发数（只在「下载进度」页改并发）——payload 存 gbCookie + gbUserAgent
-    // 2026-09-11 bugfix：GB 会话绑定登录浏览器完整 UA，保存 cookie 时自动同步当前浏览器 UA
     const payload = {
       gbCookie: $("#gbCookie").value.trim(),
       gbUserAgent: navigator.userAgent
@@ -1013,22 +1013,18 @@ function bindSettings() {
       const r = await api("/api/settings", "POST", payload);
       if (!r.ok) throw new Error(r.error || "保存失败");
       settings = r.settings;
-      // 2026-09-01 参照 iwara：保存后清空输入框 + 改 placeholder + 已保存提示，用户不会困惑
       const cookieEl = $("#gbCookie");
       if (cookieEl) {
         cookieEl.value = "";
         cookieEl.placeholder = "已保存（再贴新凭证才会覆盖；留空不改）";
         cookieEl.dataset.filled = "1";
       }
-      // 2026-09-01：保存反馈改悬浮窗，不再用页面内嵌状态行
       showToast("✅ 已保存设置", "ok");
-      updateGbUserBadge(); // 保存后顶部用户名即时刷新
+      updateGbUserBadge();
     } catch (e) {
       showToast("❌ 保存失败：" + e.message, "err");
     }
   });
-
-  // 2026-09-02（#17）：默认下载位置保存（写入 config.json defaultDownloadPath）
   const saveDefPathBtn = $("#saveDefaultPathBtn");
   if (saveDefPathBtn) saveDefPathBtn.addEventListener("click", async () => {
     const st = $("#defaultPathStatus");
@@ -1042,16 +1038,15 @@ function bindSettings() {
       setStatus(st, "保存失败: " + e.message, "err");
     }
   });
+}
 
-  // 2026-09-02（#16-A）：未完成任务扫描（.part 残留 / html 记录文件缺失）
-  // 2026-09-02（#16）：未完成任务扫描 = 重建索引的顺带开关（并入 HTML 反查卡片），
-  //   不再独立卡片。重建完成后勾选时自动扫描 .part 残留 / html 记录文件本地缺失 → 任务 json。
+/** 设置-未完成任务扫描 */
+function bindSettingsScanIncomplete() {
   let lastScanTaskJson = null;
   async function runScanIncomplete() {
     const st = $("#scanIncompleteStatus");
     const out = $("#scanIncompleteResult");
     if (!st || !out) return;
-    // 2026-09-02：导出/加入按钮固定放卡片里，未扫描出结果前禁用
     const dlBtn = $("#scanIncompleteDlBtn");
     const exBtn = $("#scanIncompleteExportBtn");
     if (dlBtn) dlBtn.disabled = true;
@@ -1065,7 +1060,6 @@ function bindSettings() {
       lastScanTaskJson = r.taskJson;
       const list = (r.taskJson && r.taskJson.tasks) || [];
       setStatus(st, `✅ 发现 ${r.count} 个未完成任务（${r.links.length} 个可下载链接）`, "ok");
-      // 前端已存有任务 json → 启用导出；有链接 → 启用一键加入下载队列
       if (exBtn && lastScanTaskJson) exBtn.disabled = false;
       if (dlBtn && r.links && r.links.length) dlBtn.disabled = false;
       out.innerHTML = list.length
@@ -1084,7 +1078,6 @@ function bindSettings() {
       setStatus(st, "扫描失败: " + e.message, "err");
     }
   }
-  // 2026-09-02 固定按钮绑定（前端存有任务 json 才可点；未扫描/无结果时禁用）
   const scanDlBtn = $("#scanIncompleteDlBtn");
   if (scanDlBtn) scanDlBtn.addEventListener("click", async () => {
     const st = $("#scanIncompleteStatus");
@@ -1094,7 +1087,7 @@ function bindSettings() {
       const rr = await api("/api/scan-incomplete/download", "POST", { links });
       if (!rr.ok) throw new Error(rr.error || "加入失败");
       setStatus(st, `✅ 已将 ${rr.count || links.length} 个未完成任务加入下载队列`, "ok");
-      try { const t = await api("/api/task"); if (t && t.task) renderTask(t.task); } catch (_) {}
+      try { const t = await api("/api/task"); if (t && t.task) renderTask(t.task); } catch (_) { /* 刷新任务失败 */ }
     } catch (e) {
       setStatus(st, "加入下载失败: " + e.message, "err");
     }
@@ -1104,8 +1097,10 @@ function bindSettings() {
     if (!lastScanTaskJson) return;
     downloadJsonFile(lastScanTaskJson, `未完成任务-${new Date().toISOString().slice(0, 10)}.json`);
   });
+}
 
-  // 2026-09-02（#16-B）：下载任务 json 导出 / 导入
+/** 设置-任务导出/导入 */
+function bindSettingsTaskIO() {
   const taskExportBtn = $("#taskExportBtn");
   if (taskExportBtn) taskExportBtn.addEventListener("click", async () => {
     const st = $("#taskJsonStatus");
@@ -1118,7 +1113,6 @@ function bindSettings() {
       setStatus(st, "导出失败: " + e.message, "err");
     }
   });
-
   const taskImportBtn = $("#taskImportBtn");
   const taskImportFile = $("#taskImportFile");
   if (taskImportBtn && taskImportFile) {
@@ -1132,7 +1126,7 @@ function bindSettings() {
         const r = await api("/api/task/import", "POST", { json: text });
         if (!r.ok) throw new Error(r.error || "导入失败");
         setStatus(st, `✅ 已导入 ${r.imported} 个链接加入下载队列`, "ok");
-        try { const t = await api("/api/task"); if (t && t.task) renderTask(t.task); } catch (_) {}
+        try { const t = await api("/api/task"); if (t && t.task) renderTask(t.task); } catch (_) { /* 刷新任务失败 */ }
       } catch (e) {
         setStatus(st, "导入失败: " + e.message, "err");
       } finally {
@@ -1140,11 +1134,13 @@ function bindSettings() {
       }
     });
   }
+}
 
+/** 设置-密码/数据备份恢复 */
+function bindSettingsSecurity() {
   const gbLoginBtn = $("#gbLoginCheckBtn");
   if (gbLoginBtn) gbLoginBtn.addEventListener("click", checkGbLoginStatus);
   checkGbLoginStatus();
-
   $("#changePwdBtn").addEventListener("click", async () => {
     const pwd = $("#newPwd").value;
     const old = $("#oldPwd").value;
@@ -1161,8 +1157,6 @@ function bindSettings() {
       $("#pwdStatus").className = "status err";
     }
   });
-
-  // ---- 数据备份/恢复（2026-08-31：zip 导出/导入全部用户数据）----
   $("#exportDataBtn").addEventListener("click", async () => {
     const st = $("#dataStatus");
     st.textContent = "正在导出…";
@@ -1184,7 +1178,6 @@ function bindSettings() {
       st.className = "status err";
     }
   });
-
   $("#importDataBtn").addEventListener("click", () => { $("#importDataFile").click(); });
   $("#importDataFile").addEventListener("change", async (ev) => {
     const file = ev.target.files && ev.target.files[0];
@@ -1211,10 +1204,10 @@ function bindSettings() {
       ev.target.value = "";
     }
   });
+}
 
-  // ---- HTML 反查（2026-08-26：hash md5 或图片原始短名都支持）----
-  // 三表：本地表命中（source=local）→ 有实际落盘路径；GB 表命中（source=gb）→ 仅线上信息；
-  //       HTML 表命中（source=html）→ 按 GB 原名（图片短名/压缩包名）从 description.html 反查
+/** 设置-HTML反查/索引重建 */
+function bindSettingsHashQuery() {
   async function hashQuery() {
     const h = String($("#hashInput").value || "").trim();
     const st = $("#hashStatus"), res = $("#hashResult");
@@ -1246,7 +1239,6 @@ function bindSettings() {
         (!isLocal && r.mod.url
           ? '<div class="row mt"><button id="hashDlBtn" type="button" class="primary">⬇ 下载此 mod</button><span class="hint" id="hashDlStatus"></span></div>'
           : "");
-      // GB 表命中 → 提供「下载此 mod」
       const dlBtn = $("#hashDlBtn");
       if (dlBtn) {
         dlBtn.addEventListener("click", async () => {
@@ -1284,7 +1276,6 @@ function bindSettings() {
       const r = await api("/api/hash-rebuild", "POST", { game: game || "" });
       if (!r.ok) throw new Error(r.error || "启动失败");
       const doScan = !!($("#hashRebuildScan") && $("#hashRebuildScan").checked);
-      // 轮询直到完成
       const poll = async () => {
         const s = await api("/api/hash-index-status");
         if (s && s.running) { setTimeout(poll, 1500); return; }
@@ -1293,8 +1284,7 @@ function bindSettings() {
           ? `✅ 「${game}」索引已重建：GB 表 ${gInfo ? gInfo.gb : "?"} 条，本地表 ${gInfo ? gInfo.local : "?"} 条`
           : "✅ 索引已重建：GB 表 " + (s ? s.gb : "?") + " 条，本地表 " + (s ? s.local : "?") + " 条（" + (s ? s.htmls : "?") + " 个 HTML）";
         st.className = "status ok";
-        // 2026-09-02（#16）：重建索引顺带开关——勾选则重建后自动扫描未完成任务
-        if (doScan) { try { await runScanIncomplete(); } catch (_) {} }
+        if (doScan) { try { await runScanIncomplete(); } catch (_) { /* 扫描失败 */ } }
       };
       setTimeout(poll, 1200);
     } catch (e) {
@@ -1302,7 +1292,6 @@ function bindSettings() {
       st.className = "status err";
     }
   });
-  // 展示索引状态（含各游戏分布）
   api("/api/hash-index-status").then((s) => {
     if (s && s.ok) {
       const st = $("#hashStatus");
@@ -1313,9 +1302,11 @@ function bindSettings() {
         st.className = "status";
       }
     }
-  }).catch(() => {});
+  }).catch(() => { /* 获取索引状态失败 */ });
+}
 
-  // ---- GB 表模糊搜索（2026-08-26：离线 mod 目录，按 mod 名/作者查）----
+/** 设置-GB表模糊搜索 */
+function bindSettingsHashSearch() {
   async function hashSearch() {
     const q = String($("#hashSearchInput").value || "").trim();
     const st = $("#hashSearchStatus"), res = $("#hashSearchResult");
@@ -1323,7 +1314,6 @@ function bindSettings() {
     st.className = "status";
     st.textContent = "搜索中…";
     try {
-      // 2026-09-02 反查搜索保持全量（不按游戏过滤）
       const r = await api("/api/hash-index-search?q=" + encodeURIComponent(q));
       if (!r.ok) throw new Error(r.error || "搜索失败");
       if (!r.count) {
@@ -1344,7 +1334,6 @@ function bindSettings() {
           ? '<button class="ghost" data-dl="' + esc(m.url) + '" style="margin-left:8px">⬇ 下载</button>'
           : "") + "</div>"
       ).join("");
-      // 下载按钮委托
       res.querySelectorAll("button[data-dl]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           btn.disabled = true;
@@ -1365,6 +1354,16 @@ function bindSettings() {
   if (hss) hss.addEventListener("click", hashSearch);
   const hsi = $("#hashSearchInput");
   if (hsi) hsi.addEventListener("keydown", (e) => { if (e.key === "Enter") hashSearch(); });
+}
+
+function bindSettings() {
+  bindSettingsGames();
+  bindSettingsCookie();
+  bindSettingsScanIncomplete();
+  bindSettingsTaskIO();
+  bindSettingsSecurity();
+  bindSettingsHashQuery();
+  bindSettingsHashSearch();
 }
 
 // 2026-09-01 参照 iwara /api/account-check：剩余天数格式化
@@ -1561,18 +1560,18 @@ async function emptyDirsRun() {
 function bindMerge() {
   $("#mmMergeBtn").addEventListener("click", mergeRolesPreview);
   $("#mmMergeGoBtn").addEventListener("click", mergeRolesRun);
-
-  // ---- 2026-08-31：清空空文件夹（空壳/仅含HTML也算，选游戏，带预览）----
   $("#mmEmptyBtn").addEventListener("click", emptyDirsPreview);
   $("#mmEmptyGoBtn").addEventListener("click", emptyDirsRun);
+  bindMergeMapping();
+  bindMergeAutoUpdate();
+}
 
-  // ---- 2026-08-26：手动添加映射（选游戏/仓库 → 从香蕉网获取角色列表 → 写入 mapping JSON）----
-  // 级联（2026-08-26）：先选游戏 → 才能选仓库；先选仓库 → 才能选角色（英文名）
+/** 映射管理：手动添加映射（游戏/仓库/角色级联选择） */
+function bindMergeMapping() {
   $("#mmAddGame").addEventListener("change", async () => {
     const game = $("#mmAddGame").value;
     const wh = $("#mmAddWarehouse");
     const en = $("#mmAddEn"), zh = $("#mmAddZh");
-    // 未选游戏：仓库/角色禁用
     if (!game) {
       wh.disabled = true; en.disabled = true; zh.disabled = true;
       wh.innerHTML = '<option value="">— 请先选择游戏 —</option>';
@@ -1588,7 +1587,6 @@ function bindMerge() {
       wh.innerHTML = '<option value="">— 请选择仓库 —</option>' +
         (r.warehouses || []).map((w) =>
           `<option value="${esc(w.name)}">${esc(w.name)}${w.type === "characters" && w.from ? "（来自" + esc(w.from) + "）" : ""}${w.local && w.type !== "characters" ? "（" + esc(w.local) + "）" : ""}</option>`).join("");
-      // 2026-08-26：选完游戏即预加载角色列表（英文名下拉数据先就绪，选了仓库立即可用）
       loadGbCharacters();
     } catch (e) {
       wh.innerHTML = '<option value="">— 获取失败 —</option>';
@@ -1597,10 +1595,9 @@ function bindMerge() {
   $("#mmAddWarehouse").addEventListener("change", () => {
     const en = $("#mmAddEn"), zh = $("#mmAddZh");
     if (!$("#mmAddWarehouse").value) { en.disabled = true; zh.disabled = true; en.value = ""; return; }
-    en.disabled = false; zh.disabled = false; // 选了仓库才能选角色/填中文
+    en.disabled = false; zh.disabled = false;
     loadGbCharacters();
   });
-  // 选仓库（角色等）→ 获取角色列表填入英文名下拉（2026-08-27：默认读 JSON 缓存，force=true 强制重新获取）
   async function loadGbCharacters(force) {
     const game = $("#mmAddGame").value;
     const st = $("#mmAddStatus");
@@ -1625,12 +1622,10 @@ function bindMerge() {
       }
     }
   }
-  // 2026-08-27：设置页「重新获取角色」按钮——强制从香蕉网拉取并保存 JSON
   $("#mmRefreshChars").addEventListener("click", () => {
     if (!$("#mmAddGame").value) { const st = $("#mmAddStatus"); if (st) setStatus(st, "请先选择游戏", "err"); return; }
     loadGbCharacters(true);
   });
-  // 可搜索角色下拉（自绘，最多显示 20 条，输入过滤）
   function renderCombo(filter) {
     const list = window.__gbChars || [];
     const el = $("#mmComboList");
@@ -1666,8 +1661,6 @@ function bindMerge() {
   });
   $("#mmAddWarehouse").addEventListener("change", loadGbCharacters);
   $("#mmAddGame").addEventListener("change", () => { window.__gbChars = []; $("#mmComboList").style.display = "none"; });
-
-  // 添加映射
   $("#mmAddBtn").addEventListener("click", async () => {
     const game = $("#mmAddGame").value;
     const en = $("#mmAddEn").value.trim();
@@ -1684,11 +1677,10 @@ function bindMerge() {
       if (st) setStatus(st, "添加失败: " + e.message, "err");
     }
   });
+}
 
-  // ---- 自动更新（2026-09-06：服务端代码自动更新 + 优雅重启）----
-  // 加载当前配置（github 模式的仓库/分支/Token 不在前端显示，只存配置文件手改）
-  // github 模式按提交时间对比版本：显示本地已应用版本时间，更新时对比远端时间
-  // 时间统一显示北京时间（UTC+8），固定时区不随浏览器所在时区变化
+/** 自动更新设置 */
+function bindMergeAutoUpdate() {
   function fmtCommitDate(iso) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -1719,18 +1711,14 @@ function bindMerge() {
       } else {
         setStatus($("#autoUpdateInfo"), "⏸ 未启用", "");
       }
-    } catch (_) {}
+    } catch (_) { /* 获取自动更新状态失败 */ }
   }
   loadAutoUpdateStatus();
-
-  // 模式切换时显示/隐藏间隔输入框
   $("#autoUpdateMode").addEventListener("change", () => {
     const mode = $("#autoUpdateMode").value;
     const isPull = (mode === "git" || mode === "github");
     $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
   });
-
-  // 保存自动更新配置（github 模式的仓库/分支/Token 由 server/config.json 手改，前端不提交）
   $("#autoUpdateSaveBtn").addEventListener("click", async () => {
     const st = $("#autoUpdateStatus");
     const enabled = $("#autoUpdateToggle").checked;
@@ -1745,8 +1733,6 @@ function bindMerge() {
       setStatus(st, "保存失败: " + e.message, "err");
     }
   });
-
-  // 手动触发 github 检查（后端等待检查完成，直接返回结果）
   $("#autoUpdateCheckBtn").addEventListener("click", async () => {
     const st = $("#autoUpdateStatus");
     setStatus(st, "🔍 检查中...", "");
@@ -1768,8 +1754,6 @@ function bindMerge() {
       setStatus(st, "检查失败: " + e.message, "err");
     }
   });
-
-  // 手动重启
   $("#autoUpdateRestartBtn").addEventListener("click", async () => {
     const st = $("#autoUpdateStatus");
     if (!confirm("确认立即重启服务端？当前下载任务将暂停，重启后自动恢复。")) return;
