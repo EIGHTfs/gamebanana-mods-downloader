@@ -53,9 +53,11 @@ if (process.argv.includes("--set-password")) {
 }
 
 // ---------- 工具 ----------
-function setSessionCookie(res, token) {
+// 2026-09-13：记住设备——hours 显式传入（登录时勾选「记住此设备」=720h 长会话），
+//   不传则沿用 config.sessionHours 默认值。cookie Max-Age 必须与 session 有效期一致。
+function setSessionCookie(res, token, hours) {
   const cfgNow = cfg.readConfig();
-  const maxAge = (cfgNow.sessionHours || 72) * 3600;
+  const maxAge = (hours != null ? hours : (cfgNow.sessionHours || 72)) * 3600;
   res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`);
 }
 

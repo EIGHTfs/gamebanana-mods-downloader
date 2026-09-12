@@ -38,6 +38,8 @@ const DEFAULT_CONFIG = {
   gbUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
   // 会话超时（小时），到期需重新登录
   sessionHours: 72,
+  // 2026-09-13：记住设备会话时长（小时，默认 30 天）——登录勾选「记住此设备」时生效
+  sessionRememberHours: 720,
   // 并发下载数
   downloadConcurrency: 4,
   // 2026-08-27 找回模式：开启后不实际下载，只归位/找回/生成 HTML

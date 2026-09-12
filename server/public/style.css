@@ -183,7 +183,19 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
   padding: 8px 12px;
   background: var(--card2);
   font-size: 13px;
+  cursor: pointer; /* 2026-09-13：下载列表分组可折叠（默认展开），点击表头切换 */
+  user-select: none;
 }
+.mod-group-head .mg-arrow {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: 4px;
+  transition: transform .15s;
+  display: inline-block;
+}
+.mod-group.collapsed .mod-group-head .mg-arrow { transform: rotate(-90deg); }
+.mod-group.collapsed .mod-group-body { display: none; }
+.mod-group-body { padding: 2px 0; }
 .mod-group-head > span { min-width: 0; word-break: break-word; }
 .mod-group-dir {
   color: var(--muted);
@@ -247,6 +259,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 }
 .auth-wrap .card { display: flex; flex-direction: column; gap: 10px; }
 .auth-wrap h1 { text-align: center; }
+/* 2026-09-13：登录页「记住此设备」（勾选后 30 天免登录） */
+.remember-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--muted); cursor: pointer;
+  margin: -2px 0 2px;
+}
+.remember-row input { cursor: pointer; }
 
 /* 目录选择弹窗（设置页读取本地选择） */
 .modal-mask {

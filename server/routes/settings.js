@@ -41,7 +41,8 @@ module.exports = function register(api) {
     // 【改为】2026-09-03：「这两项我想给现在的server版本加回去」——允许写 downloadToggles
     // 2026-09-11 bugfix：GB 会话绑定登录浏览器完整 UA（OS+版本号全部一致），
     // gbUserAgent 必须允许前端写入，否则 UA 不匹配时 /api/gb-login-status 始终返回未登录
-    const allowed = ["gbCookie", "gbUserAgent", "downloadConcurrency", "sessionHours", "port", "defaultDownloadPath", "downloadToggles"];
+    // 2026-09-13：sessionRememberHours=记住设备会话时长（默认720h），允许设置页调整
+    const allowed = ["gbCookie", "gbUserAgent", "downloadConcurrency", "sessionHours", "sessionRememberHours", "port", "defaultDownloadPath", "downloadToggles"];
     for (const k of allowed) {
       if (body[k] === undefined) continue;
       // 敏感字段（gbCookie）为空串时跳过不覆盖：留空 = 不改

@@ -509,24 +509,11 @@ async function integrityCheck(finalDir, obj, root) {
 // AI 思路：对齐旧扩展 buildModDownloadItems 的 if (settings.toggles.files/images)；
 //   HTML 第一步仍全量记录（查重/反查不丢），这里才按开关决定要不要入队下载。
 //   gif 跟图片走（用户确认）；关掉 images 时预览图和 gif 都不下。
+// 2026-09-13（下载优先级）：图片/gif 排在 files 前面 → 消费者按数组顺序取号，
+//   图片先下载（预览图/截图快速到位），压缩包后下。
 function buildDownloadItems(mod, finalDir, obj) {
   const items = [];
   const toggles = cfg.normalizeDownloadToggles(cfg.readConfig().downloadToggles);
-  if (toggles.files) {
-  for (const f of obj.files || []) {
-    items.push({
-      type: "file",
-      url: f.url || "",
-      path: path.join(finalDir, f.file),
-      displayName: f.file,
-      gbMd5: f.gbMd5 || "",
-      size: f.size || 0,
-      targetDir: finalDir,
-      modId: mod.modId, modName: mod.name, modUrl: mod.profileUrl,
-      author: mod.author, game: mod.game
-    });
-  }
-  }
   if (toggles.images) {
   for (const img of obj.images || []) {
     if (!img.url) continue;
@@ -554,6 +541,21 @@ function buildDownloadItems(mod, finalDir, obj) {
       targetDir: finalDir,
       isGif: true,
       skipReason: unreachable ? "gif 源图床不可达（tumblr/tenor/patreon），已跳过" : undefined,
+      modId: mod.modId, modName: mod.name, modUrl: mod.profileUrl,
+      author: mod.author, game: mod.game
+    });
+  }
+  }
+  if (toggles.files) {
+  for (const f of obj.files || []) {
+    items.push({
+      type: "file",
+      url: f.url || "",
+      path: path.join(finalDir, f.file),
+      displayName: f.file,
+      gbMd5: f.gbMd5 || "",
+      size: f.size || 0,
+      targetDir: finalDir,
       modId: mod.modId, modName: mod.name, modUrl: mod.profileUrl,
       author: mod.author, game: mod.game
     });

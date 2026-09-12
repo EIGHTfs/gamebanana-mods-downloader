@@ -60,8 +60,8 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 
 | 选项卡 | 功能 |
 |---|---|
-| 下载 | 批量输入 mod 链接或纯数字 id；可勾选「压缩包 / 预览图」（记住到设置）；一键开始 |
-| 下载进度 | 每个文件的实时状态（下载中/成功/跳过/失败）、进度条、预览图；失败可单独重试/跳过；并发数即时调节；任务 json 导入/导出 |
+| 下载 | 批量输入 mod 链接或纯数字 id；可勾选「压缩包 / 预览图」（记住到设置）；一键开始；图片优先下载 |
+| 下载进度 | 每个文件的实时状态（下载中/成功/跳过/失败）、进度条、预览图；失败可单独重试/跳过；并发数即时调节；任务 json 导入/导出；分组可折叠/展开（默认展开，状态记忆） |
 | 搜索 | 关键词搜索（中文归一）＋ 按时间搜索；结果勾选后一键下载 |
 | 设置 | 游戏下载路径（可读取本地目录）、GB Cookie 与登录检测、映射管理、文件夹合并、HTML 反查、修改密码（需旧密码） |
 
@@ -264,6 +264,12 @@ A: GameBanana 会话绑定了**登录时浏览器的完整 User-Agent**（含 OS
 **Q: 导入任务会不会把现有队列清掉？**
 A: 不会。导入 = 纯追加；只有点「终止」才清空队列（终止后导入 = 新建任务）。
 
+**Q: 登录太频繁 / 每次都要输密码？**
+A: 登录页默认勾选「**记住此设备**」——勾选后签发 **30 天**长会话（cookie + session 同步失效时间），期间免登录。不勾选则按默认 `sessionHours`（72 小时）。长会话时长可在 `server/config.json` 的 `sessionRememberHours` 调整（小时）。
+
+**Q: 下载时图片和压缩包哪个先下？**
+A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下——下载列表分组的全部项仍是同一组，整组完成后才从列表移除。
+
 ---
 
 ## 版本
@@ -275,4 +281,5 @@ A: 不会。导入 = 纯追加；只有点「终止」才清空队列（终止�
 | 1.2.0 | 自动更新（watch / git / github 三模式 + 防抖重启 + 前端开关 UI）；github 模式无需服务端 .git，定时从 GitHub 拉取并安全更新代码 |
 | 1.2.1 | bugfix：GB 登录检测修复——GB 会话绑定浏览器完整 UA（OS+版本号），保存 Cookie 时自动同步当前浏览器 UA 到 `gbUserAgent`，解决 UA 不匹配导致 `_bIsLoggedIn` 始终返回 false 的问题 |
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
-| 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数） |
+| 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
+| 1.3.2 | 新功能：①下载优先级——图片/gif 排前优先下载；②下载列表分组折叠/展开（默认展开，状态记忆）；③登录页「记住此设备」——勾选后 30 天免登录（默认勾选，解决登录太频繁），时长可配置 `sessionRememberHours` |
