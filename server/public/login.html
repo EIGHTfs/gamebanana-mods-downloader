@@ -13,6 +13,8 @@
   <div class="card">
     <h2>登录</h2>
     <input type="password" id="pwd" placeholder="访问密码">
+    <!-- 2026-09-13：记住此设备——勾选后 30 天内免登录（默认勾选） -->
+    <label class="remember-row"><input type="checkbox" id="remember" checked> <span>记住此设备（30 天免登录）</span></label>
     <button class="primary" id="btn">登录</button>
     <div class="status" id="status"></div>
   </div>
@@ -26,7 +28,7 @@ async function login() {
     const r = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: document.getElementById("pwd").value })
+      body: JSON.stringify({ password: document.getElementById("pwd").value, remember: document.getElementById("remember").checked })
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || "登录失败");

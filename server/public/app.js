@@ -799,6 +799,7 @@ function renderTask(task) {
   const fp = (task.items || []).length + ":" + Object.keys(task.resultsMap || {}).length + ":" + (task.doneCount || 0) + ":" + (task.status || "");
   if (__renderTaskCache.fingerprint === fp && __renderTaskCache.html !== "") {
     $("#taskList").innerHTML = __renderTaskCache.html;
+    applyGroupCollapsedState(); // 2026-09-13：缓存复用同样恢复折叠状态
     return;
   }
 
@@ -833,6 +834,7 @@ function renderTask(task) {
     return false;
   });
   const html = visibleGroups.map((g, gi) => {
+    const key = g.key; // 2026-09-13：折叠状态按组 key 记忆（localStorage）
     const rows = (g.keptRows || g.items).map(({ item, idx }) => {
       let cls = "pending", icon = typeIcon(item.type), statusText = typeLabel(item.type);
       const r = resultOf(idx);
@@ -881,13 +883,46 @@ function renderTask(task) {
       return `<div class="item ${cls}"><span class="icon">${icon}</span><span class="item-name">${esc(item.displayName || item.path || item.url || "")}${bar}</span><span class="status-text">${statusHtml}${actBtns}</span>${thumb}</div>`;
     }).join("");
     return `<div class="mod-group">
-      <div class="mod-group-head"><span class="group-num">${gi + 1}.</span><span>${esc(g.key)}</span><span class="mod-group-dir">📁 ${esc(g.targetDir)}</span></div>
-      ${rows}
+      <div class="mod-group-head" data-group="${esc(key)}"><span><span class="mg-arrow">▼</span><span class="group-num">${gi + 1}.</span><span>${esc(g.key)}</span></span><span class="mod-group-dir">📁 ${esc(g.targetDir)}</span></div>
+      <div class="mod-group-body">${rows}</div>
     </div>`;
   }).join("");
   __renderTaskCache.fingerprint = (task.items || []).length + ":" + Object.keys(task.resultsMap || {}).length + ":" + (task.doneCount || 0) + ":" + (task.status || "");
   __renderTaskCache.html = html || '<div class="empty">暂无任务</div>';
   $("#taskList").innerHTML = html || '<div class="empty">暂无任务</div>';
+  applyGroupCollapsedState(); // 2026-09-13：渲染后按 localStorage 恢复各分组折叠状态
+}
+
+// 2026-09-13：下载列表分组折叠（默认展开）。折叠状态按组 key 存 localStorage，
+//   每次 renderTask 渲染后调用 applyGroupCollapsedState 恢复；点击表头切换。
+const GROUP_COLLAPSE_KEY = "gbmd_group_collapsed";
+function loadCollapsedGroups() {
+  try { return new Set(JSON.parse(localStorage.getItem(GROUP_COLLAPSE_KEY) || "[]")); }
+  catch (_) { return new Set(); }
+}
+function applyGroupCollapsedState() {
+  const collapsed = loadCollapsedGroups();
+  document.querySelectorAll("#taskList .mod-group").forEach((g) => {
+    const head = g.querySelector(".mod-group-head");
+    const key = head && head.dataset.group;
+    g.classList.toggle("collapsed", !!key && collapsed.has(key));
+  });
+}
+function bindTaskListCollapse() {
+  const list = $("#taskList");
+  if (!list || list.dataset.collapseBound) return;
+  list.dataset.collapseBound = "1";
+  list.addEventListener("click", (e) => {
+    const head = e.target.closest && e.target.closest(".mod-group-head");
+    if (!head || !head.dataset.group) return;
+    const group = head.closest(".mod-group");
+    if (!group) return;
+    const collapsed = loadCollapsedGroups();
+    const key = head.dataset.group;
+    if (group.classList.contains("collapsed")) { group.classList.remove("collapsed"); collapsed.delete(key); }
+    else { group.classList.add("collapsed"); collapsed.add(key); }
+    try { localStorage.setItem(GROUP_COLLAPSE_KEY, JSON.stringify([...collapsed])); } catch (_) {}
+  });
 }
 
 // ---------- 主题切换（2026-08-26：蓝白=白天模式，香蕉风深色=夜间模式）----------
@@ -1801,6 +1836,7 @@ async function init() {
   bindSearch();
   bindKeywordSearch();
   bindProgress();
+  bindTaskListCollapse(); // 2026-09-13：下载列表分组折叠（默认展开）
   bindSettings();
   // 2026-09-02 目录选择弹窗事件由 path-picker.js 小模块绑定（原 bindBrowse 已移除）
   if (window.PathPicker) PathPicker.bindEvents();
