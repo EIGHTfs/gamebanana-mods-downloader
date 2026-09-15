@@ -9,11 +9,6 @@
 <title>GameBanana Mod Downloader</title>
 <link rel="stylesheet" href="style.css">
 <script src="theme-init.js"></script>
-// 2026-08-26：蓝白=白天模式（默认），香蕉风深色=夜间模式，可切换；进页面立即应用防闪烁
-try {
-  const th = localStorage.getItem("gbmd-theme");
-  if (th === "night") document.documentElement.setAttribute("data-theme", "night");
-} catch (_) {}
 </head>
 <body>
 <header>
@@ -360,7 +355,6 @@ try {
 <script src="path-picker.js?v=20260902"></script>
 <script src="search-date-range.js"></script>
 <script src="app.js?v=20260903-toggles"></script>
-
 <!-- 目录选择弹窗（设置页「读取本地选择」下载路径） -->
 <div class="modal-mask" id="browseMask" style="display:none">
   <div class="modal">

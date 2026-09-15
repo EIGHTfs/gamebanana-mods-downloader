@@ -70,3 +70,6 @@ node_modules.orig/
 
 # 用户数据备份 zip（不入库）
 *.zip
+
+# 安全删除回收站
+.trash/
