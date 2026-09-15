@@ -73,7 +73,7 @@ const PROTECTED_NAMES = new Set([
 ].map((x) => x.toLowerCase()));
 
 // 目录是否为「空壳」：仅「完全空」（0 文件 0 子目录，排除隐藏/@eaDir/.trash/.git）
-// 2026-08-26 修复（用户反馈 + 实测 1672 个误清）：有 description.html 的目录**不视为空壳**
+// 2026-08-26 修复（实测 1672 个误清）：有 description.html 的目录**不视为空壳**
 //   ——HTML 是 mod 记录（可能文件在规范位置、目录留作记录），绝不自动清理；
 //   角色/分类目录（Barbara – 芭芭拉 等动态名）也无 HTML，靠「完全空」判定天然保护。
 //   仓库层（PROTECTED_NAMES）即使完全空也不清（分类层）。

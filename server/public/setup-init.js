@@ -1,25 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="icon" type="image/png" href="favicon.png">
-<title>GameBanana Mod Downloader · 首次设置</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div class="auth-wrap">
-  <h1><img src="logo.png" alt="GameBanana Mod Downloader" style="height:26px;vertical-align:middle"></h1>
-  <div class="card">
-    <h2>首次设置</h2>
-    <p class="hint">服务器尚未设置访问密码。请设置一个密码（至少 4 位），之后访问所有页面都需要登录。</p>
-    <input type="password" id="pwd" placeholder="设置访问密码">
-    <input type="password" id="pwd2" placeholder="再次输入确认">
-    <button class="primary" id="btn">设置密码并进入</button>
-    <div class="status" id="status"></div>
-  </div>
-</div>
-<script src="setup-init.js"></script>
+// 设置向导页：首次设置密码 → /api/change-password → 自动登录 → 跳首页
 document.getElementById("btn").addEventListener("click", async () => {
   const pwd = document.getElementById("pwd").value;
   const pwd2 = document.getElementById("pwd2").value;
@@ -47,5 +26,3 @@ document.getElementById("btn").addEventListener("click", async () => {
     st.className = "status err";
   }
 });
-</body>
-</html>

@@ -282,6 +282,9 @@ function ingestModDir(modDir) {
 // ---------- 重建（2026-09-02 支持按游戏）----------
 // rebuild(game?)：game 指定 → 只重建该游戏；不指定 → 全部已配置游戏（含默认位置子目录）
 // 与旧表合并追加（只增不删）
+// ---------- 重建（2026-09-02 支持按游戏）----------
+// rebuild(game?)：game 指定 → 只重建该游戏；不指定 → 全部已配置游戏（含默认位置子目录）
+// 与旧表合并追加（只增不删）
 async function rebuild(gameFilter) {
   if (buildState.running) return { running: true, error: "正在重建中" };
   buildState.running = true;
@@ -298,87 +301,9 @@ async function rebuild(gameFilter) {
       if (!root || !fs.existsSync(root)) continue;
       let g = loadedGames.get(game) || loadGameFile(game) || { game, gb: new Map(), local: new Map(), name: new Map() };
 
-      let count = 0;
-      const walk = async (dir, gameRoot) => {
-        let ents = [];
-        try { ents = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (_) { return; }
-        for (const e of ents) {
-          // 2026-08-31 修复：不再跳过 . 开头目录——.代理人/.NPC 等隐藏仓库区里的旧 HTML
-          //   也存绝对下载路径，重建时必须遍历并替换为相对路径（所有 HTML）
-          if (e.name === ".trash" || e.name === ".git" || e.name === "@eaDir") continue;
-          const p = path.join(dir, e.name);
-          if (e.isDirectory()) {
-            await walk(p, gameRoot);
-          } else if (e.name === "description.html") {
-            const obj = readIndexObj(dir);
-            if (obj) {
-              htmls++;
-              // ---- 2026-08-31：HTML 下载路径以相对路径记录；重建时按 HTML
-              //   当前所在相对路径替换（手动移动文件夹后重建可纠正）----
-              try {
-                const relDir = path.relative(gameRoot, dir) || "";
-                const hp = path.join(dir, "description.html");
-                const hStr = fs.readFileSync(hp, "utf8");
-                const hEsc = (s) => String(s == null ? "" : s)
-                  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-                let newH = String(hStr).replace(/下载路径：[^\n<]*/, "下载路径：" + (relDir ? hEsc(relDir) : "-"));
-                // JSON 索引块里的 dir 字段同步为相对路径
-                newH = String(newH).replace(/"dir":\s*"[^"]*"/, '"dir": ' + JSON.stringify(relDir));
-                if (newH !== hStr) fs.writeFileSync(hp, newH, "utf8");
-              } catch (_) {}
-              const gbMeta = {
-                modId: obj.modId || (obj.url || "").replace(/^.*mods\/(\d+).*$/, "$1") || "",
-                modName: obj.name || "",
-                author: obj.author || "",
-                game: obj.game || "",
-                url: obj.url || ""
-              };
-              for (const f of obj.files || []) {
-                const key = String(f.gbMd5 || "").toLowerCase().trim();
-                if (key && !g.gb.has(key)) g.gb.set(key, { ...gbMeta, fileName: f.file, gbMd5: key });
-                const lk = String(f.hash || "").toLowerCase().trim();
-                if (lk && !g.local.has(lk)) g.local.set(lk, { modDir: dir, file: f.file, hash: lk, gbMd5: key, kind: "file", ...gbMeta });
-                if (key && !g.local.has(key)) g.local.set(key, { modDir: dir, file: f.file, hash: key, gbMd5: key, kind: "file", ...gbMeta });
-                const nk = String(f.file || "").toLowerCase().trim();
-                if (nk && !g.name.has(nk)) g.name.set(nk, { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: f.file, kind: "file" });
-              }
-              for (const im of obj.images || []) {
-                const lk = String(im.hash || "").toLowerCase().trim();
-                if (lk && !g.local.has(lk)) g.local.set(lk, { modDir: dir, file: im.file || im.gbFile || "", hash: lk, gbMd5: lk, kind: "image", ...gbMeta });
-                const nk = String(im.file || im.gbFile || "").toLowerCase().trim();
-                if (nk && !g.name.has(nk)) g.name.set(nk, { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: im.file || im.gbFile || "", kind: "image" });
-              }
-              // 2026-08-26 补全（垃圾桶反查）：旧版下载的 HTML 图片 hash 为空，但磁盘图片是
-              //   md5 名（内容 hash）——扫描目录里 md5 名图片文件，用文件名(=内容hash)直接建本地索引，
-              //   使垃圾桶里同 hash 的图片（内容 md5 名）也能反查到所属 mod 目录。
-              try {
-                const diskFiles = fs.readdirSync(dir);
-                for (const dn of diskFiles) {
-                  const dm = String(dn).match(/^([0-9a-f]{32})\.(jpg|jpeg|png|webp|gif)$/i);
-                  if (!dm) continue;
-                  const dk = dm[1].toLowerCase();
-                  if (!g.local.has(dk)) g.local.set(dk, { modDir: dir, file: dn, hash: dk, gbMd5: dk, kind: "image", ...gbMeta });
-                }
-              } catch (_) {}
-              // 2026-08-26：手动建立 HTML 反查时顺带清理——不在 HTML 列表的
-              //   外部 mod 遗留文件 → 移入本游戏根垃圾桶（.trash）。移入保留原名，
-              //   将来下载其真正所属 mod 时 trash-restore 按原名自动找回归位。
-              try {
-                // 2026-08-26：垃圾桶保留来源目录结构
-                let relDir = "";
-                try { relDir = path.relative(gameRoot, dir); } catch (_) {}
-                const org = cfg.readConfig().autoOrganize ? organize.organizeDir(dir, path.join(gameRoot, ".trash"), gbMeta.modId, relDir) : { moved: [] };
-                if (org.moved && org.moved.length) {
-                  console.log("[rebuild-organize]", (dir.split("/Mods/")[1] || dir).slice(0, 50), "→ 移出", org.moved.length, "个外部文件");
-                }
-              } catch (_) {}
-            }
-          }
-          if (++count % 300 === 0) await new Promise((r) => setImmediate(r));
-        }
-      };
-
-      await walk(root, root);
+      const counter = { htmls: 0, steps: 0 };
+      await walkDir(root, root, g, counter);
+      htmls += counter.htmls;
       // 2026-08-26 用户决定：自动空壳清理已取消（曾误清 1672 个目录）——以后由用户
       //   手动触发整理，不再 rebuild 时自动清理。
 
@@ -395,6 +320,108 @@ async function rebuild(gameFilter) {
   } finally {
     buildState.running = false;
   }
+}
+
+// 目录遍历：递归扫描目录树，收集 description.html 反查（htmls 计数 + 节流计数走 counter）
+async function walkDir(dir, gameRoot, g, counter) {
+  let ents = [];
+  try { ents = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (_) { return; }
+  for (const e of ents) {
+    // 2026-08-31 修复：不再跳过 . 开头目录——.代理人/.NPC 等隐藏仓库区里的旧 HTML
+    //   也存绝对下载路径，重建时必须遍历并替换为相对路径（所有 HTML）
+    if (e.name === ".trash" || e.name === ".git" || e.name === "@eaDir") continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      await walkDir(p, gameRoot, g, counter);
+    } else if (e.name === "description.html") {
+      const obj = readIndexObj(dir);
+      if (obj) {
+        counter.htmls++;
+        rewriteHtmlRelPath(dir, gameRoot);
+        const gbMeta = buildGbMeta(obj);
+        indexModFiles(obj, dir, g, gbMeta);
+        indexMd5DiskImages(dir, g, gbMeta);
+        organizeExternalFiles(dir, gameRoot, gbMeta);
+      }
+    }
+    if (++counter.steps % 300 === 0) await new Promise((r) => setImmediate(r));
+  }
+}
+
+// ---- 2026-08-31：HTML 下载路径以相对路径记录；重建时按 HTML
+//   当前所在相对路径替换（手动移动文件夹后重建可纠正）----
+function rewriteHtmlRelPath(dir, gameRoot) {
+  try {
+    const relDir = path.relative(gameRoot, dir) || "";
+    const hp = path.join(dir, "description.html");
+    const hStr = fs.readFileSync(hp, "utf8");
+    const hEsc = (s) => String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    let newH = String(hStr).replace(/下载路径：[^\n<]*/, "下载路径：" + (relDir ? hEsc(relDir) : "-"));
+    // JSON 索引块里的 dir 字段同步为相对路径
+    newH = String(newH).replace(/"dir":\s*"[^"]*"/, '"dir": ' + JSON.stringify(relDir));
+    if (newH !== hStr) fs.writeFileSync(hp, newH, "utf8");
+  } catch (_) {}
+}
+
+// 由 HTML 索引块对象构建 GB 元信息
+function buildGbMeta(obj) {
+  return {
+    modId: obj.modId || (obj.url || "").replace(/^.*mods\/(\d+).*$/, "$1") || "",
+    modName: obj.name || "",
+    author: obj.author || "",
+    game: obj.game || "",
+    url: obj.url || ""
+  };
+}
+
+// 把 HTML 的 files/images 列表写入 g 的三张索引表（gb/local/name）
+function indexModFiles(obj, dir, g, gbMeta) {
+  for (const f of obj.files || []) {
+    const key = String(f.gbMd5 || "").toLowerCase().trim();
+    if (key && !g.gb.has(key)) g.gb.set(key, { ...gbMeta, fileName: f.file, gbMd5: key });
+    const lk = String(f.hash || "").toLowerCase().trim();
+    if (lk && !g.local.has(lk)) g.local.set(lk, { modDir: dir, file: f.file, hash: lk, gbMd5: key, kind: "file", ...gbMeta });
+    if (key && !g.local.has(key)) g.local.set(key, { modDir: dir, file: f.file, hash: key, gbMd5: key, kind: "file", ...gbMeta });
+    const nk = String(f.file || "").toLowerCase().trim();
+    if (nk && !g.name.has(nk)) g.name.set(nk, { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: f.file, kind: "file" });
+  }
+  for (const im of obj.images || []) {
+    const lk = String(im.hash || "").toLowerCase().trim();
+    if (lk && !g.local.has(lk)) g.local.set(lk, { modDir: dir, file: im.file || im.gbFile || "", hash: lk, gbMd5: lk, kind: "image", ...gbMeta });
+    const nk = String(im.file || im.gbFile || "").toLowerCase().trim();
+    if (nk && !g.name.has(nk)) g.name.set(nk, { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: im.file || im.gbFile || "", kind: "image" });
+  }
+}
+
+// 2026-08-26 补全（垃圾桶反查）：旧版下载的 HTML 图片 hash 为空，但磁盘图片是
+//   md5 名（内容 hash）——扫描目录里 md5 名图片文件，用文件名(=内容hash)直接建本地索引，
+//   使垃圾桶里同 hash 的图片（内容 md5 名）也能反查到所属 mod 目录。
+function indexMd5DiskImages(dir, g, gbMeta) {
+  try {
+    const diskFiles = fs.readdirSync(dir);
+    for (const dn of diskFiles) {
+      const dm = String(dn).match(/^([0-9a-f]{32})\.(jpg|jpeg|png|webp|gif)$/i);
+      if (!dm) continue;
+      const dk = dm[1].toLowerCase();
+      if (!g.local.has(dk)) g.local.set(dk, { modDir: dir, file: dn, hash: dk, gbMd5: dk, kind: "image", ...gbMeta });
+    }
+  } catch (_) {}
+}
+
+// 2026-08-26：手动建立 HTML 反查时顺带清理——不在 HTML 列表的
+//   外部 mod 遗留文件 → 移入本游戏根垃圾桶（.trash）。移入保留原名，
+//   将来下载其真正所属 mod 时 trash-restore 按原名自动找回归位。
+function organizeExternalFiles(dir, gameRoot, gbMeta) {
+  try {
+    // 2026-08-26：垃圾桶保留来源目录结构
+    let relDir = "";
+    try { relDir = path.relative(gameRoot, dir); } catch (_) {}
+    const org = cfg.readConfig().autoOrganize ? organize.organizeDir(dir, path.join(gameRoot, ".trash"), gbMeta.modId, relDir) : { moved: [] };
+    if (org.moved && org.moved.length) {
+      console.log("[rebuild-organize]", (dir.split("/Mods/")[1] || dir).slice(0, 50), "→ 移出", org.moved.length, "个外部文件");
+    }
+  } catch (_) {}
 }
 
 function status() {

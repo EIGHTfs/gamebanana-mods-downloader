@@ -215,6 +215,12 @@ function roleZhOf(name, game) {
 //   仓库层：superCategory 映射（Skins→空 时用 category 映射顶替仓库层，角色层留空）
 //   角色层：category 映射为「英文 – 中文」
 //   无角色层（只有大仓库）→ 直接 仓库/[作者] mod名
+// ---------- 下载路径计算 ----------
+// mod = { game, name, author, superCategory, category }
+// 返回 { root, warehouse, item, folderName, dir }
+//   仓库层：superCategory 映射（Skins→空 时用 category 映射顶替仓库层，角色层留空）
+//   角色层：category 映射为「英文 – 中文」
+//   无角色层（只有大仓库）→ 直接 仓库/[作者] mod名
 function buildTargetDir(mod) {
   const game = (mod && mod.game) || "";
   const root = cfg.gameRootOf(game);
@@ -226,12 +232,31 @@ function buildTargetDir(mod) {
 
   const scRaw = String((mod && mod.superCategory) || "").trim();
   const catRaw = String((mod && mod.category) || "").trim();
+  const scVal = warehouseLookup(scRaw, game); // undefined=未映射；""=映射为空（Skins 跳过该层）
 
+  let zone = resolveTargetZone(scVal, scRaw, catRaw, game); // { warehouse, item, otherZone }
+  zone = normalizeZoneOverrides(scRaw, catRaw, zone, game);
+
+  const folderName = buildModDirName(mod.author, mod.name);
+  const wh = zone.warehouse || "其他";
+  const it = zone.item;
+
+  let dir;
+  if (it) dir = path.join(root, wh, it, folderName);
+  else if (zone.otherZone) dir = path.join(root, wh, "." + wh, folderName); // Characters/Skins → 角色/.角色（前面有点）
+  // 2026-08-26（实测：装备/.装备 有 mod 却被重下到 武器/）：无具体 item 的 mod
+  //   一律落 仓库/.仓库名（隐藏其他区，与旧项目「全部无item都进.仓库名」一致）；「其他」保持仓库根
+  else if (wh !== "其他") dir = path.join(root, wh, "." + wh, folderName);
+  else dir = path.join(root, wh, folderName);
+
+  return { root, warehouse: wh, item: it, folderName, dir };
+}
+
+// 依据 superCategory/category 解析目标仓库层与角色层
+function resolveTargetZone(scVal, scRaw, catRaw, game) {
   let warehouse = "";
   let item = "";
   let otherZone = false; // 落「仓库/.仓库名」隐藏其他区
-
-  const scVal = warehouseLookup(scRaw, game); // undefined=未映射；""=映射为空（Skins 跳过该层）
 
   // 2026-08-26：Skins 映射为 "X/.X"（mapping 文件：崩坏3 → 女武神/.女武神；代码默认 → 角色/.角色）
   //   = 该层是「X 仓库的隐藏其他区」：无具体角色 → X/.X；category 是具体角色 → X/<角色>（该层视作跳过）；
@@ -249,7 +274,7 @@ function buildTargetDir(mod) {
       item = "";
       otherZone = true;
     }
-  } else if (scVal === "" ) {
+  } else if (scVal === "") {
     // superCategory 映射为空（Skins）→ 该层跳过，用下一级（category）决定
     if (catRaw) {
       const catVal = warehouseLookup(catRaw, game);
@@ -287,12 +312,16 @@ function buildTargetDir(mod) {
     warehouse = scVal;
     item = itemDirName(catRaw, game);
   }
+  return { warehouse, item, otherZone };
+}
+
+// Characters/Skins 复合串归一 + 大仓库与项同名归一 + "X/.X" 二次解析兜底
+function normalizeZoneOverrides(scRaw, catRaw, zone, game) {
+  let { warehouse, item, otherZone } = zone;
 
   // 2026-08-26：「把香蕉网上的分类 Characters / Skins 映射成 角色/.角色 文件夹（注意后面有点）」
   // 场景：角色大仓库下的「皮肤」子类、没有具体角色（super=Skins+cat=Characters，或复合串 "Characters / Skins"，
   //   或反之 Characters+Skins）→ 归 角色/.角色（角色仓库的隐藏其他区，前面有点）
-  // 2026-08-26 AI 思路：warehouse 取该游戏「角色」仓库映射（原神/星铁=角色、崩坏3=女武神），item 留空，
-  //   目录用「仓库/.仓库名」形态（与旧项目无 item 落其他区一致，恢复此形态）
   const scN = normKey(scRaw).replace(/\s+/g, "");
   const catN = normKey(catRaw).replace(/\s+/g, "");
   const isCharsSkins =
@@ -321,20 +350,7 @@ function buildTargetDir(mod) {
     otherZone = true;
     item = "";
   }
-
-  const folderName = buildModDirName(mod.author, mod.name);
-  const wh = warehouse || "其他";
-  const it = item;
-
-  let dir;
-  if (it) dir = path.join(root, wh, it, folderName);
-  else if (otherZone) dir = path.join(root, wh, "." + wh, folderName); // Characters/Skins → 角色/.角色（前面有点）
-  // 2026-08-26（实测：装备/.装备 有 mod 却被重下到 武器/）：无具体 item 的 mod
-  //   一律落 仓库/.仓库名（隐藏其他区，与旧项目「全部无item都进.仓库名」一致）；「其他」保持仓库根
-  else if (wh !== "其他") dir = path.join(root, wh, "." + wh, folderName);
-  else dir = path.join(root, wh, folderName);
-
-  return { root, warehouse: wh, item: it, folderName, dir };
+  return { warehouse, item, otherZone };
 }
 
 module.exports = {

@@ -308,7 +308,7 @@ async function genIndexHtml(url) {
 //   · 排除仓库层目录（名字是已知仓库名：角色/光锥/武器/UI/NPC/Objects/.Mods 等）——不能整体移动仓库
 //   · 含子目录的候选只接受「[作者] mod名」或「mod名」文件夹（避免移动装有多 mod 的容器目录）
 //   · 优先级：含压缩包 > 含图片；文件夹名是 [作者] mod名 > mod名 > 其他
-// 2026-08-26 优化（用户反馈大批量「一直准备中」）：原来每个 mod 都整根遍历一次找同名文件，
+// 2026-08-26 优化（问题：大批量「一直准备中」）：原来每个 mod 都整根遍历一次找同名文件，
 //   140 个 mod 就要遍历 140 次 → 改为每游戏根建一次「文件名 → 目录」索引缓存（惰性 + 5 分钟 TTL，
 //   每次任务开始清空重建），之后每个 mod 的查重 O(1) 查索引，批次内只遍历一次根
 let rootNameIndexCache = new Map(); // root -> { at, files: Map<lowername, dir> }
@@ -508,7 +508,7 @@ async function integrityCheck(finalDir, obj, root) {
 // 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包」
 // AI 思路：对齐旧扩展 buildModDownloadItems 的 if (settings.toggles.files/images)；
 //   HTML 第一步仍全量记录（查重/反查不丢），这里才按开关决定要不要入队下载。
-//   gif 跟图片走（用户确认）；关掉 images 时预览图和 gif 都不下。
+//   gif 跟图片走；关掉 images 时预览图和 gif 都不下。
 // 2026-09-13（下载优先级）：图片/gif 排在 files 前面 → 消费者按数组顺序取号，
 //   图片先下载（预览图/截图快速到位），压缩包后下。
 function buildDownloadItems(mod, finalDir, obj) {
@@ -826,6 +826,48 @@ async function prepareMod(url) {
 }
 
 // ---------- 下载（断点续传）----------
+// ---------- 下载（断点续传）----------
+// 停滞检测定时器：网络 received 与磁盘 stat 任一增长即视为下载进行中——
+//   ① 网络慢但 data 事件持续 → received 增长（避免原 stat 版写盘缓冲延迟误报）
+//   ② 写盘背压导致 pipe pause res、data 事件停摆 → 磁盘 stat 仍在增长（避免纯 received 版误报）
+//   两者都连续 15s 无变化才判定停滞；停止/暂停仍 1s 内响应
+function startStallWatcher(task, req, tmp, getReceived, isDone) {
+  const STALL_TIMEOUT_MS = 15000;
+  let lastReceived = getReceived();
+  let lastSize = 0;
+  try { lastSize = fs.statSync(tmp).size; } catch (_) {}
+  let lastChangeAt = Date.now();
+  return setInterval(() => {
+    if (isDone()) { clearInterval(this); return; }
+    if (task && (task.abort || task.pause)) {
+      clearInterval(this);
+      try { req.destroy(new Error(task.abort ? "已停止" : "已暂停")); } catch (_) {}
+      return;
+    }
+    let curSize = lastSize;
+    try { curSize = fs.statSync(tmp).size; } catch (_) {}
+    if (getReceived() !== lastReceived || curSize !== lastSize) {
+      lastReceived = getReceived();
+      lastSize = curSize;
+      lastChangeAt = Date.now();
+    } else if (Date.now() - lastChangeAt >= STALL_TIMEOUT_MS) {
+      clearInterval(this);
+      try { req.destroy(new Error("下载停滞（网络与磁盘均无进展且未完成）")); } catch (_) {}
+    }
+  }, 1000);
+}
+
+// 下载完成收尾：空文件/大小不匹配校验 → rename → 返回 size
+function finalizeDownload(tmp, destPath, contentLength, resumeOffset) {
+  const st = fs.statSync(tmp);
+  if (st.size === 0) throw new Error("下载后文件为空: " + destPath);
+  if (contentLength > 0 && resumeOffset === 0 && st.size !== contentLength) {
+    throw new Error(`文件大小不匹配（期望 ${contentLength}，实际 ${st.size}）: ${destPath}`);
+  }
+  fs.renameSync(tmp, destPath);
+  return { size: st.size };
+}
+
 function downloadToFile(item, settings, onProgress) {
   return new Promise((resolve, reject) => {
     const destPath = item.path;
@@ -849,7 +891,6 @@ function downloadToFile(item, settings, onProgress) {
       if (useRange && resumeOffset > 0) headers.Range = `bytes=${resumeOffset}-`;
 
       let done = false;
-      let stallTimer = null;
       const req = mod.get(u, { headers, timeout: 120000, agent: parsed.protocol === "https:" ? HTTPS_AGENT : HTTP_AGENT }, (res) => {
         const code = res.statusCode || 0;
         if (code >= 300 && code < 400 && res.headers.location) {
@@ -882,33 +923,8 @@ function downloadToFile(item, settings, onProgress) {
         let received = resumeOffset;
         const total = contentLength + resumeOffset;
 
-        // 2026-08-30 修复（双判据）：received 与磁盘 stat 任一增长即视为下载进行中——
-        //   ① 网络慢但 data 事件持续 → received 增长（避免原 stat 版写盘缓冲延迟误报）
-        //   ② 写盘背压导致 pipe pause res、data 事件停摆 → 磁盘 stat 仍在增长（避免纯 received 版误报）
-        //   两者都连续 15s 无变化才判定停滞；停止/暂停仍 1s 内响应
-        const STALL_TIMEOUT_MS = 15000;
-        let stallLastReceived = received;
-        let stallLastSize = 0;
-        try { stallLastSize = fs.statSync(tmp).size; } catch (_) {}
-        let stallLastChangeAt = Date.now();
-        stallTimer = setInterval(() => {
-          if (done) { clearInterval(stallTimer); return; }
-          if (task && (task.abort || task.pause)) {
-            clearInterval(stallTimer);
-            try { req.destroy(new Error(task.abort ? "已停止" : "已暂停")); } catch (_) {}
-            return;
-          }
-          let curSize = stallLastSize;
-          try { curSize = fs.statSync(tmp).size; } catch (_) {}
-          if (received !== stallLastReceived || curSize !== stallLastSize) {
-            stallLastReceived = received;
-            stallLastSize = curSize;
-            stallLastChangeAt = Date.now();
-          } else if (Date.now() - stallLastChangeAt >= STALL_TIMEOUT_MS) {
-            clearInterval(stallTimer);
-            try { req.destroy(new Error("下载停滞（网络与磁盘均无进展且未完成）")); } catch (_) {}
-          }
-        }, 1000); // 1s 检查：停止/暂停 1s 内中断；停滞需连续 15s 无任何进展
+        // 2026-08-30 修复（双判据）：停滞检测逻辑见 startStallWatcher
+        const stallTimer = startStallWatcher(task, req, tmp, () => received, () => done);
 
         res.on("data", (chunk) => {
           received += chunk.length;
@@ -919,15 +935,8 @@ function downloadToFile(item, settings, onProgress) {
           done = true;
           clearInterval(stallTimer);
           file.close(() => {
-            try {
-              const st = fs.statSync(tmp);
-              if (st.size === 0) return reject(new Error("下载后文件为空: " + destPath));
-              if (contentLength > 0 && resumeOffset === 0 && st.size !== contentLength) {
-                return reject(new Error(`文件大小不匹配（期望 ${contentLength}，实际 ${st.size}）: ${destPath}`));
-              }
-              fs.renameSync(tmp, destPath);
-              resolve({ size: st.size });
-            } catch (e) { reject(e); }
+            try { resolve(finalizeDownload(tmp, destPath, contentLength, resumeOffset)); }
+            catch (e) { reject(e); }
           });
         });
         res.on("error", (e) => {
@@ -1042,7 +1051,6 @@ async function runDownloadLoop() {
 
 async function doDownloadLoop() {
   if (!task || (task.status !== "running" && task.status !== "preparing")) return;
-  const concurrency = task.concurrency || cfg.readConfig().downloadConcurrency || 4;
   const settings = cfg.readConfig();
   task.status = "running";
 
@@ -1060,175 +1068,157 @@ async function doDownloadLoop() {
   clearRootNameIndex(); // 2026-08-26：每批任务重建一次「文件名→目录」索引（第二步查重用）
 
   try {
-    // ---------- 生产者：逐个 mod 准备（第一步→第二步→第三步）----------
-    const produce = async () => {
-      while (task && !task.abort && !task.pause) {
-        // 2026-08-26 追加任务立刻开始：pendingMods 处理完不退出——若还有下载项在跑，
-        //   等待新追加（task.pendingMods 增长）继续生产；全部完成才退出
-        if (task.buildIndex >= (task.pendingMods || []).length) {
-          // 2026-08-26 追加任务立刻开始：有活跃下载/未完成项 → produce 等待新追加
-          const stillActive = (task.activeItems || []).length > 0 || ((task.items || []).length > 0 && resultsByIndex.size < (task.items || []).length);
-          if (stillActive) {
-            task.waitingAppend = true;
-            await new Promise((r) => setTimeout(r, 300));
-            continue; // 新追加后 buildIndex < pendingMods.length → 继续生产
-          }
-          // 无活跃下载且无未完成项 → 任务完成，produce 退出（等 consume 也退出 → 收尾 done）
-          task.waitingAppend = false;
-          break;
-        }
-        task.waitingAppend = false;
-        const myIdx = task.buildIndex;
-        task.buildIndex++;
-        const modRef = task.pendingMods[myIdx];
-        // 2026-08-30：准备阶段去重——该 mod 已在下载列表（排队中/已成功/已跳过）→
-        //   不再准备，直接记录去重跳过项（items 计数保持，结果标记 skip 原因）
-        if (modInTask(modRef.profileUrl, myIdx)) {
-          task.items = task.items || [];
-          task.items.push({ type: "skipped", displayName: modRef.name || modRef.profileUrl, modName: modRef.name, modUrl: modRef.profileUrl, path: "", url: modRef.profileUrl, skipReason: "已在下载列表（去重跳过）" });
-          task.preparingItem = null;
-          task.updatedAt = Date.now();
-          saveTask();
-          continue;
-        }
-        task.preparingItem = { name: modRef.name || modRef.profileUrl, type: "preparing" };
-        task.message = `准备 ${myIdx + 1}/${(task.pendingMods || []).length} · 已完成 ${resultsByIndex.size} 项`;
-        saveTask();
-        try {
-          const res = await prepareMod(modRef.profileUrl);
-          if (res.report.step2.moved) console.log("[step2-mv]", (res.report.step2.found || ""), "→", (res.report.step1.dir || "").split("/Mods/")[1] || "");
-          for (const it of res.items) {
-            modDirByItem.set(it, { finalDir: res.finalDir, obj: res.obj });
-          }
-          task.items = task.items || [];
-          task.items.push(...res.items);
-        } catch (e) {
-          task.items = task.items || [];
-          if (e && e.skip) {
-            task.items.push({ type: "skipped", displayName: modRef.name || modRef.profileUrl, modName: modRef.name, modUrl: modRef.profileUrl, path: "", url: modRef.profileUrl, skipReason: e.message || "未配置根目录" });
-          } else {
-            task.items.push({ type: "error", displayName: modRef.name || modRef.profileUrl, modName: modRef.name, modUrl: modRef.profileUrl, path: "", url: modRef.profileUrl, buildError: e.message || String(e) });
-          }
-        }
-        task.preparingItem = null;
-        task.updatedAt = Date.now();
-        saveTask();
-      }
-    };
-
-    // ---------- 消费者：并发下载 ----------
-    // 2026-09-06 修复（用户反馈：并发数增加后不立即生效）：
-    //   原设计：消费者数量在任务启动时按初始并发数定死（L1220），中途改 task.concurrency
-    //   只能调小（消费者等 cur 限流），无法调大——因为消费者数量不增加，实际并发上限=初始值。
-    //   现改为：始终启动 MAX_CONCURRENCY(32) 个消费者，每个消费者取项前按「当前并发数」限流。
-    //   调大 → 空闲消费者立即醒来多开（活跃数 < cur 就不等）；调小 → 消费者自动等待。
-    //   开销：32 个 idle setTimeout 轮询 ≈ 28×300ms 循环，CPU 占用 < 0.01% 核。
+    // 生产者：逐个 mod 准备（第一步→第二步→第三步）；消费者：并发下载
     const MAX_CONCURRENCY = 32;
-    const consume = async () => {
-      while (task && !task.abort && !task.pause) {
-        const cur = Math.max(1, Math.min(MAX_CONCURRENCY, parseInt(task.concurrency, 10) || 4));
-        if ((task.activeItems || []).length >= cur) {
-          await new Promise((r) => setTimeout(r, 300));
-          continue;
-        }
-        const activeIdx = new Set((task.activeItems || []).map((a) => a.idx));
-        while (downloadIdx < (task.items || []).length &&
-               (resultsByIndex.has(downloadIdx) || activeIdx.has(downloadIdx))) downloadIdx++;
-        const idx = downloadIdx;
-        if (idx >= (task.items || []).length) {
-          // 生产者未完成则等待；produce 在等追加（waitingAppend）也不退出
-          const stillProducing = task.buildIndex < (task.pendingMods || []).length || task.preparingItem || task.waitingAppend;
-          if (stillProducing) { await new Promise((r) => setTimeout(r, 200)); continue; }
-          return;
-        }
-        downloadIdx++;
-        const item = task.items[idx];
-        const activeKey = item.path || item.url || `idx${idx}`;
-        const activeItem = { key: activeKey, idx, name: item.displayName || item.path || item.url || "", modName: item.modName || "", type: item.type, received: 0, total: 0 };
-        if (!task.activeItems) task.activeItems = [];
-        task.activeItems.push(activeItem);
-        task.currentItem = activeItem;
-        task.message = `正在下载 ${resultsByIndex.size + 1}/${(task.items || []).length} 项（${task.activeItems.length} 线程进行中）`;
-        saveTask();
-        let r;
-        try {
-          r = await withPartLock(item.path + ".gbmd.part", () => executeDownloadItem(item, settings, (received, total) => {
-            activeItem.received = received;
-            activeItem.total = total;
-            const now = Date.now();
-            if (!activeItem._spT) { activeItem._spT = now; activeItem._spLast = received; }
-            else {
-              const dt = (now - activeItem._spT) / 1000;
-              if (dt >= 0.5) {
-                activeItem.speed = Math.max(0, (received - activeItem._spLast) / dt);
-                activeItem._spT = now;
-                activeItem._spLast = received;
-              }
-            }
-          }));
-          resultsByIndex.set(idx, r);
-        } catch (e) {
-          resultsByIndex.set(idx, { path: item.path, ok: false, error: e.message || String(e) });
-        }
-        // 2026-08-26 修复（用户反馈：下载进度 UI 看不到每文件状态）：
-        // resultsByIndex 是内存实时表，必须同步回填到 task.resultsMap（前端轮询 /api/task 读它），
-        // 否则任务完成后 resultsMap 恒空 → 成功/跳过/失败统计与逐文件状态全部不显示。
-        task.resultsMap = {};
-        for (const [i, rr] of resultsByIndex) task.resultsMap[i] = rr;
-        task.activeItems = (task.activeItems || []).filter((a) => a.key !== activeKey);
-        task.doneCount = resultsByIndex.size;
-        task.updatedAt = Date.now();
-        saveTask();
-      }
-    };
-
-    // 始终启动 MAX_CONCURRENCY 个消费者，按当前 task.concurrency 限流
     const consumers = [];
-    for (let i = 0; i < MAX_CONCURRENCY; i++) consumers.push(consume());
-    await Promise.all([produce(), ...consumers]);
+    for (let i = 0; i < MAX_CONCURRENCY; i++) consumers.push(consumeTaskItem(settings));
+    await Promise.all([produceTaskMod(), ...consumers]);
+  } catch (e) {
+    // 循环内异常由各步骤自己捕获；这里兜底
+    task.error = e.message || String(e);
+    saveTask();
+  }
 
-    // ---------- 收尾 ----------
-    if (!task) return;
-    if (task.abort || task.pause) {
-      const wasAbort = task.abort;
-      task.status = wasAbort ? "stopped" : "paused";
-      task.message = wasAbort ? "已终止" : "已暂停";
-      task.abort = false;
-      task.pause = false;
-      task.currentItem = null;
-      task.preparingItem = null;
-      task.activeItems = [];
-      task.updatedAt = Date.now();
-      if (wasAbort) {
-        // 2026-08-26 停止后彻底清空：前端列表消失（显示"暂无任务"）
-        task = null;
-        return;
-      }
-      saveTask();
-      return;
-    }
-
-    // 全部完成：更新各 mod 的 HTML（下载后 hash/图片整理）+ 图片 md5 整理收敛
-    task.status = "done";
-    task.message = "下载完成";
+  // ---------- 收尾 ----------
+  if (!task) return;
+  if (task.abort || task.pause) {
+    const wasAbort = task.abort;
+    task.status = wasAbort ? "stopped" : "paused";
+    task.message = wasAbort ? "已终止" : "已暂停";
+    task.abort = false;
+    task.pause = false;
     task.currentItem = null;
     task.preparingItem = null;
     task.activeItems = [];
-    task.results = [];
-    for (let i = 0; i < (task.items || []).length; i++) {
-      task.results.push(resultsByIndex.get(i) || { path: task.items[i].path, ok: false, error: "未执行" });
+    task.updatedAt = Date.now();
+    saveTask();
+    return;
+  }
+  task.status = "done";
+  task.doneAt = Date.now();
+  task.message = "全部完成";
+  saveTask();
+  try { await finalizeHtmls(); } catch (_) {}
+}
+
+// ---------- 生产者循环体：逐个 mod 准备 ----------
+async function produceTaskMod() {
+  while (task && !task.abort && !task.pause) {
+    // 2026-08-26 追加任务立刻开始：pendingMods 处理完不退出——若还有下载项在跑，
+    //   等待新追加（task.pendingMods 增长）继续生产；全部完成才退出
+    if (task.buildIndex >= (task.pendingMods || []).length) {
+      // 2026-08-26 追加任务立刻开始：有活跃下载/未完成项 → produce 等待新追加
+      const stillActive = (task.activeItems || []).length > 0 || ((task.items || []).length > 0 && resultsByIndex.size < (task.items || []).length);
+      if (stillActive) {
+        task.waitingAppend = true;
+        await new Promise((r) => setTimeout(r, 300));
+        continue; // 新追加后 buildIndex < pendingMods.length → 继续生产
+      }
+      // 无活跃下载且无未完成项 → 任务完成，produce 退出（等 consume 也退出 → 收尾 done）
+      task.waitingAppend = false;
+      return;
     }
-    try { await finalizeHtmls(); } catch (_) {}
+    task.waitingAppend = false;
+    const myIdx = task.buildIndex;
+    task.buildIndex++;
+    const modRef = task.pendingMods[myIdx];
+    // 2026-08-30：准备阶段去重——该 mod 已在下载列表（排队中/已成功/已跳过）→
+    //   不再准备，直接记录去重跳过项（items 计数保持，结果标记 skip 原因）
+    if (modInTask(modRef.profileUrl, myIdx)) {
+      task.items = task.items || [];
+      task.items.push({ type: "skipped", displayName: modRef.name || modRef.profileUrl, modName: modRef.name, modUrl: modRef.profileUrl, path: "", url: modRef.profileUrl, skipReason: "已在下载列表（去重跳过）" });
+      task.preparingItem = null;
+      task.updatedAt = Date.now();
+      saveTask();
+      continue;
+    }
+    task.preparingItem = { name: modRef.name || modRef.profileUrl, type: "preparing" };
+    task.message = `准备 ${myIdx + 1}/${(task.pendingMods || []).length} · 已完成 ${resultsByIndex.size} 项`;
+    saveTask();
+    try {
+      const res = await prepareMod(modRef.profileUrl);
+      if (res.report.step2.moved) console.log("[step2-mv]", (res.report.step2.found || ""), "→", (res.report.step1.dir || "").split("/Mods/")[1] || "");
+      for (const it of res.items) {
+        modDirByItem.set(it, { finalDir: res.finalDir, obj: res.obj });
+      }
+      task.items = task.items || [];
+      task.items.push(...res.items);
+    } catch (e) {
+      task.items = task.items || [];
+      if (e && e.skip) {
+        task.items.push({ type: "skipped", displayName: modRef.name || modRef.profileUrl, modName: modRef.name, modUrl: modRef.profileUrl, path: "", url: modRef.profileUrl, skipReason: e.message || "未配置根目录" });
+      } else {
+        task.items.push({ type: "error", displayName: modRef.name || modRef.profileUrl, modName: modRef.name, modUrl: modRef.profileUrl, path: "", url: modRef.profileUrl, buildError: e.message || String(e) });
+      }
+    }
+    task.preparingItem = null;
     task.updatedAt = Date.now();
     saveTask();
-    console.log(`[task] 下载完成（共 ${(task.items || []).length} 项）`);
-  } catch (e) {
-    if (!task) return;
-    task.status = "done";
-    task.error = e.message || String(e);
+  }
+}
+
+// ---------- 消费者循环体：并发下载一个 item ----------
+// 2026-09-06 修复（问题：并发数增加后不立即生效）：
+//   原设计：消费者数量在任务启动时按初始并发数定死，中途改 task.concurrency
+//   只能调小（消费者等 cur 限流），无法调大——因为消费者数量不增加，实际并发上限=初始值。
+//   现改为：始终启动 MAX_CONCURRENCY(32) 个消费者，每个消费者取项前按「当前并发数」限流。
+//   调大 → 空闲消费者立即醒来多开（活跃数 < cur 就不等）；调小 → 消费者自动等待。
+async function consumeTaskItem(settings) {
+  const MAX_CONCURRENCY = 32;
+  while (task && !task.abort && !task.pause) {
+    const cur = Math.max(1, Math.min(MAX_CONCURRENCY, parseInt(task.concurrency, 10) || 4));
+    if ((task.activeItems || []).length >= cur) {
+      await new Promise((r) => setTimeout(r, 300));
+      continue;
+    }
+    const activeIdx = new Set((task.activeItems || []).map((a) => a.idx));
+    while (downloadIdx < (task.items || []).length &&
+           (resultsByIndex.has(downloadIdx) || activeIdx.has(downloadIdx))) downloadIdx++;
+    const idx = downloadIdx;
+    if (idx >= (task.items || []).length) {
+      // 生产者未完成则等待；produce 在等追加（waitingAppend）也不退出
+      const stillProducing = task.buildIndex < (task.pendingMods || []).length || task.preparingItem || task.waitingAppend;
+      if (stillProducing) { await new Promise((r) => setTimeout(r, 200)); continue; }
+      return;
+    }
+    downloadIdx++;
+    const item = task.items[idx];
+    const activeKey = item.path || item.url || `idx${idx}`;
+    const activeItem = { key: activeKey, idx, name: item.displayName || item.path || item.url || "", modName: item.modName || "", type: item.type, received: 0, total: 0 };
+    if (!task.activeItems) task.activeItems = [];
+    task.activeItems.push(activeItem);
+    task.currentItem = activeItem;
+    task.message = `正在下载 ${resultsByIndex.size + 1}/${(task.items || []).length} 项（${task.activeItems.length} 线程进行中）`;
+    saveTask();
+    let r;
+    try {
+      r = await withPartLock(item.path + ".gbmd.part", () => executeDownloadItem(item, settings, (received, total) => {
+        activeItem.received = received;
+        activeItem.total = total;
+        const now = Date.now();
+        if (!activeItem._spT) { activeItem._spT = now; activeItem._spLast = received; }
+        else {
+          const dt = (now - activeItem._spT) / 1000;
+          if (dt >= 0.5) {
+            activeItem.speed = Math.max(0, (received - activeItem._spLast) / dt);
+            activeItem._spT = now;
+            activeItem._spLast = received;
+          }
+        }
+      }));
+      resultsByIndex.set(idx, r);
+    } catch (e) {
+      resultsByIndex.set(idx, { path: item.path, ok: false, error: e.message || String(e) });
+    }
+    // 2026-08-26 修复（问题：下载进度 UI 看不到每文件状态）：
+    // resultsByIndex 是内存实时表，必须同步回填到 task.resultsMap（前端轮询 /api/task 读它），
+    // 否则任务完成后 resultsMap 恒空 → 成功/跳过/失败统计与逐文件状态全部不显示。
+    task.resultsMap = {};
+    for (const [i, rr] of resultsByIndex) task.resultsMap[i] = rr;
+    task.activeItems = (task.activeItems || []).filter((a) => a.key !== activeKey);
+    task.doneCount = resultsByIndex.size;
     task.updatedAt = Date.now();
     saveTask();
-    console.log(`[task] 下载完成（异常收尾: ${task.error}）`);
   }
 }
 
@@ -1458,7 +1448,7 @@ async function startDownloadTask({ mods }) {
   console.log(`[task] 追加 ${plan.append.length} 个 mod 到下载队列` + (skipped > 0 ? `（跳过 ${skipped} 个）` : ""));
   saveTask();
 
-  // 2026-08-26 修复（用户反馈：paused 时提交显示「追加中」不下载）：
+  // 2026-08-26 修复（问题：paused 时提交显示「追加中」不下载）：
   //   paused 状态提交新 mod → 自动恢复下载（用户期望立即开始，而非只追加）
   if (task.status === "running" || task.status === "preparing") {
     runDownloadLoop();
@@ -1500,7 +1490,7 @@ function resumeTask() {
 
 function stopTask() {
   if (!task) return { ok: false, error: "没有任务" };
-  // 2026-08-26 修复（用户反馈：停止后实际还在下载）：
+  // 2026-08-26 修复（问题：停止后实际还在下载）：
   //   原来设 abort=true 后立即 task=null——下载循环的 abort 检查是「task && task.abort」，
   //   task 变 null 后检查恒 false，正在下载的请求不会中断，继续下完。
   //   正确：设 abort=true 保留 task 引用（下载循环会 destroy 活跃请求），
@@ -1555,7 +1545,7 @@ function getRestoreMode() {
 
 // 2026-08-26 加回：跳过失败项——按 path 或 url 匹配，标记 skipped
 // （前端立即消失；不写 skip-list，下次重新发起下载会再尝试——与旧项目最终行为一致）
-// 2026-08-26 修复（用户反馈跳过/重试不能正常使用）：
+// 2026-08-26 修复（问题：跳过/重试不能正常使用）：
 //   · 结果表同时看 resultsByIndex 与 task.resultsMap（重启/重试后 resultsByIndex 可能不全）
 //   · 「卡住」项（无任何结果、任务已 done 的重试残留）也能被跳过/重试
 function syncResultsMap() {
@@ -1618,7 +1608,7 @@ function skipAllFailed() {
   return { ok: true, skipped: n, message: n ? `已清除 ${n} 个失败项（下次请求可再下载）` : "无失败项" };
 }
 
-// 2026-09-01 重试重构（用户反馈三个 bug）：
+// 2026-09-01 重试重构（三个 bug）：
 //   ① 单个任务重试失败会所有任务都重试 → 支持单项重试（传 url/path 只重试匹配项）
 //   ② 不在下载列表的错误也重试 → 排除 type:"error"/"skipped"（构建失败/去重跳过/图床不可达，
 //      重试无意义）；只重试「在下载列表且确实失败」的项
@@ -1660,7 +1650,7 @@ function retryFailed(q = {}) {
     if (i < minIdx) minIdx = i;
   }
   if (downloadIdx > minIdx) downloadIdx = minIdx;
-  // 2026-08-26 修复（用户反馈重试不生效）：done 任务重试后必须转 running，
+  // 2026-08-26 修复（问题：重试不生效）：done 任务重试后必须转 running，
   //   否则 doDownloadLoop 的 status 守卫直接 return，重新入队的项永远不会被下载
   task.status = "running";
   task.pause = false;
@@ -1690,7 +1680,7 @@ function restorePendingTask() {
   } catch (_) { task = null; }
   if (!task) return;
   const hasItems = Array.isArray(task.items) && task.items.length > 0;
-  // 2026-08-26 修复（用户反馈：重启后搜索的巨量任务自动恢复海量下载）：
+  // 2026-08-26 修复（问题：重启后搜索的巨量任务自动恢复海量下载）：
   //   重启后一律恢复为「暂停」状态——保留列表供查看/手动继续，不自动开始下载。
   //   防止搜索批量（几千个 mod）重启后自动海量下载。
   if ((task.status === "running" || task.status === "paused" || task.status === "done") && hasItems) {
