@@ -51,7 +51,7 @@ const { manifestPaths } = requireUp(__dirname, "marker-manifest.js", {
  * @param {string[]} [opts.extraChmodScripts] 追加需恢复可执行位的脚本（相对项目根）
  * @param {string} [opts.pidFileName]   PID 文件名（缺省 = 项目根目录名.pid）
  */
-function createAutoUpdate(opts) { // dsh-skip-func-length 既有超长工厂函数（约 500 行），本次仅追加 extraWatchExclude，待专项重构
+function createAutoUpdate(opts) { // dsh-skip-func-length 既有超长工厂函数（约 540 行），本文件多处已有 dsh-skip-quality 豁免，待专项重构拆分
   const projectName = (opts && opts.projectName) || "auto-update";
   const defaultRepo = (opts && opts.defaultRepo) || "";
   const extraExclude = (opts && opts.extraExclude) || [];
@@ -167,6 +167,13 @@ function createAutoUpdate(opts) { // dsh-skip-func-length 既有超长工厂函�
     const base = p.slice(p.lastIndexOf("/") + 1);
     if (runtimeBasenames.has(base)) return false;
     for (const rel of runtimePaths) {
+      const r = String(rel).replace(/\\/g, "/").replace(/\/+$/, "");
+      if (p === r || p.startsWith(r + "/")) return false;
+    }
+
+    // 导入导出用户数据清单（userdata-manifest.json 标记的运行态）：watch 也不重启
+    // 覆盖 json/ 之外的运行态目录（avatar / server/thumbs 等）
+    for (const rel of loadUserdataExcludes()) {
       const r = String(rel).replace(/\\/g, "/").replace(/\/+$/, "");
       if (p === r || p.startsWith(r + "/")) return false;
     }
@@ -413,6 +420,29 @@ function createAutoUpdate(opts) { // dsh-skip-func-length 既有超长工厂函�
     }
   }
 
+  // 缓存 userdata-manifest.json 的排除路径（30s 过期；读失败用空列表不影响主流程）
+  let _userdataRel = null;
+  let _userdataLoaded = 0;
+  /** 读取 data-backup 生成的 userdata-manifest.json（导入导出用户数据清单），
+   *  把其中标记的运行态文件/目录并入排除判断——auto-update 与导入导出共用同一份清单：
+   *  源码 //userdata-manifest.json 注释里写的运行态，github 模式不覆盖、watch 模式不重启。 */
+  function loadUserdataExcludes() {
+    const now = Date.now();
+    if (_userdataRel && now - _userdataLoaded < 30000) return _userdataRel;
+    const out = [];
+    try {
+      const mf = path.join(ROOT_DIR, "json", "userdata-manifest.json");
+      if (fs.existsSync(mf)) {
+        const m = JSON.parse(fs.readFileSync(mf, "utf8"));
+        for (const f of m.files || []) if (f && f.rel) out.push(f.rel);
+        for (const d of m.dirs || []) if (d && d.rel) out.push(d.rel);
+      }
+    } catch (_) {}
+    _userdataRel = out;
+    _userdataLoaded = now;
+    return out;
+  }
+
   /** 判断相对路径是否命中排除清单（精确匹配或前缀匹配） */
   /** 是否排除：任意层级目录名 / 后缀 / 精确路径或目录前缀 */
   function isExcluded(relPath) {
@@ -422,8 +452,9 @@ function createAutoUpdate(opts) { // dsh-skip-func-length 既有超长工厂函�
     if (GITHUB_EXCLUDE_DIR.some((d) => segs.includes(d))) return true;
     // 2) 后缀规则：任意路径段结尾匹配
     if (GITHUB_EXCLUDE_SUFFIX.some((s) => p.endsWith(s))) return true;
-    // 3) 精确文件路径 / 目录前缀
-    return GITHUB_EXCLUDE.some((rule) => p === rule || p.startsWith(rule + "/"));
+    // 3) 精确文件路径 / 目录前缀（内置 + extraExclude + 导入导出用户数据清单）
+    const allRules = GITHUB_EXCLUDE.concat(loadUserdataExcludes());
+    return allRules.some((rule) => p === rule || p.startsWith(rule + "/"));
   }
 
   /** 恢复 *.sh 与 scripts/installer 可执行位（tarball 里可能丢失） */

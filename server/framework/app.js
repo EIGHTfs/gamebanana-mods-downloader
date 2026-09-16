@@ -137,6 +137,7 @@ function createServer(opts) {
         dir: fragments.dir,
         pages: fragments.pages,
         watch: fragments.watch,
+        brand: fragments.brand, // 品牌配置：@brand:key 指令替换用
       })
     : null;
 

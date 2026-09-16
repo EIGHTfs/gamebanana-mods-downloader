@@ -65,7 +65,7 @@ function loadFragmentManifest() {
   const fragDir = path.join(PUBLIC_DIR, "fragments");
   if (!fs.existsSync(fragDir) || !fs.statSync(fragDir).isDirectory()) return null;
   // 页面名 → 框架文件（public/ 下的同名文件即框架）
-  const FRAMEWORKS = ["index.html", "style.css"];
+  const FRAMEWORKS = ["index.html", "style.css", "login.html", "setup.html"];
   const pages = {};
   for (const name of FRAMEWORKS) {
     const f = path.join(PUBLIC_DIR, name);
@@ -135,11 +135,18 @@ async function main() {
 
   // HTML 片段组装：index.html 由 fragments/ 下的功能片段拼装（改片段刷新生效）
   const fragManifest = loadFragmentManifest();
+  // 品牌配置（@brand:title/@brand:icon/@brand:logo 指令替换用；缺失时组装器保留原注释）
+  let brandConf = null;
+  try {
+    const bf = path.join(PUBLIC_DIR, "brand.json");
+    if (fs.existsSync(bf)) brandConf = JSON.parse(fs.readFileSync(bf, "utf8"));
+  } catch (_) { brandConf = null; }
   const fragments = fragManifest
     ? {
         dir: path.join(PUBLIC_DIR, "fragments"),
         pages: fragManifest.pages,
         watch: true,
+        brand: brandConf,
       }
     : null;
 

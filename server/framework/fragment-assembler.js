@@ -15,6 +15,10 @@ const path = require("path");
 //   <!-- @frag:topbar -->            HTML 框架
 //   /* @frag:styles/variables.css */  CSS 框架
 const FRAG_PATTERN = /(?:<!--|\/\*)\s*@frag:([^\s]+?)\s*(?:-->|\*\/)/;
+// 品牌注释指令两种形态（组装时从品牌配置取项目特有值替换）：
+//   注释形态（元素文本内，HTML/CSS）：<!-- @brand:key --> / /* @brand:key */
+//   纯文本形态（属性值内，无 > 避免截断标签）：@brand:key@
+const BRAND_PATTERN = /(?:<!--\s*@brand:([A-Za-z0-9_-]+?)\s*-->|\/\*\s*@brand:([A-Za-z0-9_-]+?)\s*\*\/|@brand:([A-Za-z0-9_-]+?)@)/g;
 const MAX_NEST_DEPTH = 8; // 嵌套片段深度上限（防环）
 
 // ---------- 模块级工具（不依赖组装器实例） ----------
@@ -54,10 +58,31 @@ function missedNote(dir, filePath, kind, name) {
     : "<!-- " + kind + " @frag:" + name + " -->";
 }
 
-/** 展开单行指令：返回替换文本与引用的片段名（找不到/读失败时按框架类型生成占位注释） */
-function expandOneLine(dir, line, depth, files, filePath) {
+/** 替换文本内所有 @brand:key 注释（g 正则共享 lastIndex，用前重置）。无 key 命中返回原文本。 */
+function replaceBrandInText(text, brand) {
+  if (!brand || !BRAND_PATTERN.test(text)) return text;
+  BRAND_PATTERN.lastIndex = 0;
+  let replaced = false;
+  const out = text.replace(BRAND_PATTERN, (whole, k1, k2, k3) => {
+    const key = k1 || k2 || k3;
+    const v = brand[key];
+    if (v === undefined) return whole;
+    replaced = true;
+    return String(v);
+  });
+  BRAND_PATTERN.lastIndex = 0;
+  return replaced ? out : text;
+}
+
+/** 展开单行指令：先查 @frag（片段替换），再查 @brand（品牌值替换）。
+ * 品牌 key 缺失时保留原注释（不报错），由调用方决定是否提示。 */
+function expandOneLine(dir, line, depth, files, filePath, brand) {
   const matched = FRAG_PATTERN.exec(line);
-  if (!matched) return { text: line, ok: true };
+  if (!matched) {
+    // 品牌替换：把行内所有 @brand:key 注释换成配置值
+    if (brand) return { text: replaceBrandInText(line, brand), ok: true };
+    return { text: line, ok: true };
+  }
   const name = matched[1];
   // 带扩展名（.html/.css 等）按原名查找；无扩展名时补 .html
   const fname = /\.[a-z0-9]+$/i.test(name) ? name : name + ".html";
@@ -75,17 +100,18 @@ function expandOneLine(dir, line, depth, files, filePath) {
   }
   // 片段内还有指令 → 递归展开（超深度则按原文插入）
   if (depth < MAX_NEST_DEPTH && FRAG_PATTERN.test(fragText)) {
-    const nested = expandFrags(dir, fragPath, depth + 1);
+    const nested = expandFrags(dir, fragPath, depth + 1, brand);
     if (nested.error) return { text: missedNote(dir, filePath, "嵌套展开失败", name), ok: false };
     for (const f of nested.files) if (files.indexOf(f) < 0) files.push(f);
     return { text: nested.text.replace(/\r?\n$/, ""), ok: !nested.warning };
   }
   files.push(fname);
-  return { text: fragText, ok: true };
+  // 片段内容无 @frag 时也要替换其内的 @brand 注释（如 head-extra/topbar 品牌区）
+  return { text: replaceBrandInText(fragText, brand), ok: true };
 }
 
 /** 解析文件中的 @frag 指令（递归展开嵌套），返回 { text, files, warning? } */
-function expandFrags(dir, filePath, depth) {
+function expandFrags(dir, filePath, depth, brand) {
   depth = depth || 0;
   let text;
   try {
@@ -97,7 +123,7 @@ function expandFrags(dir, filePath, depth) {
   const lines = text.replace(/\r?\n$/, "").split("\n");
   let ok = true;
   for (let i = 0; i < lines.length; i++) {
-    const r = expandOneLine(dir, lines[i], depth, files, filePath);
+    const r = expandOneLine(dir, lines[i], depth, files, filePath, brand);
     if (r.text !== lines[i]) lines[i] = r.text;
     if (!r.ok) ok = false;
   }
@@ -106,10 +132,10 @@ function expandFrags(dir, filePath, depth) {
 }
 
 /** 框架模式构建：读框架文件 → 展开指令 */
-function buildFromFramework(dir, spec) {
+function buildFromFramework(dir, spec, brand) {
   const fp = toAbs(dir, spec);
   if (!isFile(fp)) return { error: "框架文件缺失: " + spec };
-  const out = expandFrags(dir, fp, 0);
+  const out = expandFrags(dir, fp, 0, brand);
   if (out.error) return { error: out.error };
   return { text: out.text, files: out.files, warning: out.warning, mtime: maxMtime(dir, out.files) };
 }
@@ -138,18 +164,20 @@ function buildFromList(dir, list) {
  *                                 值 = 字符串 → 框架模式（该文件含 @frag 指令）
  *                                 值 = 数组   → 数组模式（片段文件名列表）
  * @param {boolean} [opts.watch]   是否启用 mtime 检测（默认 true）
+ * @param {object}  [opts.brand]   品牌配置 { key: value }；@brand:key 注释指令替换用
  * @returns {object} { render(name), invalidate(name), list(), labels() }
  */
 function createFragmentAssembler(opts) {
   const dir = opts.dir;
   const pages = opts.pages || {};
   const watch = opts.watch !== false;
+  const brand = opts.brand || null; // 品牌配置 { key: value }，@brand:key 指令替换用
   const cache = new Map(); // name → { text, files, mtime, warning }
 
   function build(name) {
     const spec = pages[name];
     if (!spec) return null;
-    const built = typeof spec === "string" ? buildFromFramework(dir, spec) : buildFromList(dir, spec);
+    const built = typeof spec === "string" ? buildFromFramework(dir, spec, brand) : buildFromList(dir, spec);
     if (!built.error) cache.set(name, built);
     return built;
   }
