@@ -1,6 +1,7 @@
 // ============================================================
-// gbmd - 路由：自动更新（/api/auto-update）
+// 路由：自动更新（/api/auto-update）——框架层·通用
 // 2026-09-06 新增：服务端代码自动更新 + 优雅重启
+// 2026-09-16 通用化：无项目特有内容，注入 api.autoUpdate 即可用
 // ============================================================
 "use strict";
 
@@ -23,7 +24,7 @@ module.exports = function register(api) {
 
   // POST /api/auto-update/config
   // { enabled, mode, interval } —— github 模式的仓库/分支/Token 不在前端设置，
-  // 只存 server/config.json 手改；本端点不接收也不覆盖这三个字段。
+  // 只存 config 手改；本端点不接收也不覆盖这三个字段。
   route("POST", "/api/auto-update/config", async (req, res) => {
     const body = await readBody(req);
     const cfgNow = cfg.readConfig();
