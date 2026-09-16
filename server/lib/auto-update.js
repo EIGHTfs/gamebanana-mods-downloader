@@ -29,6 +29,18 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { spawn, execSync } = require("child_process");
+// marker-manifest 与 auto-update 可能同目录（framework/）或由项目拷贝到 lib/。
+// require-sibling 自举：本文件在 framework/ 时同目录加载；被拼到 lib/ 时向上找。
+let requireUp;
+try {
+  ({ requireUp } = require("./require-sibling"));
+} catch (_) {
+  ({ requireUp } = require("../framework/require-sibling"));
+}
+const { manifestPaths } = requireUp(__dirname, "marker-manifest.js", {
+  // lib/ 拼接版：marker-manifest 在兄弟目录 framework/，不在祖先链上
+  dirs: [path.join(__dirname, "..", "framework"), __dirname],
+});
 
 /**
  * 创建 auto-update 实例（框架层统一入口）。
@@ -39,7 +51,7 @@ const { spawn, execSync } = require("child_process");
  * @param {string[]} [opts.extraChmodScripts] 追加需恢复可执行位的脚本（相对项目根）
  * @param {string} [opts.pidFileName]   PID 文件名（缺省 = 项目根目录名.pid）
  */
-function createAutoUpdate(opts) {
+function createAutoUpdate(opts) { // dsh-skip-func-length 既有超长工厂函数（约 500 行），本次仅追加 extraWatchExclude，待专项重构
   const projectName = (opts && opts.projectName) || "auto-update";
   const defaultRepo = (opts && opts.defaultRepo) || "";
   const extraExclude = (opts && opts.extraExclude) || [];
@@ -119,13 +131,54 @@ function createAutoUpdate(opts) {
     restarting = false;
   }
 
+  /**
+   * 变更是否应触发重启。
+   *
+   * 不该触发重启的三类：
+   *   1. 运行态数据文件——由源码注释自动汇总（写文件处标注 //runtime-manifest.json 注释，见 marker-manifest.js），
+   *      避免清单与代码脱节：业务运行时频繁写这些文件，触发重启会导致「登录一次重启一次」
+   *   2. public/fragments/ HTML 片段——由 fragment-assembler 按 mtime 热更新，
+   *      改片段刷新即生效，重启反而打断下载任务
+   *   3. 项目通过 extraWatchExclude 追加的路径
+   */
+  let runtimePaths = [];
+  try {
+    runtimePaths = manifestPaths({
+      root: ROOT_DIR,
+      json: "runtime-manifest.json",
+      scanDirs: ["server"],
+    });
+  } catch (e) {
+    _log("运行态清单扫描失败（仅用内置规则）: " + (e && e.message));
+  }
+  const extraWatchExclude = (opts && opts.extraWatchExclude) || [];
+
+  // 清单里的基线文件名集合（fs.watch 回调常只给文件名，需按名匹配）
+  const runtimeBasenames = new Set(runtimePaths.map((r) => String(r).replace(/\\/g, "/").split("/").pop()));
+
+  function shouldRestartFor(filename) {
+    if (!filename) return false;
+    if (!/\.(js|cjs|html|css|json)$/i.test(filename)) return false;
+    const p = String(filename).replace(/\\/g, "/");
+    if (p.startsWith("json/")) return false;
+    if (p.includes("public/fragments/") || p.startsWith("fragments/")) return false;
+
+    // 运行态清单（源码注释自动生成）
+    const base = p.slice(p.lastIndexOf("/") + 1);
+    if (runtimeBasenames.has(base)) return false;
+    for (const rel of runtimePaths) {
+      const r = String(rel).replace(/\\/g, "/").replace(/\/+$/, "");
+      if (p === r || p.startsWith(r + "/")) return false;
+    }
+
+    if (extraWatchExclude.some((rule) => p === rule || p.endsWith("/" + rule) || p.startsWith(rule + "/"))) return false;
+    return true;
+  }
+
   /** watch 模式：监控 server/ 目录文件变更 */
   function startFileWatch() {
-    // 忽略 json/ 目录（运行时数据，频繁变更）+ node_modules + .git
     watcher = fs.watch(SERVER_DIR, { recursive: false }, (event, filename) => {
-      if (!filename) return;
-      if (!/\.(js|cjs|html|css|json)$/i.test(filename)) return;
-      if (filename.startsWith("json/") || filename.startsWith("json\\")) return;
+      if (!shouldRestartFor(filename)) return;
       _log(`检测到变更: ${filename}`);
       scheduleRestart();
     });
@@ -139,9 +192,7 @@ function createAutoUpdate(opts) {
     try {
       if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
       fs.watch(dir, { recursive: true }, (event, filename) => {
-        if (!filename) return;
-        if (!/\.(js|cjs|html|css|json)$/i.test(filename)) return;
-        if (filename.startsWith("json/") || filename.startsWith("json\\")) return;
+        if (!shouldRestartFor(filename)) return;
         _log(`检测到变更: ${filename}`);
         scheduleRestart();
       });
@@ -510,11 +561,15 @@ function createAutoUpdate(opts) {
   };
 }
 
+module.exports = { createAutoUpdate };
+
 module.exports = createAutoUpdate({
   projectName: "gamebanana-mods-downloader",
   defaultRepo: "EIGHTfs/gamebanana-mods-downloader",
   // gbmd 特有运行态数据（github 模式绝不覆盖）
   extraExclude: ["json/gamebanana.com.json"],
+  // 前端片段组装：index.html 是蓝图框架（含 @frag 指令），改它由组装器热更新，不触发重启
+  extraWatchExclude: ["index.html", "public/index.html"],
   // gbmd 特有可执行脚本（tarball 解压后恢复可执行位）
   extraChmodScripts: [
     "crx/native-host/install-linux.sh",

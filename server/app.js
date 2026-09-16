@@ -56,6 +56,25 @@ function injectAssetVersion(html, publicDir) {
   );
 }
 
+// ---------- 片段清单 ----------
+// 框架模式：index.html 是蓝图框架（含 <!-- @frag:xxx --> 指令），
+// 片段在 fragments/ 下（通用分片 + 项目特有分片），组装器按指令替换插入。
+function loadFragmentManifest() {
+  // 框架文件 = public/index.html（蓝图框架）
+  const frameworkFile = path.join(PUBLIC_DIR, "index.html");
+  const fragDir = path.join(PUBLIC_DIR, "fragments");
+  try {
+    if (!fs.existsSync(frameworkFile) || !fs.statSync(frameworkFile).isFile()) return null;
+    if (!fs.existsSync(fragDir) || !fs.statSync(fragDir).isDirectory()) return null;
+    return {
+      pages: { "index.html": frameworkFile }, // 值 = 框架文件路径 → 组装器走框架模式
+    };
+  } catch (e) {
+    console.log("[fragments] 清单不可用（回退静态 index.html）: " + (e && e.message));
+    return null;
+  }
+}
+
 // ---------- 油猴脚本分发 ----------
 // 顶部「📥 油猴脚本」入口：inline 让 Tampermonkey/Violentmonkey 自动弹安装/更新
 const USERSCRIPT_NAMES = ["/userscript.user.js", "/gamebanana-cookie-userscript.user.js"];
@@ -110,6 +129,16 @@ async function main() {
     if (typeof mod === "function") routes.push({ prefix: "", handler: mod });
   }
 
+  // HTML 片段组装：index.html 由 fragments/ 下的功能片段拼装（改片段刷新生效）
+  const fragManifest = loadFragmentManifest();
+  const fragments = fragManifest
+    ? {
+        dir: path.join(PUBLIC_DIR, "fragments"),
+        pages: fragManifest.pages,
+        watch: true,
+      }
+    : null;
+
   const server = createServer({
     config: cfg,
     auth: gbAuth,
@@ -118,6 +147,7 @@ async function main() {
     publicRoutes: publicRoutes,
     loginPath: "/login.html",
     setupPath: "/setup.html",
+    fragments: fragments,
     // 未设密码时把首页导向首次设置页
     needsSetup: () => !cfg.readConfig().passwordHash,
     // HTML 资源版本注入
@@ -151,6 +181,7 @@ async function main() {
 }
 
 // 会话清理：每小时清过期 session（auth 由 framework 提供）
+//runtime-manifest.json file server/sessions.json watch=skip desc=会话持久化（登录态，运行期频繁写）
 gbAuth.init({ sessionFile: path.join(__dirname, "sessions.json"), cookieName: "session" });
 gbAuth.startCleanup();
 

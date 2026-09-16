@@ -1,0 +1,37 @@
+  <!-- ============ 下载进度 ============ -->
+  <div class="tab-panel" id="panel-progress">
+    <div class="card">
+      <h2>下载进度</h2>
+      <div class="row">
+        <span id="taskState" style="font-weight:600">无任务</span>
+        <button id="pauseBtn" type="button" disabled>暂停</button>
+        <button id="resumeBtn" type="button" disabled>继续</button>
+        <button id="stopBtn" type="button" disabled class="danger">终止</button>
+        <button id="retryBtn" type="button" disabled class="ghost">重试失败</button>
+        <button id="clearFailBtn" type="button" class="ghost" title="一键移除当前下载失败的列表（一次性，不影响之后新出现的失败）">清除失败</button>
+        <!-- 2026-09-02（#16-B）：下载任务 json 导入/导出（存档备份 / 换端迁移） -->
+        <button id="taskExportBtn" type="button" class="ghost" title="导出当前下载任务为 json（含已排队的链接）">导出任务 json</button>
+        <button id="taskImportBtn" type="button" class="ghost" title="从任务 json 导入链接加入下载队列">导入任务 json</button>
+        <input type="file" id="taskImportFile" accept=".json,application/json" style="display:none">
+      </div>
+      <div class="status" id="taskJsonStatus"></div>
+      <div class="progress-wrap mt">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+      <div id="taskMeta"></div>
+      <div id="activeList" style="margin-top:6px"></div>
+      <div class="row mt">
+        <label>并发数 <input type="number" id="concurrencyInput" min="1" max="32" value="4" style="width:70px"></label>
+        <button class="ghost" id="concurrencyBtn" type="button">应用</button>
+        
+        <div class="status" id="concurrencyStatus"></div>
+      </div>
+      <div class="row mt">
+        <label title="开启后下载任务不实际下载文件，只做垃圾桶找回/归位/生成 HTML，需下载的项直接跳过">
+          <input type="checkbox" id="restoreModeToggle"> 找回模式（不下载，仅找回/归位）
+        </label>
+        <span class="hint" id="restoreModeHint"></span>
+      </div>
+      <div id="taskList" class="mt"></div>
+    </div>
+  </div>

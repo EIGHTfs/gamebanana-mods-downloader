@@ -8,6 +8,7 @@ const path = require("path");
 const urlMod = require("url");
 
 const { sendJson } = require("./http-utils");
+const { createFragmentAssembler } = require("./fragment-assembler");
 
 const DEFAULT_PORT = 3000;
 const CACHE_MAX_AGE = 3600;
@@ -117,6 +118,9 @@ async function dispatchRoutes(req, res, url, pathname, routes, ctx) {
  *                                         opts.setupPath（默认 /setup.html）
  * @param {string}   [opts.setupPath]    - 首次设置页路径
  * @param {string}   [opts.port]         - 覆盖监听端口（缺省读 config.port）
+ * @param {object}   [opts.fragments]    - HTML 片段组装配置：
+ *                                         { dir, pages: { "index.html": ["head.html", ...] }, watch }
+ *                                         命中请求返回拼装结果，片段改动后下一次请求自动重拼
  * @param {function} [opts.onReady]      - 启动回调 (port)
  */
 function createServer(opts) {
@@ -124,10 +128,45 @@ function createServer(opts) {
     config, auth, publicDir, routes = [],
     publicRoutes = [], loginPath = "/login.html", extraMime = {},
     transformHtml, needsSetup, setupPath = "/setup.html",
-    port: portOpt, onReady,
+    port: portOpt, fragments, onReady,
   } = opts;
 
   const mime = { ...DEFAULT_MIME, ...extraMime };
+  const assembler = fragments && fragments.pages
+    ? createFragmentAssembler({
+        dir: fragments.dir,
+        pages: fragments.pages,
+        watch: fragments.watch,
+      })
+    : null;
+
+  /** 尝试用片段组装响应页面请求；命中返回 true */
+  function serveFragment(res, pathname, mimeMap, transform) {
+    if (!assembler) return false;
+    const name = pathname === "/" ? "index.html" : pathname.replace(/^\//, "");
+    if (!assembler.list().includes(name)) return false;
+
+    const r = assembler.render(name);
+    if (!r.ok) {
+      console.error("[fragments] " + name + " 组装失败: " + r.error);
+      res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+      res.end("<h1>页面组装失败</h1><p>" + r.error + "</p>");
+      return true;
+    }
+    let html = r.text;
+    if (typeof transform === "function") {
+      const out = transform(html, pathname);
+      if (out != null) html = out;
+    }
+    const buf = Buffer.from(html);
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Length": buf.length,
+      "Cache-Control": "no-cache",
+    });
+    res.end(buf);
+    return true;
+  }
 
   async function handleRequest(req, res) {
     const url = urlMod.parse(req.url, true);
@@ -136,6 +175,7 @@ function createServer(opts) {
     // 未设置密码：页面请求先导向首次设置页（先于鉴权门，否则会被重定向到登录页死循环）
     if (typeof needsSetup === "function" && needsSetup() && !pathname.startsWith("/api/")) {
       if (pathname === "/" || pathname === "/index.html" || pathname === setupPath) {
+        if (serveFragment(res, setupPath, mime, transformHtml)) return;
         if (serveStaticFile(res, publicDir, setupPath, mime, transformHtml)) return;
       }
     }
@@ -144,6 +184,7 @@ function createServer(opts) {
 
     const ctx = { cfg: config, auth, sendJson };
     if (await dispatchRoutes(req, res, url, pathname, routes, ctx)) return;
+    if (serveFragment(res, pathname, mime, transformHtml)) return;
     if (serveStaticFile(res, publicDir, pathname, mime, transformHtml)) return;
 
     sendJson(res, { error: "未找到" }, 404);
@@ -164,4 +205,4 @@ function createServer(opts) {
   return server;
 }
 
-module.exports = { createServer, DEFAULT_MIME };
+module.exports = { createServer, DEFAULT_MIME, createFragmentAssembler };

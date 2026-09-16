@@ -1,0 +1,26 @@
+</div>
+
+<!-- 2026-09-01：保存设置改悬浮按钮（右下角，仅设置页显示） -->
+<div id="speedHud" class="speed-hud" hidden>⬇ 0 KB/s</div>
+<button id="saveSettingsFab" type="button" title="保存设置">💾</button>
+
+<script src="path-picker.js?v=20260902"></script>
+<script src="search-date-range.js"></script>
+<script src="app.js?v=20260903-toggles"></script>
+<!-- 目录选择弹窗（设置页「读取本地选择」下载路径） -->
+<div class="modal-mask" id="browseMask" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <b>选择下载目录</b>
+      <button class="ghost" id="browseClose" type="button">✕</button>
+    </div>
+    <div class="browse-path" id="browsePath"></div>
+    <div class="browse-list" id="browseList"></div>
+    <div class="row mt">
+      <button class="primary" id="browseSelect" type="button">选择此目录</button>
+      <span class="hint" id="browseHint"></span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

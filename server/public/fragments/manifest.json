@@ -1,0 +1,48 @@
+{
+  "source": "index.html",
+  "note": "gbmd 特有分片（按 tab-panel class 目录组织）；通用分片在 blueprint/fragments/",
+  "fragments": [
+    {
+      "file": "head-extra.html",
+      "from": 6,
+      "to": 9,
+      "desc": "favicon 图标 + title（其余 head 骨架在蓝图框架）"
+    },
+    {
+      "file": "topbar.html",
+      "from": 14,
+      "to": 26,
+      "desc": "顶栏（品牌区/登录徽章/时间/油猴/主题/退出）"
+    },
+    {
+      "file": "tab-panel/panel-download.html",
+      "from": 41,
+      "to": 67,
+      "desc": "下载面板"
+    },
+    {
+      "file": "tab-panel/panel-progress.html",
+      "from": 69,
+      "to": 106,
+      "desc": "下载进度面板"
+    },
+    {
+      "file": "tab-panel/panel-search.html",
+      "from": 108,
+      "to": 157,
+      "desc": "搜索面板"
+    },
+    {
+      "file": "tab-panel/panel-settings.html",
+      "from": 158,
+      "to": 348,
+      "desc": "设置面板"
+    },
+    {
+      "file": "scripts.html",
+      "from": 355,
+      "to": 357,
+      "desc": "页面脚本引用"
+    }
+  ]
+}

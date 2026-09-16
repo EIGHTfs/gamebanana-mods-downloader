@@ -4,7 +4,7 @@
 "use strict";
 
 const { createConfig } = require("./config-loader");
-const { createServer, DEFAULT_MIME } = require("./app");
+const { createServer, DEFAULT_MIME, createFragmentAssembler } = require("./app");
 const { createRoute, groupRoutes } = require("./route-factory");
 const { sendJson, readBody, parseCredentialText, cleanCookie } = require("./http-utils");
 const fsAsync = require("./fs-async");
@@ -14,6 +14,7 @@ const jsonDir = require("./json-dir");
 const auth = require("./auth");
 const { createBackup } = require("./data-backup");
 const { createAutoUpdate } = require("./auto-update");
+const markerManifest = require("./marker-manifest");
 
 module.exports = {
   // 核心
@@ -23,6 +24,8 @@ module.exports = {
   groupRoutes,
   createBackup,
   createAutoUpdate,
+  createFragmentAssembler,
+  markerManifest,
   DEFAULT_MIME,
 
   // 工具

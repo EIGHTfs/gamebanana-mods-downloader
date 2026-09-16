@@ -1,0 +1,28 @@
+
+  <!-- ============ 下载 ============ -->
+  <div class="tab-panel active" id="panel-download">
+    <div class="card">
+      <h2>下载 Mod</h2>
+      <p class="hint">每行一个 Mod 链接或纯数字 id</p>
+      <textarea id="batchInput" rows="8" placeholder="每行一个 Mod 链接或纯数字 id" style="width:100%"></textarea>
+      <!-- 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
+           AI 思路：下载页勾选、写入 config.json 全局记住；gif 跟图片；HTML 始终生成不设开关。默认两项都开。 -->
+      <div class="row mt">
+        <label><input type="checkbox" id="dlToggleFiles" checked> 压缩包（Mod 文件）</label>
+        <label><input type="checkbox" id="dlToggleImages" checked> 预览图（含 gif）</label>
+      </div>
+      <p class="hint">description.html 始终生成。关掉的一类本次不下；已有文件仍会查重归位。勾选会记住。</p>
+      <div class="row mt">
+        <button class="primary" id="batchBtn" type="button">开始下载</button>
+        <button class="ghost" id="clearBtn" type="button">清空</button>
+      </div>
+      <div class="status" id="batchStatus"></div>
+    </div>
+    <div class="card">
+      <h2>下载流程说明</h2>
+      <p class="hint">① 根据香蕉网网页生成 HTML（作者/游戏/分类/文件 md5/图片名/gif），并计算下载路径（映射：Characters→角色、Weapons→武器、Skins→空；角色目录「英文 – 中文」；Characters/Skins → 角色/.角色）<br>
+      ② 在整个游戏根目录搜索压缩包名/图片名，存在于其他文件夹则 mv 到计算出的完整下载路径，HTML 存入<br>
+      ③ 整理：清理 .gbmd.part（仅 part 存在则断点续传），图片重命名为 hash 值，重复图片进根目录垃圾桶<br>
+      ④ 正式下载缺失文件（不改原始文件名，非法字符用空格替换）</p>
+    </div>
+  </div>

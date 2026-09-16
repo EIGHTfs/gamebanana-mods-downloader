@@ -1539,34 +1539,37 @@ async function checkGbLoginStatus() {
 // 2026-09-01 参照 iwara updateIwaraUserBadge：r 可传入复用（检测按钮点完直接刷新），否则自取
 async function updateGbUserBadge(r) {
   const el = $("#gbUserBadge");
+  const nameEl = $("#gbUserName");
+  const remainEl = $("#gbUserRemain");
   if (!el) return;
+  const setStack = (name, remain, cls) => {
+    if (nameEl) nameEl.textContent = name;
+    else el.textContent = name;
+    if (remainEl) remainEl.textContent = remain || "";
+    el.className = "sub header-stack " + cls;
+  };
   try {
     if (!r) r = await api("/api/gb-login-status");
     const name = r.username || "";
     const remain = fmtGbLoginRemain(r);
-    // 2026-09-01 顶部两行：第一行用户名（加粗），第二行剩多少天
+    // 顶部两行：第一行用户名（加粗样式），第二行剩余天数（嵌套 span 只填文本）
     if (!r || !r.cookieSet) {
-      el.innerHTML = "<b>未配置凭证</b><span>需粘贴 Cookie</span>";
-      el.className = "sub hcol gb-user-err";
+      setStack("未配置凭证", "需粘贴 Cookie", "gb-user-err");
       el.title = "设置页粘贴 GameBanana Cookie（sess+rmc）";
       return;
     }
     if (r.warnLevel === "expired" || !r.loggedIn) {
-      el.innerHTML = "<b>" + (r.warnLevel === "expired" ? "已过期" : "未登录") + "</b><span>" + (remain ? remain : "") + "</span>";
-      el.className = "sub hcol gb-user-err";
+      setStack(r.warnLevel === "expired" ? "已过期" : "未登录", remain, "gb-user-err");
       el.title = r.detail || "GameBanana Cookie 已过期，请重新复制";
     } else if (r.warnLevel === "warn") {
-      el.innerHTML = "<b>" + (name || "已登录") + "</b><span>⚠️ " + remain + "</span>";
-      el.className = "sub hcol gb-user-warn";
+      setStack(name || "已登录", "⚠️ " + remain, "gb-user-warn");
       el.title = r.profileUrl || "GameBanana 已登录用户";
     } else {
-      el.innerHTML = "<b>" + (name || "已登录") + "</b><span>" + (remain || "") + "</span>";
-      el.className = "sub hcol gb-user-ok";
+      setStack(name || "已登录", remain, "gb-user-ok");
       el.title = r.profileUrl || "GameBanana 已登录用户";
     }
   } catch (_) {
-    el.textContent = "";
-    el.className = "sub";
+    setStack("", "", "");
   }
 }
 
@@ -1973,8 +1976,13 @@ async function init() {
   } catch (_) {}
   function updServerTime() {
     const t = new Date();
-    // 2026-09-01 顶部两行：年月日 / 时分秒
-    $("#serverTime").innerHTML = "<b>" + t.toLocaleDateString("zh-CN") + "</b><span>" + t.toLocaleTimeString("zh-CN", { hour12: false }) + "</span>";
+    // 顶部两行：年月日 / 时分秒（嵌套 span 只填文本）
+    const dateEl = $("#serverDate");
+    const clockEl = $("#serverClock");
+    const el = $("#serverTime");
+    if (dateEl) dateEl.textContent = t.toLocaleDateString("zh-CN");
+    if (clockEl) clockEl.textContent = t.toLocaleTimeString("zh-CN", { hour12: false });
+    if (!dateEl && el) el.textContent = t.toLocaleDateString("zh-CN") + " " + t.toLocaleTimeString("zh-CN", { hour12: false });
   }
   updServerTime();
   setInterval(updServerTime, 1000);

@@ -1,9 +1,8 @@
 // ============================================================
 // data-backup.js —— 用户数据备份/恢复
-//   导出：扫源码 //userdata-manifest.json 注释自动生成清单 → zip
+//   导出：按源码 //userdata-manifest.json 注释生成清单 → 打包 zip
 //   导入：上传 zip → 按清单白名单校验路径 → 解压写回
-// 「两个项目userdata-manifest.json都有问题，没有维护过，希望改成自动维护。
-//   方法就是生成读取json文件时代码旁注释//userdata-manifest.json，然后导出配置文件时自动生成userdata-manifest.json」
+//   清单生成由 framework/marker-manifest 统一提供（与自动更新的运行态清单同一套逻辑）
 // ============================================================
 "use strict";
 
@@ -11,12 +10,12 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { execFile, execFileSync } = require("child_process");
+const { markerManifest } = require("../framework");
 
 const jsonDir = require("./json-dir");
 const APP_ROOT = path.join(__dirname, "..", "..");
 const APP_NAME = "gamebanana-mods-downloader";
 const MANIFEST_FILE = jsonDir.jsonFile("userdata-manifest.json");
-const MARKER = "//userdata-manifest.json";
 
 const toolCache = new Map();
 
@@ -46,77 +45,16 @@ function findTool(name) {
 const ZIP_BIN = () => findTool("zip");
 const UNZIP_BIN = () => findTool("unzip");
 
-function parseMarker(line) {
-  const i = String(line || "").indexOf(MARKER);
-  if (i < 0) return null;
-  const rest = String(line).slice(i + MARKER.length).trim();
-  const parts = rest.split(/\s+/).filter(Boolean);
-  if (!parts.length) return null;
-  if (parts[0] === "file" && parts[1]) {
-    return { kind: "file", rel: parts[1], desc: parts.slice(2).join(" ") };
-  }
-  if (parts[0] === "dir" && parts[1]) {
-    let suffix = "";
-    let descParts = parts.slice(2);
-    if (descParts[0] && descParts[0].charAt(0) === ".") {
-      suffix = descParts[0];
-      descParts = descParts.slice(1);
-    }
-    return { kind: "dir", rel: parts[1], suffix: suffix, desc: descParts.join(" ") };
-  }
-  return null;
-}
-
-function walkJs(dir, hits) {
-  let names;
-  try { names = fs.readdirSync(dir); } catch (_) { return; }
-  for (const n of names) {
-    if (n === "node_modules" || n === "public" || n === "thumbs" || n.charAt(0) === ".") continue;
-    const abs = path.join(dir, n);
-    let st;
-    try { st = fs.statSync(abs); } catch (_) { continue; }
-    if (st.isDirectory()) { walkJs(abs, hits); continue; }
-    if (!/\.(js|cjs)$/.test(n)) continue;
-    let text;
-    try { text = fs.readFileSync(abs, "utf8"); } catch (_) { continue; }
-    for (const line of text.split(/\r?\n/)) {
-      const hit = parseMarker(line);
-      if (hit) hits.push(hit);
-    }
-  }
-}
-
 function buildManifest() {
-  const hits = [];
-  walkJs(path.join(APP_ROOT, "server"), hits);
-  const files = [];
-  const dirs = [];
-  const seenF = new Set();
-  const seenD = new Set();
-  for (const h of hits) {
-    if (h.kind === "file") {
-      if (!h.rel || seenF.has(h.rel) || h.rel === "json/userdata-manifest.json") continue;
-      seenF.add(h.rel);
-      files.push({ rel: h.rel, desc: h.desc || "" });
-    } else if (h.kind === "dir") {
-      const key = h.rel + "\0" + (h.suffix || "");
-      if (!h.rel || seenD.has(key)) continue;
-      seenD.add(key);
-      const d = { rel: h.rel, desc: h.desc || "" };
-      if (h.suffix) d.suffix = h.suffix;
-      dirs.push(d);
-    }
-  }
-  files.sort((a, b) => a.rel.localeCompare(b.rel));
-  dirs.sort((a, b) => a.rel.localeCompare(b.rel));
-  return {
-    schema: 1,
+  // 清单生成统一走 framework/marker-manifest（与 auto-update 的运行态清单同一套扫描）
+  const m = markerManifest.buildManifest({
+    root: APP_ROOT,
+    json: "userdata-manifest.json",
     app: APP_NAME,
-    generatedAt: new Date().toISOString(),
-    note: "导出时根据源码 //userdata-manifest.json 注释自动生成，不要手改。",
-    files: files,
-    dirs: dirs
-  };
+  });
+  // 导出清单自身不入包（避免自引用）
+  m.files = m.files.filter((f) => f.rel !== "json/userdata-manifest.json");
+  return m;
 }
 
 function writeManifest(m) {

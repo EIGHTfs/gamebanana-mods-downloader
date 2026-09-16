@@ -1,0 +1,14 @@
+{
+  "source": "index.html",
+  "note": "gbmd 风格前端片段划分（按 tab-panel + 共用块）；行区间对应拆分前的 index.html",
+  "fragments": [
+    { "file": "head.html", "from": 1, "to": 13, "desc": "head 元信息（meta/favicon/标题/样式/主题脚本）" },
+    { "file": "topbar.html", "from": 14, "to": 31, "desc": "顶栏（标题/登录徽章/时间/油猴/主题/退出）+ 未设密码警告" },
+    { "file": "tabs.html", "from": 32, "to": 39, "desc": "容器开头 + tab 导航条" },
+    { "file": "panel-download.html", "from": 40, "to": 67, "desc": "下载面板（输入框/内容开关/流程说明）" },
+    { "file": "panel-progress.html", "from": 68, "to": 106, "desc": "下载进度面板（状态/控制/任务列表/并发/找回模式）" },
+    { "file": "panel-search.html", "from": 107, "to": 157, "desc": "搜索面板（关键词/按时间/结果/导入导出）" },
+    { "file": "panel-settings.html", "from": 158, "to": 348, "desc": "设置面板（下载路径/默认位置/合并/哈希/账号/密码/备份）" },
+    { "file": "foot.html", "from": 349, "to": 374, "desc": "容器收尾 + 悬浮按钮 + 脚本引用 + 目录选择弹窗" }
+  ]
+}
