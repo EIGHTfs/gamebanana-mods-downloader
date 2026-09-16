@@ -67,18 +67,28 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 
 ---
 
-## 目录结构（2026-09 重构后）
+## 目录结构（2026-09 模板化改造后）
+
+> 服务端 HTTP 层改用 dl-server-template 模板的通用框架（`server/framework/`），
+> 本项目只需提供配置、业务模块与路由表，不再自带 HTTP 服务/鉴权门/静态文件实现。
 
 ```
 gamebanana-mods-downloader/
 ├── start.sh                  # 启停脚本（start/stop/restart/status/set-password）
 ├── server/
 │   ├── boot.cjs              # 入口：CJS 强制引导（零依赖，解决 ESM 父目录问题）
-│   ├── app.js                # HTTP 入口：注册路由 + 静态页面 + 启动序列
-│   ├── config.js             # 配置管理（config.json 自动初始化；读取游戏/映射）
-│   ├── auth.js               # 密码 scrypt 哈希 + 会话（HttpOnly Cookie，清过期 token）
-│   ├── routes/               # API 路由（app.js 只注册）
-│   ├── utils/                # 叶子工具（index-html / html / http / path-safe / fs-async）
+│   ├── app.js                # 装配层：初始化配置/鉴权 + 挂载路由 + 启动钩子 + 资源版本注入
+│   ├── framework/            # 通用框架（模板同步，勿手改；改模板后整体覆盖）
+│   │   ├── app.js            # createServer：HTTP 服务 + 鉴权门 + 静态文件 + setup 跳转
+│   │   ├── route-factory.js  # createRoute：{"METHOD /path": handler} 表式路由 + ctx(query/params)
+│   │   ├── auth.js           # 会话鉴权（scrypt 由项目侧提供；cookie 名可配；定时清理）
+│   │   ├── config-loader.js  # createConfig：schema 驱动配置读写
+│   │   ├── auto-update.js    # 自动更新（watch/git/github 三模式 + 防抖重启）
+│   │   ├── routes-auto-update.js # 自动更新通用路由
+│   │   └── ...               # http-utils / app-log / fs-async / html-utils / data-backup 等
+│   ├── config.js             # 配置管理（config.json 自动初始化；读取游戏/映射；scrypt 密码）
+│   ├── routes/               # API 路由：每个文件导出 createRoute({...}) 表
+│   ├── utils/                # 叶子工具（index-html / html / path-safe / fs-async）
 │   ├── lib/
 │   │   ├── downloader.js     # 四步下载流程 + 并发/断点续传/重试/跳过 + 任务事件日志
 │   │   ├── gb-api.js         # GameBanana API 封装（mod 解析/搜索/Cookie 清洗）
@@ -283,3 +293,5 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.3.2 | 新功能：①下载优先级——图片/gif 排前优先下载；②下载列表分组折叠/展开（默认展开，状态记忆）；③登录页「记住此设备」——勾选后 30 天免登录（默认勾选，解决登录太频繁），时长可配置 `sessionRememberHours` |
+| 1.4.0 | 服务端模板化改造：HTTP 层改用 dl-server-template 通用框架——`server/framework/` 提供 createServer（鉴权门/静态文件/setup 跳转/HTML 资源注入钩子）与 createRoute（`{"METHOD /path": handler}` 表式路由 + ctx.query/params）；11 个 routes 全部改写为表式导出；`app.js` 从 234 行降到 150 行的纯装配层；framework 补齐通用能力（公开路由白名单、未设密码放行、cookie 名可配、定时清理会话、API 日志过滤） |
+| 1.4.1 | bugfix：①github 模式自动更新首次运行误判「有新版本」——无状态文件时只记录基线，不再全量覆盖并重启（原逻辑 `undefined !== sha` 恒为真）；start.sh/boot.cjs/setup.sh 加入更新排除列表，保护重启入口；②静态资源版本号 `mtimeMs \| 0` 32 位溢出成负数，改 `Math.floor`；③framework `readBody` 二次读同一请求流导致 POST 请求永久挂起，加结果缓存 |

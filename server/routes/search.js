@@ -4,42 +4,52 @@
 // ============================================================
 "use strict";
 
-module.exports = function register(api) {
-  const { route, sendJson, search } = api;
+const { createRoute, sendJson, readBody } = require("../framework");
+const search = require("../lib/search");
+const cfg = require("../config");
+const gbApi = require("../lib/gb-api");
+const searchDateRange = require("../lib/search-date-range.cjs");
+
+// 模块级 handler 工厂（keywordSearch 等）接收 api 依赖对象；
+// 模板化后由 framework + 业务模块在本地组装，工厂函数体保持原样。
+const api = { sendJson, readBody, cfg, gbApi, search, searchDateRange };
+
+module.exports = createRoute({
+
 
   // ---- 关键词搜索（中文/变体 → 英文归一后搜 GB Results API）----
-  route("GET", "/api/keyword-search", keywordSearch(api));
+  "GET /api/keyword-search": keywordSearch(api),
 
   // ---- 按时间搜索（保留）----
-  route("POST", "/api/search", searchByDate(api));
-  route("GET", "/api/search-status", (req, res) => sendJson(res, 200, { ok: true, task: search.getQueryTask() }));
-  route("POST", "/api/search/stop", (req, res) => sendJson(res, 200, search.stopSearch()));
-  route("GET", "/api/search/cache", (req, res) => sendJson(res, 200, { ok: true, cache: search.getCache() }));
-  route("POST", "/api/search/clear", (req, res) => sendJson(res, 200, search.clearCache()));
+  "POST /api/search": searchByDate(api),
+  "GET /api/search-status": (req, res) => sendJson(res, { ok: true, task: search.getQueryTask() }, 200),
+  "POST /api/search/stop": (req, res) => sendJson(res, search.stopSearch(), 200),
+  "GET /api/search/cache": (req, res) => sendJson(res, { ok: true, cache: search.getCache() }, 200),
+  "POST /api/search/clear": (req, res) => sendJson(res, search.clearCache(), 200),
   // 2026-08-26：手动导入搜索记录（上传 JSON 数组，按 modId 合并，导入覆盖原有）
-  route("POST", "/api/search/import", importSearchCache(api));
+  "POST /api/search/import": importSearchCache(api),
   // 2026-08-31：保存搜索结果（把前端当前结果覆盖写入 search_cache.json）
-  route("POST", "/api/search/save", saveSearchResults(api));
+  "POST /api/search/save": saveSearchResults(api),
   // 2026-08-26：导出搜索记录（当前 cache 完整 JSON，前端下载为文件）
-  route("GET", "/api/search/export", exportSearchCache(api));
-};
+  "GET /api/search/export": exportSearchCache(api),
+});
 
 // ---- 模块级 handler 工厂 ----
 
 // 关键词搜索 handler：归一 → 变体合并搜索 → 无结果回退原词
 function keywordSearch(api) {
   const { sendJson, cfg, gbApi } = api;
-  return async (req, res, parsed) => {
-    let q = String(parsed.query.q || "").trim();
-    const game = String(parsed.query.game || "").trim();
-    if (!q || !game) return sendJson(res, 400, { ok: false, error: "missing q or game" });
+  return async (req, res, ctx) => {
+    let q = String(ctx.query.q || "").trim();
+    const game = String(ctx.query.game || "").trim();
+    if (!q || !game) return sendJson(res, { ok: false, error: "missing q or game" }, 400);
     const gameId = cfg.gameIdOf(game);
-    if (!gameId) return sendJson(res, 400, { ok: false, error: "unknown game id: " + game });
+    if (!gameId) return sendJson(res, { ok: false, error: "unknown game id: " + game }, 400);
     try {
       const origQ = q;
       q = gbApi.normalizeKeyword(game, q); // 桑多涅 → Sandrone
-      const perpage = Math.min(parseInt(parsed.query.perpage, 10) || 50, 100);
-      const maxResults = Math.min(parseInt(parsed.query.max || 100, 10) || 100, 500);
+      const perpage = Math.min(parseInt(ctx.query.perpage, 10) || 50, 100);
+      const maxResults = Math.min(parseInt(ctx.query.max || 100, 10) || 100, 500);
       // 2026-08-27：合并搜索——搜角色名时自动补搜变体（短名/中文），合并去重。
       const variants = genKeywordVariants(api, game, q);
       const { all, seen } = collectSearchResults(api, gameId, variants, perpage, maxResults);
@@ -62,9 +72,9 @@ function keywordSearch(api) {
           });
         }
       }
-      return sendJson(res, 200, { ok: true, count: results.length, results, pages: all.length >= maxResults, normalized: q !== origQ ? { from: origQ, to: q } : undefined, variants: variants.length > 1 ? variants : undefined });
+      return sendJson(res, { ok: true, count: results.length, results, pages: all.length >= maxResults, normalized: q !== origQ ? { from: origQ, to: q } : undefined, variants: variants.length > 1 ? variants : undefined }, 200);
     } catch (e) {
-      return sendJson(res, 400, { ok: false, error: e.message || String(e) });
+      return sendJson(res, { ok: false, error: e.message || String(e) }, 400);
     }
   };
 }
@@ -124,15 +134,15 @@ function searchByDate(api) {
   return async (req, res) => {
     const body = await readBody(req);
     const range = searchDateRange.resolveRange(body.startDate, body.endDate);
-    if (!range.ok) return sendJson(res, 400, { ok: false, error: range.error });
+    if (!range.ok) return sendJson(res, { ok: false, error: range.error }, 400);
     const contentFilter = Array.isArray(body.contentFilter) && body.contentFilter.length ? body.contentFilter : ["normal", "nsfw"];
     let games = (body.games || []).filter((g) => g && String(g).trim());
-    if (!games.length) return sendJson(res, 400, { ok: false, error: "未指定要搜索的游戏" });
+    if (!games.length) return sendJson(res, { ok: false, error: "未指定要搜索的游戏" }, 400);
     try {
       const t = await search.startSearchTask({ games, startDate: range.startDate, endDate: range.endDate, contentFilter, startTs: range.startTs, endTs: range.endTs });
-      return sendJson(res, 200, { ok: true, started: true, task: t });
+      return sendJson(res, { ok: true, started: true, task: t }, 200);
     } catch (e) {
-      return sendJson(res, 400, { ok: false, error: e.message || String(e) });
+      return sendJson(res, { ok: false, error: e.message || String(e) }, 400);
     }
   };
 }
@@ -144,12 +154,12 @@ function importSearchCache(api) {
     const body = await readBody(req);
     let records = body && body.records;
     if (typeof records === "string") {
-      try { records = JSON.parse(records); } catch (_) { return sendJson(res, 400, { ok: false, error: "JSON 解析失败，请上传正确的搜索记录数组" }); }
+      try { records = JSON.parse(records); } catch (_) { return sendJson(res, { ok: false, error: "JSON 解析失败，请上传正确的搜索记录数组" }, 400); }
     }
     if (body && body.json && !records) {
-      try { records = JSON.parse(body.json); } catch (_) { return sendJson(res, 400, { ok: false, error: "JSON 解析失败，请上传正确的搜索记录数组" }); }
+      try { records = JSON.parse(body.json); } catch (_) { return sendJson(res, { ok: false, error: "JSON 解析失败，请上传正确的搜索记录数组" }, 400); }
     }
-    return sendJson(res, 200, search.importCache(records));
+    return sendJson(res, search.importCache(records), 200);
   };
 }
 
@@ -159,7 +169,7 @@ function saveSearchResults(api) {
   return async (req, res) => {
     const body = await readBody(req);
     const results = Array.isArray(body && body.results) ? body.results : [];
-    return sendJson(res, 200, search.saveRecords(results));
+    return sendJson(res, search.saveRecords(results), 200);
   };
 }
 

@@ -5,31 +5,27 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, readBody } = require("../framework");
-const cfg = require("../config");
-const autoUpdate = require("../lib/auto-update");
-
-module.exports = createRoute({
-
+module.exports = function register(api) {
+  const { route, sendJson, readBody, cfg, autoUpdate } = api;
 
   // GET /api/auto-update/status
-  "GET /api/auto-update/status": (req, res) => {
+  route("GET", "/api/auto-update/status", (req, res) => {
     const cfgNow = cfg.readConfig();
     const status = autoUpdate.getStatus();
     // githubToken 仅存配置文件手改，不回传前端（脱敏为空串）
     const config = Object.assign({}, cfgNow.autoUpdate || {});
     delete config.githubToken;
-    return sendJson(res, {
+    return sendJson(res, 200, {
       ok: true,
       config: config,
       status: status
-    }, 200);
-  },
+    });
+  });
 
   // POST /api/auto-update/config
   // { enabled, mode, interval } —— github 模式的仓库/分支/Token 不在前端设置，
   // 只存 config 手改；本端点不接收也不覆盖这三个字段。
-  "POST /api/auto-update/config": async (req, res) => {
+  route("POST", "/api/auto-update/config", async (req, res) => {
     const body = await readBody(req);
     const cfgNow = cfg.readConfig();
     const cur = cfgNow.autoUpdate || {};
@@ -56,16 +52,16 @@ module.exports = createRoute({
       console.log("[auto-update] " + msg);
     });
 
-    return sendJson(res, { ok: true, autoUpdate: next }, 200);
-  },
+    return sendJson(res, 200, { ok: true, autoUpdate: next });
+  });
 
   // POST /api/auto-update/check
   // 手动触发一次 github 模式检查（不等定时轮询），等待完成后返回检查结果
-  "POST /api/auto-update/check": async (req, res) => {
+  route("POST", "/api/auto-update/check", async (req, res) => {
     const cfgNow = cfg.readConfig();
     const au = cfgNow.autoUpdate || {};
     if (!au.enabled || au.mode !== "github") {
-      return sendJson(res, { ok: false, error: "仅 github 模式支持手动检查" }, 400);
+      return sendJson(res, 400, { ok: false, error: "仅 github 模式支持手动检查" });
     }
     const before = autoUpdate.getStatus().lastCheck || null;
     autoUpdate.checkGitHubUpdate(au);
@@ -78,13 +74,13 @@ module.exports = createRoute({
       // 若进程已重启（lastCheck 内存态清空），退出等待
       if (autoUpdate.getStatus().restarting && now === null) break;
     }
-    return sendJson(res, { ok: true, check: result }, 200);
-  },
+    return sendJson(res, 200, { ok: true, check: result });
+  });
 
   // POST /api/auto-update/restart
   // 手动触发重启（不依赖文件变更检测）
-  "POST /api/auto-update/restart": async (req, res) => {
+  route("POST", "/api/auto-update/restart", async (req, res) => {
     autoUpdate.scheduleRestart();
-    return sendJson(res, { ok: true, message: "2 秒后重启" }, 200);
-  },
-});
+    return sendJson(res, 200, { ok: true, message: "2 秒后重启" });
+  });
+};

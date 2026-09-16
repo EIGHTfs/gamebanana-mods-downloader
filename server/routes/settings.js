@@ -1,8 +1,11 @@
 // ============================================================
 // gbmd - 路由：设置（config.json：gbCookie/并发/会话时长/端口/默认下载路径/开关）
-// P1 从 app.js 拆分。bug#6：写 gbCookie 时 cleanCookie 清洗脏值。
+// 模板化：createRoute 表式导出（"METHOD /path": handler）
 // ============================================================
 "use strict";
+
+const { createRoute, sendJson, readBody, cleanCookie } = require("../framework");
+const cfg = require("../config");
 
 // 脱敏：不回传密码哈希/盐与 gbCookie 明文，用 hasGbCookie 表示是否已配置
 function publicSettings(c) {
@@ -12,33 +15,23 @@ function publicSettings(c) {
   });
 }
 
-module.exports = function register(api) {
-  const { route, routePublic, sendJson, readBody, cfg, cleanCookie } = api;
-
-  // GET /api/status（公开，任意方法）
-  routePublic("*", "/api/status", (req, res) => {
-    const cfgNow = cfg.readConfig();
-    return sendJson(res, 200, { ok: true, needsSetup: !cfgNow.passwordHash, needsAuth: !!cfgNow.passwordHash });
-  });
-
-  // GET /api/settings
-  route("GET", "/api/settings", (req, res) => {
-    return sendJson(res, 200, { ok: true, settings: publicSettings(cfg.readConfig()) });
-  });
+module.exports = createRoute({
+  // GET /api/settings（脱敏后的当前配置）
+  "GET /api/settings": (req, res) => {
+    return sendJson(res, { ok: true, settings: publicSettings(cfg.readConfig()) }, 200);
+  },
 
   // POST /api/settings
-  // 2026-09-01 参照 iwara-downloader-server：设置接口脱敏（不回传 gbCookie 明文）、
-  // 敏感字段空串跳过不覆盖（留空 = 不改）、支持油猴/手填的「Cookie=...」组合文本。
-  route("POST", "/api/settings", async (req, res) => {
+  // 设置接口脱敏（不回传 gbCookie 明文）、敏感字段空串跳过不覆盖（留空 = 不改）、
+  // 支持油猴/手填的「Cookie=...」组合文本。
+  "POST /api/settings": async (req, res) => {
     const body = await readBody(req);
     const cfgNow = cfg.readConfig();
-    // bug#6 写时清洗：兼容油猴组合文本「Cookie=...」+ JSON 脏值 '{"cookie":"..."}'
+    // 写时清洗：兼容油猴组合文本「Cookie=...」+ JSON 脏值 '{"cookie":"..."}'
     if (typeof body.gbCookie === "string") {
       const cleaned = cleanCookie(body.gbCookie);
       if (cleaned) body.gbCookie = cleaned; // 非空才写，避免空值覆盖
     }
-    // 【原代码】const allowed = ["gbCookie", "downloadConcurrency", "sessionHours", "port", "defaultDownloadPath"];
-    // 【改为】2026-09-03：「这两项我想给现在的server版本加回去」——允许写 downloadToggles
     // 2026-09-11 bugfix：GB 会话绑定登录浏览器完整 UA（OS+版本号全部一致），
     // gbUserAgent 必须允许前端写入，否则 UA 不匹配时 /api/gb-login-status 始终返回未登录
     // 2026-09-13：sessionRememberHours=记住设备会话时长（默认720h），允许设置页调整
@@ -55,6 +48,19 @@ module.exports = function register(api) {
       cfgNow[k] = body[k];
     }
     cfg.writeConfig(cfgNow);
-    return sendJson(res, 200, { ok: true, settings: publicSettings(cfg.readConfig()) });
-  });
-};
+    return sendJson(res, { ok: true, settings: publicSettings(cfg.readConfig()) });
+  },
+});
+
+// 公开路由（未登录可访问）：由 app.js 组装到 publicRoutes 白名单
+module.exports.public = createRoute({
+  // GET /api/status（任意方法；框架按 method 匹配，故同时注册 GET/POST）
+  "GET /api/status": (req, res) => {
+    const cfgNow = cfg.readConfig();
+    return sendJson(res, { ok: true, needsSetup: !cfgNow.passwordHash, needsAuth: !!cfgNow.passwordHash });
+  },
+  "POST /api/status": (req, res) => {
+    const cfgNow = cfg.readConfig();
+    return sendJson(res, { ok: true, needsSetup: !cfgNow.passwordHash, needsAuth: !!cfgNow.passwordHash });
+  },
+});
