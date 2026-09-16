@@ -149,7 +149,7 @@ function createServer(opts) {
     const r = assembler.render(name);
     if (!r.ok) {
       console.error("[fragments] " + name + " 组装失败: " + r.error);
-      res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+      res.writeHead(500, { "Content-Type": mimeMap[path.extname(name).toLowerCase()] || "text/html; charset=utf-8" });
       res.end("<h1>页面组装失败</h1><p>" + r.error + "</p>");
       return true;
     }
@@ -159,8 +159,10 @@ function createServer(opts) {
       if (out != null) html = out;
     }
     const buf = Buffer.from(html);
+    // MIME 按组装页面名推断（index.html → text/html，style.css → text/css）
+    const ctype = mimeMap[path.extname(name).toLowerCase()] || "text/html; charset=utf-8";
     res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8",
+      "Content-Type": ctype,
       "Content-Length": buf.length,
       "Cache-Control": "no-cache",
     });

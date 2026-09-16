@@ -73,3 +73,5 @@ node_modules.orig/
 
 # 安全删除回收站
 .trash/
+**/.trash/
+**/.trash-*/

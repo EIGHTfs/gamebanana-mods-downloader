@@ -1,0 +1,15 @@
+
+/* 2026-09-01 保存设置悬浮按钮（右下角，仅设置页显示；interval 避开 toast 位置） */
+#saveSettingsFab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 2147482990;
+  width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--primary); color: #fff; font-size: 22px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  display: none; align-items: center; justify-content: center;
+  transition: transform .15s ease, background .15s ease;
+}
+#saveSettingsFab:hover { transform: translateY(-2px) scale(1.05); }
+#saveSettingsFab.show { display: flex; }
+
+.diff-from { color: var(--fail); word-break: break-all; }
+.diff-to { color: var(--success); font-weight: 600; word-break: break-all; }

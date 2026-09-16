@@ -11,7 +11,10 @@
 const fs = require("fs");
 const path = require("path");
 
-const FRAG_PATTERN = /<!--\s*@frag:([^\s]+?)\s*-->/;
+// 指令格式（HTML 注释 / CSS 注释两种都支持，片段名可带子目录）
+//   <!-- @frag:topbar -->            HTML 框架
+//   /* @frag:styles/variables.css */  CSS 框架
+const FRAG_PATTERN = /(?:<!--|\/\*)\s*@frag:([^\s]+?)\s*(?:-->|\*\/)/;
 const MAX_NEST_DEPTH = 8; // 嵌套片段深度上限（防环）
 
 // ---------- 模块级工具（不依赖组装器实例） ----------
@@ -43,28 +46,37 @@ function maxMtime(dir, files) {
   return newest;
 }
 
-/** 展开单行指令：返回替换文本与引用的片段名（找不到/读失败时返回错误注释） */
-function expandOneLine(dir, line, depth, files) {
+/** 生成「片段缺失/失败」占位注释：CSS 文件用块注释，其余用 HTML 注释，保证语法合法 */
+function missedNote(dir, filePath, kind, name) {
+  const isCss = String(filePath).toLowerCase().endsWith(".css");
+  return isCss
+    ? "/* " + kind + " @frag:" + name + " */"
+    : "<!-- " + kind + " @frag:" + name + " -->";
+}
+
+/** 展开单行指令：返回替换文本与引用的片段名（找不到/读失败时按框架类型生成占位注释） */
+function expandOneLine(dir, line, depth, files, filePath) {
   const matched = FRAG_PATTERN.exec(line);
   if (!matched) return { text: line, ok: true };
   const name = matched[1];
-  const fname = name.endsWith(".html") ? name : name + ".html";
+  // 带扩展名（.html/.css 等）按原名查找；无扩展名时补 .html
+  const fname = /\.[a-z0-9]+$/i.test(name) ? name : name + ".html";
   const fragPath = toAbs(dir, fname);
   if (!isFile(fragPath)) {
     files.push(fname);
-    return { text: "<!-- 缺失片段 @frag:" + name + " -->", ok: false };
+    return { text: missedNote(dir, filePath, "缺失片段", name), ok: false };
   }
   let fragText;
   try {
     fragText = fs.readFileSync(fragPath, "utf8").replace(/\r?\n$/, "");
   } catch (_) {
     files.push(fname);
-    return { text: "<!-- 读取失败 @frag:" + name + " -->", ok: false };
+    return { text: missedNote(dir, filePath, "读取失败", name), ok: false };
   }
   // 片段内还有指令 → 递归展开（超深度则按原文插入）
   if (depth < MAX_NEST_DEPTH && FRAG_PATTERN.test(fragText)) {
     const nested = expandFrags(dir, fragPath, depth + 1);
-    if (nested.error) return { text: "<!-- 嵌套展开失败 @frag:" + name + " -->", ok: false };
+    if (nested.error) return { text: missedNote(dir, filePath, "嵌套展开失败", name), ok: false };
     for (const f of nested.files) if (files.indexOf(f) < 0) files.push(f);
     return { text: nested.text.replace(/\r?\n$/, ""), ok: !nested.warning };
   }
@@ -85,7 +97,7 @@ function expandFrags(dir, filePath, depth) {
   const lines = text.replace(/\r?\n$/, "").split("\n");
   let ok = true;
   for (let i = 0; i < lines.length; i++) {
-    const r = expandOneLine(dir, lines[i], depth, files);
+    const r = expandOneLine(dir, lines[i], depth, files, filePath);
     if (r.text !== lines[i]) lines[i] = r.text;
     if (!r.ok) ok = false;
   }

@@ -1,0 +1,34 @@
+.mod-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  background: var(--card);
+}
+.mod-group-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--card2);
+  font-size: 13px;
+  cursor: pointer; /* 2026-09-13：下载列表分组可折叠（默认展开），点击表头切换 */
+  user-select: none;
+}
+.mod-group-head .mg-arrow {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: 4px;
+  transition: transform .15s;
+  display: inline-block;
+}
+.mod-group.collapsed .mod-group-head .mg-arrow { transform: rotate(-90deg); }
+.mod-group.collapsed .mod-group-body { display: none; }
+.mod-group-body { padding: 2px 0; }
+.mod-group-head > span { min-width: 0; word-break: break-word; }
+.mod-group-dir {
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+  max-width: 60%;
+  text-align: right;
+}

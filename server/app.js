@@ -57,22 +57,26 @@ function injectAssetVersion(html, publicDir) {
 }
 
 // ---------- 片段清单 ----------
-// 框架模式：index.html 是蓝图框架（含 <!-- @frag:xxx --> 指令），
+// 框架模式：框架文件含 <!-- @frag:xxx --> 指令（HTML）或 /* @frag:xxx */ 指令（CSS），
 // 片段在 fragments/ 下（通用分片 + 项目特有分片），组装器按指令替换插入。
+//   index.html ← 蓝图框架（HTML 指令）
+//   style.css  ← 蓝图框架（CSS 指令，样式分片在 fragments/styles/）
 function loadFragmentManifest() {
-  // 框架文件 = public/index.html（蓝图框架）
-  const frameworkFile = path.join(PUBLIC_DIR, "index.html");
   const fragDir = path.join(PUBLIC_DIR, "fragments");
-  try {
-    if (!fs.existsSync(frameworkFile) || !fs.statSync(frameworkFile).isFile()) return null;
-    if (!fs.existsSync(fragDir) || !fs.statSync(fragDir).isDirectory()) return null;
-    return {
-      pages: { "index.html": frameworkFile }, // 值 = 框架文件路径 → 组装器走框架模式
-    };
-  } catch (e) {
-    console.log("[fragments] 清单不可用（回退静态 index.html）: " + (e && e.message));
-    return null;
+  if (!fs.existsSync(fragDir) || !fs.statSync(fragDir).isDirectory()) return null;
+  // 页面名 → 框架文件（public/ 下的同名文件即框架）
+  const FRAMEWORKS = ["index.html", "style.css"];
+  const pages = {};
+  for (const name of FRAMEWORKS) {
+    const f = path.join(PUBLIC_DIR, name);
+    try {
+      if (fs.existsSync(f) && fs.statSync(f).isFile()) pages[name] = f;
+    } catch (_) {
+      console.log("[fragments] 框架文件不可用: " + name);
+    }
   }
+  if (!Object.keys(pages).length) return null;
+  return { pages: pages };
 }
 
 // ---------- 油猴脚本分发 ----------
