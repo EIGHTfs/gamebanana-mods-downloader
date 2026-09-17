@@ -1,8 +1,18 @@
-// 路由工厂：把 handler 函数注册到 HTTP 路由
-// 项目路由文件只需导出 handler 函数，框架处理：body 解析、错误捕获。
+// 路由工厂（表式范式）：把 handler 函数注册到 HTTP 路由
+// 项目路由文件只需导出 handler 表，框架处理：body 解析、错误捕获。
+// 另一种范式见 route-registry.js（闭包式）；两者的匹配语义共用 route-core，
+// 差异仅在「怎么登记路由」，匹配行为完全一致。
+//
+// 表 key 支持：
+//   "GET /api/x"      精确路径
+//   "* /api/x"        method 通配（任意方法）
+//   "GET /api/x/:id"  模板路径，:id 编译为具名捕获，handler 里用 ctx.params.id 取
+//   "GET /^\\/avatar\\//"  RegExp 路径（以 / 开头且能被解析为正则字面量时不适用，
+//                      如需正则请用 route-registry 的闭包式注册）
 "use strict";
 
 const { sendJson, readBody } = require("./http-utils");
+const routeCore = require("./route-core");
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 
@@ -12,8 +22,9 @@ function parseRouteTable(handlers) {
     const parts = key.split(/\s+/);
     const method = parts[0].toUpperCase();
     const pattern = parts[1] || "/";
-    const re = new RegExp("^" + pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$");
-    table.push({ method, re, fn });
+    // 复用 route-core 的模板编译（:param → 具名捕获），保持与闭包式同源
+    const re = routeCore.compilePattern(pattern);
+    table.push({ method, re, fn, pattern });
   }
   return table;
 }
@@ -36,7 +47,8 @@ function createRoute(handlers) {
     const method = req.method;
 
     for (const entry of table) {
-      if (method !== entry.method) continue;
+      // method 匹配统一走 route-core：支持 "*" 通配与数组，与闭包式同源
+      if (!routeCore.matchMethod(entry.method, method)) continue;
       const match = pathname.match(entry.re);
       if (!match) continue;
 
