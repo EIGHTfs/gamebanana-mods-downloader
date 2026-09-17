@@ -24,7 +24,7 @@ const LEGACY_FILES = [
 const organize = require("./organize"); // 2026-08-26 下载时/rebuild 时自动整理
 const cfg = require("../config"); // 2026-08-30 autoOrganize 开关
 const mapping = require("./mapping"); // 2026-09-02 游戏名→索引文件名复用字符替换映射文件（illegalChars.json）
-const { parseIndexObj, readIndexObj } = require("../utils/index-html");
+const { parseIndexObj, readIndexObj } = require("./index-html");
 
 // ---------- 内存表（跨游戏全库合并，查询用）----------
 let gbIndex = new Map();      // hash -> {modId, modName, author, game, url, fileName, gbMd5}
@@ -136,7 +136,7 @@ function migrateLegacy() {
   return migrated;
 }
 
-// ---------- HTML 索引块解析（抽到 utils/index-html.js，P2 去重）----------
+// ---------- HTML 索引块解析（抽到 lib/index-html.js，P2 去重）----------
 
 // ---------- 启动加载 ----------
 function load() {

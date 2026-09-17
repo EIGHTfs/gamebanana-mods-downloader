@@ -1,4 +1,4 @@
-// utils/index-html.js —— description.html 内嵌「机器可读索引块」的读写（P2 去重）
+// lib/index-html.js —— description.html 内嵌「机器可读索引块」的读写（P2 去重）
 //   块格式：<script id="gbmd-index" type="application/json">{ schema:1, ... }</script>
 //   原 4 处重复（downloader/organize/hash-index/incomplete-scan）合一，逻辑原样搬。
 "use strict";

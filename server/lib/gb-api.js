@@ -8,7 +8,7 @@
 
 const path = require("path");
 const cfg = require("../config");
-const { cleanCookie } = require("../utils/http");
+const { cleanCookie } = require("../framework/http-utils");
 
 const API_BASE = "https://gamebanana.com/apiv11/Mod";
 

@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const cfg = require("../config");
-const { parseIndexObj } = require("../utils/index-html");
+const { parseIndexObj } = require("./index-html");
 
 // 取所有扫描根：已配置游戏的下载根（gameRootOf 已含 #17 默认位置 fallback）
 function collectRoots() {
@@ -104,7 +104,7 @@ async function scanIncomplete() {
   return results;
 }
 
-// parseIndexObj 抽到 utils/index-html.js（P2 去重）
+// parseIndexObj 抽到 lib/index-html.js（P2 去重）
 
 // 任务 json 导出格式（#16-B 导入用）：{ schema:"gbmd-tasks-v1", tasks:[{...}] }
 function toTaskJson(results) {

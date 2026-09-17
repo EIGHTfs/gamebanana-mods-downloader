@@ -36,8 +36,8 @@ const cfg = require("../config");
 const gbApi = require("./gb-api");
 const mapping = require("./mapping");
 const organize = require("./organize");
-const { INDEX_TAG_ID, buildIndexBlock, parseIndexObj, readIndexObj } = require("../utils/index-html");
-const { escapeHtml } = require("../utils/html");
+const { INDEX_TAG_ID, buildIndexBlock, parseIndexObj, readIndexObj } = require("./index-html");
+const { escapeHtml } = require("../framework/html-utils");
 const hashIndex = require("./hash-index");
 
 // 2026-08-26 性能优化（实测 images.gamebanana.com 首连接 28-30s，keep-alive 复用后 0.7s）：
@@ -143,7 +143,7 @@ function isImageExt(name) {
 }
 
 // ---------- HTML 索引块（机器可读，供 2/3/4 步复用）----------
-// INDEX_TAG_ID / buildIndexBlock / parseIndexObj / readIndexObj 抽到 utils/index-html.js（P2 去重）
+// INDEX_TAG_ID / buildIndexBlock / parseIndexObj / readIndexObj 抽到 lib/index-html.js（P2 去重）
 
 // ---------- 第一步：生成 HTML ----------
 // 可见部分按的结构：

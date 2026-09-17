@@ -25,7 +25,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { parseIndexObj, readIndexObj } = require("../utils/index-html");
+const { parseIndexObj, readIndexObj } = require("./index-html");
 const JSON_DIR = process.env.GBMD_JSON_DIR ? path.resolve(process.env.GBMD_JSON_DIR) : path.join(__dirname, "..", "..", "json");
 const INDEX_DIR = path.join(JSON_DIR, "index"); // 2026-09-02 按游戏分文件后的索引目录
 
@@ -49,7 +49,7 @@ function loadNameIndex() {
   return map;
 }
 
-// parseIndexObj / readIndexObj 抽到 utils/index-html.js（P2 去重）
+// parseIndexObj / readIndexObj 抽到 lib/index-html.js（P2 去重）
 
 // 反查文件名属于哪个 modId（name-index 精确名，忽略后缀再查一次）
 function lookupModId(fileName) {
