@@ -6,7 +6,11 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const dataBackup = require("../server/lib/data-backup");
+const dataBackup = require("../server/framework/data-backup").createBackup({
+  appName: "gamebanana-mods-downloader",
+  appRoot: path.join(__dirname, ".."),
+  toolDir: path.join(__dirname, "..", "tool", "bin"),
+});
 const log = makeLog("data-import-manifest");
 
 // 本地清单（可信白名单）：只放行 json/gamebanana.com.json

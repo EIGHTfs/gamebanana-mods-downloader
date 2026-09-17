@@ -9,6 +9,7 @@ const os = require("os");
 const { execFile, execFileSync } = require("child_process");
 
 const jsonDir = require("./json-dir");
+const markerManifest = require("./marker-manifest");
 
 const MARKER = "//userdata-manifest.json";
 const MANIFEST_NAME = "userdata-manifest.json";
@@ -44,80 +45,22 @@ function safeRelPath(ctx, rel) {
   if (normalized.split("/").some((seg) => seg === "..")) return false;
   return path.resolve(ctx.appRoot, normalized).startsWith(ctx.appRoot + path.sep);
 }
-
-function parseMarker(line) {
-  const idx = String(line || "").indexOf(MARKER);
-  if (idx < 0) return null;
-  const rest = String(line).slice(idx + MARKER.length).trim();
-  const parts = rest.split(/\s+/).filter(Boolean);
-  if (!parts.length) return null;
-  if (parts[0] === "file" && parts[1]) {
-    return { kind: "file", rel: parts[1], desc: parts.slice(2).join(" ") };
-  }
-  if (parts[0] === "dir" && parts[1]) {
-    let suffix = "";
-    let descParts = parts.slice(2);
-    if (descParts[0] && descParts[0].charAt(0) === ".") {
-      suffix = descParts[0];
-      descParts = descParts.slice(1);
-    }
-    return { kind: "dir", rel: parts[1], suffix, desc: descParts.join(" ") };
-  }
-  return null;
-}
-
-// ---------- 清单生成 ----------
-
-function walkJs(dir, hits) {
-  let names;
-  try { names = fs.readdirSync(dir); } catch (_) { return; }
-  for (const name of names) {
-    if (name === "node_modules" || name === "public" || name === "thumbs" || name.charAt(0) === ".") continue;
-    const abs = path.join(dir, name);
-    let stat;
-    try { stat = fs.statSync(abs); } catch (_) { continue; }
-    if (stat.isDirectory()) { walkJs(abs, hits); continue; }
-    if (!/\.(js|cjs)$/.test(name)) continue;
-    let text;
-    try { text = fs.readFileSync(abs, "utf8"); } catch (_) { continue; }
-    for (const line of text.split(/\r?\n/)) {
-      const hit = parseMarker(line);
-      if (hit) hits.push(hit);
-    }
-  }
-}
-
 function buildManifest(ctx) {
-  const hits = [];
-  walkJs(path.join(ctx.appRoot, "server"), hits);
-  const files = [];
-  const dirs = [];
-  const seenFile = new Set();
-  const seenDir = new Set();
-  for (const hit of hits) {
-    if (hit.kind === "file") {
-      if (!hit.rel || seenFile.has(hit.rel) || hit.rel === "json/" + MANIFEST_NAME) continue;
-      seenFile.add(hit.rel);
-      files.push({ rel: hit.rel, desc: hit.desc || "" });
-    } else if (hit.kind === "dir") {
-      const key = hit.rel + "\0" + (hit.suffix || "");
-      if (!hit.rel || seenDir.has(key)) continue;
-      seenDir.add(key);
-      const entry = { rel: hit.rel, desc: hit.desc || "" };
-      if (hit.suffix) entry.suffix = hit.suffix;
-      dirs.push(entry);
-    }
-  }
-  files.sort((a, b) => a.rel.localeCompare(b.rel));
-  dirs.sort((a, b) => a.rel.localeCompare(b.rel));
-  return {
-    schema: 1,
+  // 清单生成统一走 framework/marker-manifest —— 与 auto-update 的运行态清单
+  // 同一套扫描与解析逻辑，避免两份实现漂移：
+  //   · 它支持 k=v 附加字段（required=1 / watch=skip）与引号值
+  //     （desc="服务配置（例外留在 server/）"），内联的朴素解析做不到；
+  //   · 它会跳过 framework/ 目录，不会把 marker-manifest.js 头部的用法
+  //     示例行当成真实条目扫进来。
+  const m = markerManifest.buildManifest({
+    root: ctx.appRoot,
+    json: MANIFEST_NAME,
     app: ctx.appName,
-    generatedAt: new Date().toISOString(),
-    note: "导出时根据源码 //" + MANIFEST_NAME + " 注释自动生成，不要手改。",
-    files,
-    dirs,
-  };
+  });
+  // 清单自身不入包，避免自引用
+  m.files = (m.files || []).filter((f) => f.rel !== "json/" + MANIFEST_NAME);
+  m.dirs = (m.dirs || []).filter((d) => d.rel !== "json/" + MANIFEST_NAME);
+  return m;
 }
 
 function writeManifest(ctx, manifest) {
