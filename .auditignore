@@ -1,0 +1,9 @@
+# .auditignore — 审计豁免（语法同 .gitignore）
+# 照常 git 跟踪/提交，仅审计扫描跳过；与 .gitignore 叠加生效（各管各的）。
+#
+# 单文件脚本：Chrome 扩展入口 / 油猴脚本，按设计就是单文件承载主体逻辑，
+# 拆分会破坏油猴脚本的单文件特性（需 @require 远程引用）与扩展入口结构。
+# 仅豁免这三个文件，同目录其他文件照常审计。
+crx/extension/popup.js
+scripts/gamebanana-cookie-userscript.user.js
+scripts/gb-login-diag.user.js

@@ -295,3 +295,4 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.3.2 | 新功能：①下载优先级——图片/gif 排前优先下载；②下载列表分组折叠/展开（默认展开，状态记忆）；③登录页「记住此设备」——勾选后 30 天免登录（默认勾选，解决登录太频繁），时长可配置 `sessionRememberHours` |
 | 1.4.0 | 服务端模板化改造：HTTP 层改用 dl-server-template 通用框架——`server/framework/` 提供 createServer（鉴权门/静态文件/setup 跳转/HTML 资源注入钩子）与 createRoute（`{"METHOD /path": handler}` 表式路由 + ctx.query/params）；11 个 routes 全部改写为表式导出；`app.js` 从 234 行降到 150 行的纯装配层；framework 补齐通用能力（公开路由白名单、未设密码放行、cookie 名可配、定时清理会话、API 日志过滤） |
 | 1.4.1 | bugfix：①github 模式自动更新首次运行误判「有新版本」——无状态文件时只记录基线，不再全量覆盖并重启（原逻辑 `undefined !== sha` 恒为真）；start.sh/boot.cjs/setup.sh 加入更新排除列表，保护重启入口；②静态资源版本号 `mtimeMs \| 0` 32 位溢出成负数，改 `Math.floor`；③framework `readBody` 二次读同一请求流导致 POST 请求永久挂起，加结果缓存 |
+| 1.5.0 | 备份恢复改用框架层 `createBackup`（配置驱动），删除项目内 `lib/data-backup.js`（框架层原实现改为复用 `marker-manifest`，修正带引号的 `desc="..."` 被原样输出的问题）；`userdata-manifest.json` 改为不入库（导出时自动生成，缺失时自动重建） |
