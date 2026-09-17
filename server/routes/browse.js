@@ -4,9 +4,9 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson } = require("../framework");
+const { createRoute, sendJson, pathSafe } = require("../framework");
 const cfg = require("../config");
-const { isBlocked, isBrowsableDir } = require("../utils/path-safe");
+const { isBlocked, isBrowsableDir } = pathSafe;
 const fs = require("fs");
 const path = require("path");
 

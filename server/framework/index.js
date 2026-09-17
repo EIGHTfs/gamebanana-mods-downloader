@@ -15,6 +15,7 @@ const auth = require("./auth");
 const { createBackup } = require("./data-backup");
 const { createAutoUpdate } = require("./auto-update");
 const markerManifest = require("./marker-manifest");
+const pathSafe = require("./path-safe");
 
 module.exports = {
   // 核心
@@ -40,4 +41,5 @@ module.exports = {
   appLog,
   jsonDir,
   auth,
+  pathSafe,
 };
