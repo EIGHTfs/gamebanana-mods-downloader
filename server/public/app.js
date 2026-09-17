@@ -1680,7 +1680,8 @@ function bindMerge() {
   $("#mmEmptyBtn").addEventListener("click", emptyDirsPreview);
   $("#mmEmptyGoBtn").addEventListener("click", emptyDirsRun);
   bindMergeMapping();
-  bindMergeAutoUpdate();
+  // 自动更新卡片：公共模块（blueprint/auto-update-card.js；HTML 走 @frag:auto-update-card）
+  if (window.AutoUpdateCard) window.AutoUpdateCard.mount();
 }
 
 /** 映射管理：手动添加映射（游戏/仓库/角色级联选择） */
@@ -1817,97 +1818,6 @@ function renderCombo(filter) {
   if (!shown.length) { el.innerHTML = '<div class="combo-empty">无匹配角色</div>'; el.style.display = "block"; return; }
   el.innerHTML = shown.map((c) => `<div class="combo-item" data-v="${esc(c)}">${esc(c)}</div>`).join("");
   el.style.display = "block";
-}
-
-/** 自动更新设置 */
-function bindMergeAutoUpdate() {
-  function fmtCommitDate(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    const bj = new Date(d.getTime() + 8 * 3600 * 1000);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${bj.getUTCFullYear()}-${p(bj.getUTCMonth() + 1)}-${p(bj.getUTCDate())} ${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}`;
-  }
-  async function loadAutoUpdateStatus() {
-    try {
-      const r = await api("/api/auto-update/status");
-      if (!r.ok) return;
-      const c = r.config || {};
-      const s = r.status || {};
-      $("#autoUpdateToggle").checked = !!c.enabled;
-      $("#autoUpdateMode").value = c.mode || "watch";
-      $("#autoUpdateInterval").value = c.interval || 300;
-      const isPull = (c.mode === "git" || c.mode === "github");
-      $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
-      if (s.enabled) {
-        const localVer = s.lastCommitDate ? fmtCommitDate(s.lastCommitDate) + "（北京时间）" : (s.lastSha ? s.lastSha.slice(0, 8) : "");
-        const modeText = {
-          watch: "文件监控",
-          git: "定时 git pull",
-          github: `GitHub 拉取${localVer ? "（本地版本 " + localVer + "）" : ""}`
-        };
-        setStatus($("#autoUpdateInfo"), `✅ 监控中（mode=${s.mode}, ${modeText[s.mode] || s.mode}）`, "ok");
-      } else {
-        setStatus($("#autoUpdateInfo"), "⏸ 未启用", "");
-      }
-    } catch (_) { /* 获取自动更新状态失败 */ }
-  }
-  loadAutoUpdateStatus();
-  $("#autoUpdateMode").addEventListener("change", () => {
-    const mode = $("#autoUpdateMode").value;
-    const isPull = (mode === "git" || mode === "github");
-    $("#autoUpdateIntervalRow").style.display = isPull ? "flex" : "none";
-  });
-  $("#autoUpdateSaveBtn").addEventListener("click", async () => {
-    const st = $("#autoUpdateStatus");
-    const enabled = $("#autoUpdateToggle").checked;
-    const mode = $("#autoUpdateMode").value;
-    const interval = parseInt($("#autoUpdateInterval").value, 10) || 300;
-    try {
-      const r = await api("/api/auto-update/config", "POST", { enabled, mode, interval });
-      if (!r.ok) throw new Error(r.error || "保存失败");
-      setStatus(st, "✅ 已保存" + (enabled ? "，监控已启动" : "，监控已停止"), "ok");
-      loadAutoUpdateStatus();
-    } catch (e) {
-      setStatus(st, "保存失败: " + e.message, "err");
-    }
-  });
-  $("#autoUpdateCheckBtn").addEventListener("click", async () => {
-    const st = $("#autoUpdateStatus");
-    setStatus(st, "🔍 检查中...", "");
-    try {
-      const r = await api("/api/auto-update/check", "POST");
-      if (!r.ok) throw new Error(r.error || "检查失败");
-      const c = r.check || null;
-      if (c && c.result === "latest") {
-        setStatus(st, "✅ " + c.message, "ok");
-      } else if (c && c.result === "updated") {
-        setStatus(st, "🔄 " + c.message, "ok");
-      } else if (c && c.result === "error") {
-        setStatus(st, "❌ " + c.message, "err");
-      } else {
-        setStatus(st, "🔍 已触发检查（进程可能已重启，请刷新页面查看）", "");
-      }
-      setTimeout(loadAutoUpdateStatus, 1500);
-    } catch (e) {
-      setStatus(st, "检查失败: " + e.message, "err");
-    }
-  });
-  $("#autoUpdateRestartBtn").addEventListener("click", async () => {
-    const st = $("#autoUpdateStatus");
-    if (!confirm("确认立即重启服务端？当前下载任务将暂停，重启后自动恢复。")) return;
-    try {
-      const r = await api("/api/auto-update/restart", "POST");
-      if (!r.ok) throw new Error(r.error || "重启失败");
-      setStatus(st, "🔄 2 秒后重启...", "ok");
-      setTimeout(() => {
-        setStatus($("#autoUpdateInfo"), "⏳ 服务端重启中...", "");
-      }, 1500);
-    } catch (e) {
-      setStatus(st, "重启失败: " + e.message, "err");
-    }
-  });
 }
 
 // ---------- 退出 ----------
