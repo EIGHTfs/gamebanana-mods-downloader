@@ -27,7 +27,13 @@
 "use strict";
 
 const fs = require("fs");
+const fsp = fs.promises;
 const path = require("path");
+
+/** 异步 existsSync 等价物：不存在返回 false，与同步版语义一致（含权限错误） */
+async function exists(p) {
+  try { await fsp.access(p); return true; } catch (_) { return false; }
+}
 const crypto = require("crypto");
 const https = require("https");
 const http = require("http");
@@ -593,31 +599,32 @@ async function step2FindAndMove(target, mod, obj, finalDir, trashRoot) {
   }
   const moveOnlyAll = [...warehouseFiles, ...moveFilesOnly];
   if (moveOnlyAll.length) {
+    // 逐文件搬运改异步：文件数可达数千，同步 IO 会把事件循环整段占满
     for (const w of moveOnlyAll) {
-      const srcHasHtml = fs.existsSync(path.join(w.dir, "description.html"));
+      const srcHasHtml = await exists(path.join(w.dir, "description.html"));
       let ents = [];
-      try { ents = fs.readdirSync(w.dir, { withFileTypes: true }); } catch (_) { continue; }
+      try { ents = await fsp.readdir(w.dir, { withFileTypes: true }); } catch (_) { continue; }
       for (const e of ents) {
         if (!e.isFile() || e.name.startsWith(".")) continue;
         if (!wantFiles[String(e.name).toLowerCase()]) continue;
         if (srcHasHtml) continue;
         const s = path.join(w.dir, e.name);
         const d = path.join(finalDir, e.name);
-        if (fs.existsSync(d)) {
+        if (await exists(d)) {
           try {
-            fs.mkdirSync(trashRoot, { recursive: true });
+            await fsp.mkdir(trashRoot, { recursive: true });
             let tx = path.join(trashRoot, w.relDir || "", e.name);
-            if (fs.existsSync(tx)) tx = tx + "-" + Date.now();
-            fs.mkdirSync(path.dirname(tx), { recursive: true });
-            fs.renameSync(s, tx);
+            if (await exists(tx)) tx = tx + "-" + Date.now();
+            await fsp.mkdir(path.dirname(tx), { recursive: true });
+            await fsp.rename(s, tx);
             movedList.push(w.relDir + "/" + e.name + "(重复→trash)");
           } catch (_) { /* 移动失败，跳过 */ }
         } else {
-          try { fs.renameSync(s, d); movedList.push(w.relDir + "/" + e.name); } catch (_) { /* 移动失败，跳过 */ }
+          try { await fsp.rename(s, d); movedList.push(w.relDir + "/" + e.name); } catch (_) { /* 移动失败，跳过 */ }
         }
       }
       if (w.deleteHtml) {
-        try { const h = path.join(w.dir, "description.html"); if (fs.existsSync(h)) { fs.unlinkSync(h); console.log("[step2-warehouse-html] 删除仓库根HTML:", h.replace(target.root + "/", "")); } } catch (_) { /* 删除失败，跳过 */ }
+        try { const h = path.join(w.dir, "description.html"); if (await exists(h)) { await fsp.unlink(h); console.log("[step2-warehouse-html] 删除仓库根HTML:", h.replace(target.root + "/", "")); } } catch (_) { /* 删除失败，跳过 */ }
       }
     }
   }
