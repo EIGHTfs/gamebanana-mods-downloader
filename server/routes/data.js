@@ -6,6 +6,7 @@
 
 const { createRoute, sendJson, readBody } = require("../framework");
 const fs = require("fs");
+const fsp = fs.promises;
 const path = require("path");
 const os = require("os");
 // 用户数据备份/恢复：走框架层通用工厂（createBackup），项目只传配置
@@ -39,7 +40,8 @@ module.exports = createRoute({
     try { zipBuf = Buffer.from(b64, "base64"); }
     catch (e) { return sendJson(res, { ok: false, error: "zip 数据解码失败" }, 400); }
     const zipPath = path.join(os.tmpdir(), "gbmd-upload-" + Date.now() + ".zip");
-    fs.writeFileSync(zipPath, zipBuf);
+    // 异步写：上传的 zip 可能很大，同步写会阻塞事件循环
+    await fsp.writeFile(zipPath, zipBuf);
     try {
       const r = await dataBackup.importZip(zipPath);
       return sendJson(res, r, 200);
