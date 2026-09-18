@@ -103,9 +103,6 @@ function bindTabs() {
       tab.classList.add("active");
       $("#panel-" + tab.dataset.tab).classList.add("active");
       try { history.replaceState(null, "", "#" + tab.dataset.tab); } catch (_) {}
-      // 2026-09-01 保存设置悬浮按钮：仅设置页显示
-      const fab = $("#saveSettingsFab");
-      if (fab) fab.classList.toggle("show", tab.dataset.tab === "settings");
     });
   });
   window.addEventListener("hashchange", () => {
@@ -1117,8 +1114,8 @@ function bindSettingsGames() {
 
 /** 设置-Cookie/默认路径 */
 function bindSettingsCookie() {
-  const saveFab = $("#saveSettingsFab");
-  if (saveFab) saveFab.addEventListener("click", async () => {
+  const saveBtn = $("#saveCookieBtn");
+  if (saveBtn) saveBtn.addEventListener("click", async () => {
     const payload = {
       gbCookie: $("#gbCookie").value.trim(),
       gbUserAgent: navigator.userAgent

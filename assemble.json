@@ -11,7 +11,8 @@
   "brand": {
     "title": "GameBanana Mod Downloader",
     "logo": "brand.png",
-    "icon": "favicon.png"
+    "icon": "favicon.png",
+    "displayTitle": "GameBanana<br>Mod<br>Downloader"
   },
   "files": {
     "server/framework/": "server/framework/",

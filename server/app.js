@@ -194,7 +194,7 @@ async function main() {
 // 会话清理：每小时清过期 session（auth 由 framework 提供）
 //runtime-manifest.json file json/sessions.json watch=skip desc=会话持久化（登录态，运行期频繁写）
 // 会话统一放运行态目录 json/（与 iwara 一致）；原先落在 server/ 下，重启/更新时易被当代码处理
-gbAuth.init({ sessionFile: require("./framework/json-dir").jsonFile("sessions.json"), cookieName: "session" });
+gbAuth.init({ sessionFile: require("./framework/json-dir").jsonFile("sessions.json"), cookieName: "gbmd_session" });
 gbAuth.startCleanup();
 
 main().catch((e) => {
