@@ -58,9 +58,9 @@ const DEFAULT_CONFIG = {
   // 2026-09-06 自动更新：开发机推送后服务端自动拉取重启，不用手动同步代码
   // enabled=false 默认关；interval=拉取模式秒数
   // mode=watch（文件监控）/ git（定时 git pull，需 .git）/ github（定时从 GitHub 拉取，无需 .git）
-  //   github 模式可选字段：githubRepo（默认 EIGHTfs/gamebanana-mods-downloader）、
-  //   githubBranch（默认 main）、githubToken（私有仓库才需要）
-  autoUpdate: { enabled: false, mode: "watch", interval: 300, githubRepo: "EIGHTfs/gamebanana-mods-downloader", githubBranch: "main", githubToken: "" }
+  //   github 模式的仓库不在默认配置里写死：由 lib/auto-update.js 的 defaultRepo 提供，
+  //   用户可在 config.json 覆盖 githubRepo；githubBranch 默认 main、githubToken 私有仓库才需要
+  autoUpdate: { enabled: false, mode: "watch", interval: 300, githubBranch: "main", githubToken: "" }
 };
 
 // 下载内容开关归一：只认 files / images 两个布尔；缺省或非 false = 开。
