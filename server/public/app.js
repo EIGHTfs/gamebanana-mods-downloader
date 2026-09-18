@@ -588,9 +588,50 @@ function bindTaskControlButtons() {
   });
 }
 
+// 2026-09-18 新增：预览图灯箱——点缩略图放大，点遮罩 / Esc / 滚轮 关闭
+let lightboxEl = null;
+function closeLightbox() {
+  if (!lightboxEl) return;
+  lightboxEl.remove();
+  lightboxEl = null;
+  document.removeEventListener("keydown", onLightboxKey);
+  document.removeEventListener("wheel", onLightboxWheel);
+}
+function onLightboxKey(e) { if (e.key === "Escape") closeLightbox(); }
+function onLightboxWheel() { closeLightbox(); }
+function openLightbox(src, cap) {
+  closeLightbox();
+  const mask = document.createElement("div");
+  mask.className = "lightbox-mask";
+  const img = document.createElement("img");
+  img.className = "lightbox-img";
+  img.src = src;
+  img.alt = cap || "";
+  mask.appendChild(img);
+  if (cap) {
+    const c = document.createElement("div");
+    c.className = "lightbox-cap";
+    c.textContent = cap;
+    mask.appendChild(c);
+  }
+  // 点遮罩关闭；点图片本身不关（便于细看）
+  mask.addEventListener("click", (e) => { if (e.target === mask) closeLightbox(); });
+  document.body.appendChild(mask);
+  lightboxEl = mask;
+  document.addEventListener("keydown", onLightboxKey);
+  document.addEventListener("wheel", onLightboxWheel);
+}
+
 // 失败行 🔄重试 / 🚫跳过 / 错误文本复制（事件委托）
 function bindRowActionDelegation() {
   document.addEventListener("click", async (ev) => {
+    // 2026-09-18 新增：点缩略图放大（.row-thumb-clickable）
+    const thumbEl = ev.target.closest && ev.target.closest(".row-thumb-clickable");
+    if (thumbEl) {
+      ev.preventDefault();
+      openLightbox(thumbEl.dataset.full || thumbEl.src, thumbEl.dataset.cap || "");
+      return;
+    }
     // 2026-09-02 新增：错误文本点击复制（.mm-err-copy）
     const errCopy = ev.target.closest(".mm-err-copy");
     if (errCopy) {
@@ -939,10 +980,13 @@ function rowHtml(item, idx, task, doneMap) {
   // 2026-08-26：跳过的图片也显示预览图（已存在/已下载的图片项都显示缩略图）
   const hasFile = r && (r.ok || (r.skipped && r.exists)) && item.path;
   const isImgOk = item.type === "image" && hasFile;   // gif 也给预览缩略图
+  // 缩略图与放大图同源（服务端 /api/image 直接回原图）；路径在 URL 里编码
+  const thumbSrc = `/api/image?path=${encodeURIComponent(item.path || "")}`;
   // gif 也用同一个 /api/image 端点预览（服务端本就返回 image/gif），加 GIF 角标便于区分
   let thumb = "";
   if (isImgOk) {
-    const img = `<img class="row-thumb" src="/api/image?path=${encodeURIComponent(item.path)}" loading="lazy" alt="${esc(item.displayName || "")}">`;
+    // 2026-09-18 新增：点缩略图放大（灯箱）——src 用 thumb，data-full 留给放大时大图
+    const img = `<img class="row-thumb row-thumb-clickable" src="${thumbSrc}" loading="lazy" alt="${esc(item.displayName || "")}" data-full="${thumbSrc}" data-cap="${esc(item.displayName || item.path || "")}" title="点击放大">`;
     thumb = item.isGif ? `<span class="row-thumb-wrap">${img}<span class="row-thumb-badge">GIF</span></span>` : img;
   }
   // 每行文件进度条：成功100%绿 / 下载中实时蓝 / 失败100%红 / 未开始0%

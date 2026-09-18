@@ -14,3 +14,24 @@
   color: #fff; background: rgba(0, 0, 0, .62);
   pointer-events: none;
 }
+
+/* 2026-09-18 新增：缩略图可点击放大（cursor + hover 高亮，提示可点） */
+.row-thumb-clickable { cursor: zoom-in; transition: border-color .15s, transform .15s; }
+.row-thumb-clickable:hover { border-color: var(--primary); transform: scale(1.04); }
+
+/* 2026-09-18 新增：预览图灯箱（点缩略图放大查看，点遮罩/Esc/滚轮关闭） */
+.lightbox-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,.86);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; cursor: zoom-out; padding: 24px;
+}
+.lightbox-img {
+  max-width: 96vw; max-height: 92vh; object-fit: contain;
+  border-radius: 8px; background: var(--card);
+  box-shadow: 0 8px 40px rgba(0,0,0,.5); cursor: default;
+}
+.lightbox-cap {
+  position: fixed; left: 0; right: 0; bottom: 16px; text-align: center;
+  color: #eee; font-size: 13px; padding: 0 24px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8); word-break: break-all;
+}

@@ -10,7 +10,7 @@
   ],
   "brand": {
     "title": "GameBanana Mod Downloader",
-    "logo": "brand.png",
+    "logo": "logo.png",
     "icon": "favicon.png",
     "displayTitle": "GameBanana<br>Mod<br>Downloader"
   },
@@ -26,6 +26,7 @@
     "server/project/blueprint/auto-update-card.js": "server/public/auto-update-card.js",
     "server/project/blueprint/index.html/downloader/index.html": "server/public/index.html",
     "server/project/blueprint/style.css": "server/public/style.css",
+    "server/templates/_gbmd-style/public/app.js": "server/public/app.js",
     "server/project/blueprint/fragments/": "server/public/fragments/",
     "server/templates/_gbmd-style/public/logo.png": "server/public/brand.png",
     "server/templates/_gbmd-style/fragments/": "server/public/fragments/"
