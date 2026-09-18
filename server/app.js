@@ -188,6 +188,11 @@ async function main() {
     },
   });
 
+  // 优雅关停：自动更新重启前排空在途响应，避免浏览器收到截断的 CSS/HTML。
+  if (typeof autoUpdate.setShutdownHook === "function") {
+    autoUpdate.setShutdownHook(() => (typeof server.drain === "function" ? server.drain() : Promise.resolve()));
+  }
+
   return server;
 }
 

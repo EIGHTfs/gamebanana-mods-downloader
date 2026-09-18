@@ -1535,9 +1535,9 @@ async function checkGbLoginStatus() {
 // 2026-09-01：顶部时间前面显示当前登录的用户名（复用 /api/gb-login-status 的 username）
 // 2026-09-01 参照 iwara updateIwaraUserBadge：r 可传入复用（检测按钮点完直接刷新），否则自取
 async function updateGbUserBadge(r) {
-  const el = $("#gbUserBadge");
-  const nameEl = $("#gbUserName");
-  const remainEl = $("#gbUserRemain");
+  const el = $("#UserBadge");
+  const nameEl = $("#UserName");
+  const remainEl = $("#UserRemain");
   if (!el) return;
   const setStack = (name, remain, cls) => {
     if (nameEl) nameEl.textContent = name;
