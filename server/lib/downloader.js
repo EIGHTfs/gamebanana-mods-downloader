@@ -506,7 +506,7 @@ async function integrityCheck(finalDir, obj, root) {
 
 // ---------- 第四步：构建下载项（正式下载由消费者执行）----------
 // 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包」
-// AI 思路：对齐旧扩展 buildModDownloadItems 的 if (settings.toggles.files/images)；
+// 对齐旧扩展 buildModDownloadItems 的 if (settings.toggles.files/images)；
 //   HTML 第一步仍全量记录（查重/反查不丢），这里才按开关决定要不要入队下载。
 //   gif 跟图片走；关掉 images 时预览图和 gif 都不下。
 // 2026-09-13（下载优先级）：图片/gif 排在 files 前面 → 消费者按数组顺序取号，

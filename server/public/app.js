@@ -123,7 +123,7 @@ function switchTab(name) {
 
 // ---------- 批量下载 ----------
 // 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包」
-// AI 思路：勾选即时写入 /api/settings 的 downloadToggles；搜索「下载勾选项」也走同一份 config，不必每次 POST 再带。
+// 勾选即时写入 /api/settings 的 downloadToggles；搜索「下载勾选项」也走同一份 config，不必每次 POST 再带。
 function currentDownloadToggles() {
   const filesEl = $("#dlToggleFiles");
   const imagesEl = $("#dlToggleImages");

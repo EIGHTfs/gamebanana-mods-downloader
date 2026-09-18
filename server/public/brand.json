@@ -1,1 +1,6 @@
-{"title":"GameBanana Mod Downloader","icon":"favicon.png","logo":"brand.png"}
+{
+  "title": "GameBanana Mod Downloader",
+  "icon": "favicon.png",
+  "logo": "brand.png",
+  "displayTitle": "GameBanana<br>Mod<br>Downloader"
+}

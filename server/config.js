@@ -52,7 +52,7 @@ const DEFAULT_CONFIG = {
   //   的游戏，下载时自动落到「该根目录/<游戏名>」作为下载路径（gameRootOf fallback）。
   defaultDownloadPath: "",
   // 2026-09-03：「浏览器插件以前可以选择下载内容比如图片，压缩包，这两项我想给现在的server版本加回去」
-  // AI 思路：对齐旧扩展 toggles.files / toggles.images；gif 跟图片走；description.html 始终生成（索引/归位真相）。
+  // 对齐旧扩展 toggles.files / toggles.images；gif 跟图片走；description.html 始终生成（索引/归位真相）。
   // 缺字段视为 true，旧 config.json 行为不变（三项全下）。
   downloadToggles: { files: true, images: true },
   // 2026-09-06 自动更新：开发机推送后服务端自动拉取重启，不用手动同步代码
