@@ -938,8 +938,13 @@ function rowHtml(item, idx, task, doneMap) {
   }
   // 2026-08-26：跳过的图片也显示预览图（已存在/已下载的图片项都显示缩略图）
   const hasFile = r && (r.ok || (r.skipped && r.exists)) && item.path;
-  const isImgOk = item.type === "image" && !item.isGif && hasFile;
-  const thumb = isImgOk ? `<img class="row-thumb" src="/api/image?path=${encodeURIComponent(item.path)}" loading="lazy" alt="${esc(item.displayName || "")}">` : "";
+  const isImgOk = item.type === "image" && hasFile;   // gif 也给预览缩略图
+  // gif 也用同一个 /api/image 端点预览（服务端本就返回 image/gif），加 GIF 角标便于区分
+  let thumb = "";
+  if (isImgOk) {
+    const img = `<img class="row-thumb" src="/api/image?path=${encodeURIComponent(item.path)}" loading="lazy" alt="${esc(item.displayName || "")}">`;
+    thumb = item.isGif ? `<span class="row-thumb-wrap">${img}<span class="row-thumb-badge">GIF</span></span>` : img;
+  }
   // 每行文件进度条：成功100%绿 / 下载中实时蓝 / 失败100%红 / 未开始0%
   let barPct = 0, barCls = "row-bar-pending";
   if (r) {
