@@ -891,6 +891,11 @@ function downloadToFile(item, settings, onProgress) {
       if (useRange && resumeOffset > 0) headers.Range = `bytes=${resumeOffset}-`;
 
       let done = false;
+      // stallTimer 必须在本作用域声明：它既要在响应回调里 clear，也要在
+      //   req.on("error") 里 clear —— 后者是响应回调的兄弟作用域。
+      //   若把 const/let 写在响应回调内，请求在响应到达前就 error 时，
+      //   下面 clearInterval(stallTimer) 会抛 ReferenceError 打死整个进程。
+      let stallTimer = null;
       const req = mod.get(u, { headers, timeout: 120000, agent: parsed.protocol === "https:" ? HTTPS_AGENT : HTTP_AGENT }, (res) => {
         const code = res.statusCode || 0;
         if (code >= 300 && code < 400 && res.headers.location) {
@@ -924,7 +929,7 @@ function downloadToFile(item, settings, onProgress) {
         const total = contentLength + resumeOffset;
 
         // 2026-08-30 修复（双判据）：停滞检测逻辑见 startStallWatcher
-        const stallTimer = startStallWatcher(task, req, tmp, () => received, () => done);
+        stallTimer = startStallWatcher(task, req, tmp, () => received, () => done);
 
         res.on("data", (chunk) => {
           received += chunk.length;
@@ -948,7 +953,7 @@ function downloadToFile(item, settings, onProgress) {
       req.on("timeout", () => req.destroy(new Error("下载超时（连接空闲）")));
       req.on("error", (e) => {
         done = true;
-        clearInterval(stallTimer);
+        if (stallTimer) clearInterval(stallTimer);   // 响应回调可能尚未执行
         reject(e);
       });
     }
