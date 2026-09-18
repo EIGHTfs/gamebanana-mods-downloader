@@ -8,6 +8,11 @@
     "",
     "  用法：../dl-server-template/setup.sh gbmd --to ./server"
   ],
+  "brand": {
+    "title": "GameBanana Mod Downloader",
+    "logo": "brand.png",
+    "icon": "favicon.png"
+  },
   "files": {
     "server/framework/": "server/framework/",
     "server/framework/cjs-bootstrap.cjs": "server/lib/cjs-bootstrap.cjs",
