@@ -1,0 +1,12 @@
+{
+  "port": { "type": "number", "default": 8642 },
+  "sessionHours": { "type": "number", "default": 72 },
+  "gbCookie": { "type": "string", "default": "" },
+  "gbUserAgent": { "type": "string", "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0" },
+  "downloadConcurrency": { "type": "number", "default": 1 },
+  "restoreOnly": { "type": "boolean", "default": false },
+  "autoOrganize": { "type": "boolean", "default": false },
+  "defaultDownloadPath": { "type": "string", "default": "" },
+  "downloadToggles": { "type": "object", "default": { "files": true, "images": true } },
+  "autoUpdate": { "type": "object", "default": { "enabled": false, "mode": "watch", "interval": 300 } }
+}

@@ -43,6 +43,7 @@
     "server/templates/_downloader-style/public/index.html": "server/public/index.html",
     "server/templates/_downloader-style/public/style.css": "server/public/style.css",
     "server/templates/_gbmd-style/public/app.js": "server/public/app.js",
+    "server/templates/_gbmd-style/config.schema.json": "server/config.schema.json",
     "server/templates/_downloader-style/fragments/": "server/public/fragments/",
     "server/templates/_gbmd-style/public/logo.png": "server/public/logo.png",
     "server/templates/_gbmd-style/server/lib/auto-update.js": "server/lib/auto-update.js",
