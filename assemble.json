@@ -42,6 +42,9 @@
     "server/templates/_gbmd-style/public/app.js": "server/public/app.js",
     "server/project/blueprint/fragments/": "server/public/fragments/",
     "server/templates/_gbmd-style/public/logo.png": "server/public/logo.png",
+    "server/templates/_gbmd-style/public/path-picker.js": "server/public/path-picker.js",
+    "server/templates/_gbmd-style/public/favicon.png": "server/public/favicon.png",
+    "server/templates/_gbmd-style/public/favicon.ico": "server/public/favicon.ico",
     "server/templates/_gbmd-style/fragments/": "server/public/fragments/"
   },
   "init": false
