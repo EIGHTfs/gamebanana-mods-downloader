@@ -4,7 +4,7 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, readBody, auth } = require("../framework");
+const { createRoute, sendJson, readBody, auth } = require("../core/index.js");
 const cfg = require("../config");
 
 // 会话 cookie：Max-Age 与 session 有效期一致（勾选「记住此设备」签长会话）

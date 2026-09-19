@@ -4,7 +4,7 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, readBody, cleanCookie } = require("../framework");
+const { createRoute, sendJson, readBody, cleanCookie } = require("../core/index.js");
 const cfg = require("../config");
 
 // 脱敏：不回传密码哈希/盐与 gbCookie 明文，用 hasGbCookie 表示是否已配置

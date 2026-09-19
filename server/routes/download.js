@@ -4,7 +4,7 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, readBody } = require("../framework");
+const { createRoute, sendJson, readBody } = require("../core/index.js");
 const downloader = require("../lib/downloader");
 const gbApi = require("../lib/gb-api");
 const incompleteScan = require("../lib/incomplete-scan");

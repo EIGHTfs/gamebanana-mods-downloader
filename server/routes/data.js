@@ -4,13 +4,13 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, readBody } = require("../framework");
+const { createRoute, sendJson, readBody } = require("../core/index.js");
 const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
 const os = require("os");
 // 用户数据备份/恢复：走框架层通用工厂（createBackup），项目只传配置
-const dataBackup = require("../framework/data-backup").createBackup({
+const dataBackup = require("../store/data-backup.js").createBackup({
   appName: "gamebanana-mods-downloader",
   appRoot: path.join(__dirname, "..", ".."),
   toolDir: path.join(__dirname, "..", "..", "tool", "bin"),

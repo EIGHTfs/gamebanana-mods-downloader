@@ -4,7 +4,7 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, readBody } = require("../framework");
+const { createRoute, sendJson, readBody } = require("../core/index.js");
 const cfg = require("../config");
 const mergeDirs = require("../lib/merge-dirs");
 

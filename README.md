@@ -69,7 +69,7 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 
 ## 目录结构（2026-09 模板化改造后）
 
-> 服务端 HTTP 层改用 dl-server-template 模板的通用框架（`server/framework/`），
+> 服务端 HTTP 层改用 dl-server-template 模板的通用框架（`server/core/` 等 8 个按功能分层的子目录），
 > 本项目只需提供配置、业务模块与路由表，不再自带 HTTP 服务/鉴权门/静态文件实现。
 
 ```
@@ -293,6 +293,7 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.3.2 | 新功能：①下载优先级——图片/gif 排前优先下载；②下载列表分组折叠/展开（默认展开，状态记忆）；③登录页「记住此设备」——勾选后 30 天免登录（默认勾选，解决登录太频繁），时长可配置 `sessionRememberHours` |
+| 1.5.0 | **框架目录迁移对接模板新结构**：`server/framework/` 平铺 22 个文件 → 8 个按功能分子目录（`core/` `route/` `auth/` `http/` `config/` `store/` `update/` `assemble/`）+ `lib/`。①`assemble.json` 由整目录条目改为逐文件条目，`start.sh` 与 `cjs-bootstrap.cjs` 落位到项目根与 `server/lib/`；②引用改写 34 处（19 个文件）——含 12 个 `server/routes/*.js` 业务路由：它们不在清单里、却 require 框架模块，迁移工具原先只处理「清单提到的文件」，会漏掉这批，表现为迁移后启动报 `Cannot find module '../framework'`；③`.gitignore` 补 `server/templates/` 与 `server/project/blueprint/`（组装来源素材，非本项目源码）；④README 正文框架路径同步为实际结构。本项目业务代码除引用路径外无改动。启动验证：`/`→302、`/api/images`→401（正常鉴权） |
 | 1.4.3 | **修复下载中途整进程崩溃**（SA6400 上「服务莫名消失」的真因）：`server/lib/downloader.js` 的 `doFetch` 里 `const stallTimer` 声明在响应回调内，却在兄弟作用域 `req.on("error")` 中 `clearInterval(stallTimer)`——请求在响应到达前就失败（网络中断 / TLS 错误 / 超时）时抛 `ReferenceError: stallTimer is not defined`，未捕获异常直接打死整个 Node 进程，日志停在栈回溯、无任何优雅退出记录。现将声明提升到 `doFetch` 作用域（`let stallTimer = null`），并对未赋值场景加空值防护。同步模板 v1.6.2 的 `start.sh`（端口精确匹配 + 启动前等端口释放） |
 | 1.4.2 | 下载列表 gif 预览：原 `isImgOk` 显式排除 `item.isGif`，gif 行没有缩略图；服务端 `/api/image` 本就返回 `image/gif`，故去掉排除条件，gif 与静态图同样预览，右下角加 GIF 角标区分。顶栏「油猴脚本」入口补 `btn` 类——它是 `<a>`，此前按钮规则限定 `button.` 前缀，拿不到边框底色 |
 | 1.4.1 | 同步模板 1.5.0：①顶栏徽章元素 id 由 `gbUserBadge` 统一为 `UserBadge`（`topbar/badge.html` + `app.js` 三处选择器），CSS 不再需要按项目名分支；②补上 `style.css` 漏引的 `mod-group.css` / `grid-map.css` 片段——下载列表分组折叠样式此前未进入组装产物，点击分组表头无折叠动画；③框架 `app.js` 新增 `server.drain()` 优雅关停：自动更新重启前等在途响应写完，避免静态资源被截断（表现为「刚更新完页面样式不对」）；④`auto-update` 复制新版本期间挂起文件监听，避免复制途中的中间态触发误重启 |

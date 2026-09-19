@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const dataBackup = require("../server/framework/data-backup").createBackup({
+const dataBackup = require("../server/store/data-backup.js").createBackup({
   appName: "gamebanana-mods-downloader",
   appRoot: path.join(__dirname, ".."),
   toolDir: path.join(__dirname, "..", "tool", "bin"),

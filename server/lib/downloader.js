@@ -43,7 +43,7 @@ const gbApi = require("./gb-api");
 const mapping = require("./mapping");
 const organize = require("./organize");
 const { INDEX_TAG_ID, buildIndexBlock, parseIndexObj, readIndexObj } = require("./index-html");
-const { escapeHtml } = require("../framework/html-utils");
+const { escapeHtml } = require("../http/html-utils.js");
 const hashIndex = require("./hash-index");
 
 // 2026-08-26 性能优化（实测 images.gamebanana.com 首连接 28-30s，keep-alive 复用后 0.7s）：

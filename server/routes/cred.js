@@ -4,7 +4,7 @@
 // ============================================================
 "use strict";
 
-const { createRoute, sendJson, cleanCookie } = require("../framework");
+const { createRoute, sendJson, cleanCookie } = require("../core/index.js");
 const cfg = require("../config");
 const gbApi = require("../lib/gb-api");
 
