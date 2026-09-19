@@ -1,0 +1,18 @@
+/* downloader 主题：夜间（香蕉风深色）。每主题一文件，存放于 themes/ 专门文件夹。
+   本目录为 downloader 系（gbmd/iwara）专用主题，由 _downloader-style 风格模板下发。
+   切换机制：<html> 根元素 data-theme="night"（theme-init.js 从 localStorage 读取设置），
+   本文件选择器后于 day.css 拼装，data-theme="night" 时覆盖白天变量。 */
+:root[data-theme="night"] {
+  /* ---- 夜间模式（香蕉风深色） ---- */
+  --bg: #151d23;
+  --card: #1e2a33;
+  --card2: #26343f;
+  --border: #33434f;
+  --text: #e6edf3;
+  --muted: #8ba3b5;
+  --primary: #f6b73c;   /* 香蕉黄 */
+  --accent2: #e6a024;
+  --success: #4ade80;
+  --fail: #f87171;
+  --warn: #d97706;
+}
