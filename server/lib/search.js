@@ -11,7 +11,7 @@ const path = require("path");
 const { fetchOnePage, processPageRecords } = require("./gb-api");
 const cfg = require("../config");
 
-const jsonDir = require("./json-dir");
+const jsonDir = require("../store/json-dir"); // 统一引用模板版（B2 合并：lib 版已并入模板源）
 const QUERY_FILE = jsonDir.migrateRuntimeJson("search_task.json"); //userdata-manifest.json file json/search_task.json 搜索任务状态
 const CACHE_FILE = jsonDir.migrateRuntimeJson("search_cache.json"); //userdata-manifest.json file json/search_cache.json 搜索记录缓存
 

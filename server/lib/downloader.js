@@ -52,7 +52,7 @@ const KEEP_ALIVE_MS = 60000;
 const HTTPS_AGENT = new https.Agent({ keepAlive: true, keepAliveMsecs: KEEP_ALIVE_MS, maxSockets: 64, maxFreeSockets: 32 });
 const HTTP_AGENT = new http.Agent({ keepAlive: true, keepAliveMsecs: KEEP_ALIVE_MS, maxSockets: 64, maxFreeSockets: 32 });
 
-const jsonDir = require("./json-dir");
+const jsonDir = require("../store/json-dir"); // 统一引用模板版（B2 合并：lib 版已并入模板源）
 const TASK_FILE = jsonDir.migrateRuntimeJson("download_task.json"); //userdata-manifest.json file json/download_task.json 下载任务列表
 const MAX_RETRY = 3;
 const RETRY_DELAY_MS = 1500;
