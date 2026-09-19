@@ -8,7 +8,7 @@ const { createRoute, sendJson, readBody } = require("../core/index.js");
 const search = require("../lib/search");
 const cfg = require("../config");
 const gbApi = require("../lib/gb-api");
-const searchDateRange = require("../lib/search-date-range.cjs");
+const searchDateRange = require("../search/search-date-range.cjs");
 
 // 模块级 handler 工厂（keywordSearch 等）接收 api 依赖对象；
 // 模板化后由 framework + 业务模块在本地组装，工厂函数体保持原样。

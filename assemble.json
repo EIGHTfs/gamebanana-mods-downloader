@@ -29,7 +29,7 @@
     "server/framework/route/routes-adapter.js": "server/route/routes-adapter.js",
     "server/framework/route/routes-auth.js": "server/route/routes-auth.js",
     "server/framework/route/routes-auto-update.js": "server/route/routes-auto-update.js",
-    "server/framework/assemble/search-date-range.cjs": "server/assemble/search-date-range.cjs",
+    "server/framework/search/search-date-range.cjs": "server/search/search-date-range.cjs",
     "server/project/blueprint/login.html": "server/public/login.html",
     "server/project/blueprint/login.js": "server/public/login.js",
     "server/project/blueprint/setup.html": "server/public/setup.html",

@@ -78,17 +78,19 @@ gamebanana-mods-downloader/
 ├── server/
 │   ├── boot.cjs              # 入口：CJS 强制引导（零依赖，解决 ESM 父目录问题）
 │   ├── app.js                # 装配层：初始化配置/鉴权 + 挂载路由 + 启动钩子 + 资源版本注入
-│   ├── framework/            # 通用框架（模板同步，勿手改；改模板后整体覆盖）
-│   │   ├── app.js            # createServer：HTTP 服务 + 鉴权门 + 静态文件 + setup 跳转
-│   │   ├── route-factory.js  # createRoute：{"METHOD /path": handler} 表式路由 + ctx(query/params)
-│   │   ├── auth.js           # 会话鉴权（scrypt 由项目侧提供；cookie 名可配；定时清理）
-│   │   ├── config-loader.js  # createConfig：schema 驱动配置读写
-│   │   ├── auto-update.js    # 自动更新（watch/git/github 三模式 + 防抖重启）
-│   │   ├── routes-auto-update.js # 自动更新通用路由
-│   │   └── ...               # http-utils / app-log / fs-async / html-utils / data-backup 等
+│   ├── core/ route/ auth/    # 通用框架（模板同步，勿手改；改模板后整体覆盖）
+│   │   http/ config/ store/  #   按功能分层，不再是 framework/ 平铺
+│   │   update/ assemble/ search/
+│   │   ├── core/app.js       # createServer：HTTP 服务 + 鉴权门 + 静态文件 + setup 跳转
+│   │   ├── route/route-factory.js # createRoute：{"METHOD /path": handler} 表式路由 + ctx(query/params)
+│   │   ├── auth/auth.js      # 会话鉴权（scrypt 由项目侧提供；cookie 名可配；定时清理）
+│   │   ├── config/config-loader.js # createConfig：schema 驱动配置读写
+│   │   ├── update/auto-update.js   # 自动更新（watch/git/github 三模式 + 防抖重启）
+│   │   ├── update/routes-auto-update.js # 自动更新通用路由
+│   │   ├── search/search-date-range.cjs # 按时间搜索的日期窗口解析（前后端共用规则）
+│   │   └── ...               # http/http-utils、core/app-log、http/fs-async、store/data-backup 等
 │   ├── config.js             # 配置管理（config.json 自动初始化；读取游戏/映射；scrypt 密码）
 │   ├── routes/               # API 路由：每个文件导出 createRoute({...}) 表
-│   ├── utils/                # 叶子工具（index-html / html / path-safe / fs-async）
 │   ├── lib/
 │   │   ├── downloader.js     # 四步下载流程 + 并发/断点续传/重试/跳过 + 任务事件日志
 │   │   ├── gb-api.js         # GameBanana API 封装（mod 解析/搜索/Cookie 清洗）
@@ -97,9 +99,12 @@ gamebanana-mods-downloader/
 │   │   ├── hash-index.js     # HTML 反查三表（GB 线上表 + 本地表 + HTML 原名表）
 │   │   ├── organize.js       # 自动整理（外部遗留 → 垃圾桶）
 │   │   ├── merge-dirs.js     # 文件夹合并（英文目录 → 英文 – 中文）
-│   │   ├── data-backup.js    # 数据备份/恢复（ZIP 导出/导入）
 │   │   ├── incomplete-scan.js# 未完成任务扫描
-│   │   └── app-log.js        # 日志：时间戳 + [task]/[api] 事件
+│   │   ├── index-html.js     # index.html 生成
+│   │   ├── app-log.js        # 日志：时间戳 + [task]/[api] 事件
+│   │   ├── json-dir.js       # 数据目录入口（薄壳，转发框架 store/）
+│   │   ├── auto-update.js    # 自动更新入口（薄壳，转发框架 update/）
+│   │   └── cjs-bootstrap.cjs # CJS 强制（模板下发）
 │   └── public/               # 前端（index.html + app.js）
 ├── crx/                      # 浏览器扩展（Chrome MV3）+ 原生消息宿主
 ├── json/
@@ -293,6 +298,7 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.3.2 | 新功能：①下载优先级——图片/gif 排前优先下载；②下载列表分组折叠/展开（默认展开，状态记忆）；③登录页「记住此设备」——勾选后 30 天免登录（默认勾选，解决登录太频繁），时长可配置 `sessionRememberHours` |
+| 1.5.1 | **日期范围模块归位 `framework/search/`**：模板把「按时间搜索的日期窗口解析」从 `framework/assemble/` 拆出独立 `search/` 子目录（assemble/ 只管页面片段装配）。本项目同步：`server/assemble/search-date-range.cjs` → `server/search/search-date-range.cjs`，`routes/search.js` 引用随之更新。同时清掉 `server/lib/search-date-range.cjs`——它是同内容的孤儿副本（原先 routes 引的是它、assembly 那份反而没人用），易误改错文件；删除前确认 git 有历史可恢复。README 目录结构段落同步实际布局：删掉写了但实际不存在的 `server/utils/` 行；`framework/` 平铺描述改为 8 个功能子目录（core/route/auth/http/config/store/update/assemble/search）；`lib/` 清单补上实际存在的 index-html / json-dir / auto-update / cjs-bootstrap，并把已归框架 `store/` 的 data-backup 从清单移除 |
 | 1.5.0 | **框架目录迁移对接模板新结构**：`server/framework/` 平铺 22 个文件 → 8 个按功能分子目录（`core/` `route/` `auth/` `http/` `config/` `store/` `update/` `assemble/`）+ `lib/`。①`assemble.json` 由整目录条目改为逐文件条目，`start.sh` 与 `cjs-bootstrap.cjs` 落位到项目根与 `server/lib/`；②引用改写 34 处（19 个文件）——含 12 个 `server/routes/*.js` 业务路由：它们不在清单里、却 require 框架模块，迁移工具原先只处理「清单提到的文件」，会漏掉这批，表现为迁移后启动报 `Cannot find module '../framework'`；③`.gitignore` 补 `server/templates/` 与 `server/project/blueprint/`（组装来源素材，非本项目源码）；④README 正文框架路径同步为实际结构。本项目业务代码除引用路径外无改动。启动验证：`/`→302、`/api/images`→401（正常鉴权） |
 | 1.4.3 | **修复下载中途整进程崩溃**（SA6400 上「服务莫名消失」的真因）：`server/lib/downloader.js` 的 `doFetch` 里 `const stallTimer` 声明在响应回调内，却在兄弟作用域 `req.on("error")` 中 `clearInterval(stallTimer)`——请求在响应到达前就失败（网络中断 / TLS 错误 / 超时）时抛 `ReferenceError: stallTimer is not defined`，未捕获异常直接打死整个 Node 进程，日志停在栈回溯、无任何优雅退出记录。现将声明提升到 `doFetch` 作用域（`let stallTimer = null`），并对未赋值场景加空值防护。同步模板 v1.6.2 的 `start.sh`（端口精确匹配 + 启动前等端口释放） |
 | 1.4.2 | 下载列表 gif 预览：原 `isImgOk` 显式排除 `item.isGif`，gif 行没有缩略图；服务端 `/api/image` 本就返回 `image/gif`，故去掉排除条件，gif 与静态图同样预览，右下角加 GIF 角标区分。顶栏「油猴脚本」入口补 `btn` 类——它是 `<a>`，此前按钮规则限定 `button.` 前缀，拿不到边框底色 |
