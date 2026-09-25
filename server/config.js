@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const jsonDir = require("./lib/json-dir");
+const jsonDir = require("./store/json-dir");
 // config.json 是例外：留在 server/（不随其它运行态 json 迁到 json/）
 //runtime-manifest.json file server/config.json watch=skip desc="服务配置（含密码/路径，本机权威）"
 //userdata-manifest.json file server/config.json desc="服务配置（例外留在 server/）"

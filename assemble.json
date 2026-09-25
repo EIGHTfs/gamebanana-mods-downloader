@@ -45,6 +45,7 @@
     "server/templates/_gbmd-style/public/app.js": "server/public/app.js",
     "server/templates/_gbmd-style/config.schema.json": "server/config.schema.json",
     "server/templates/_downloader-style/fragments/": "server/public/fragments/",
+    "server/templates/_downloader-style/test/": "test/",
     "server/templates/_gbmd-style/public/logo.png": "server/public/logo.png",
     "server/templates/_gbmd-style/server/lib/auto-update.js": "server/lib/auto-update.js",
     "server/templates/_gbmd-style/public/path-picker.js": "server/public/path-picker.js",
