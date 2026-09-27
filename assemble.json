@@ -36,8 +36,6 @@
     "templates/_downloader/test/helpers/routes-collect.cjs": "test/helpers/routes-collect.cjs",
     "templates/_downloader/test/helpers/test-log.cjs": "test/helpers/test-log.cjs",
     "templates/_downloader/test/p0-smoke.test.cjs": "test/p0-smoke.test.cjs",
-    "templates/_downloader/_gamebanana-mods/html/scripts.html": "server/public/fragments/scripts.html",
-    "templates/_downloader/_gamebanana-mods/html/topbar/badge.html": "server/public/fragments/topbar/badge.html",
     "templates/_downloader/_gamebanana-mods/html/topbar/userscript.html": "server/public/fragments/topbar/userscript.html",
     "templates/_downloader/_gamebanana-mods/html/tab-panel/panel-download.html": "server/public/fragments/tab-panel/panel-download.html",
     "templates/_downloader/_gamebanana-mods/html/tab-panel/panel-progress.html": "server/public/fragments/tab-panel/panel-progress.html",
@@ -84,11 +82,14 @@
     "templates/_downloader/_gamebanana-mods/js/app.js": "server/public/app.js",
     "templates/_downloader/_gamebanana-mods/json/config.schema.json": "server/config.schema.json",
     "templates/_downloader/_gamebanana-mods/assets/logo.png": "server/public/logo.png",
-    "templates/_downloader/_gamebanana-mods/server/lib/auto-update.js": "server/lib/auto-update.js",
     "templates/_downloader/_gamebanana-mods/js/path-picker.js": "server/public/path-picker.js",
     "templates/_downloader/_gamebanana-mods/assets/favicon.png": "server/public/favicon.png",
     "templates/_downloader/_gamebanana-mods/assets/favicon.ico": "server/public/favicon.ico",
-    "templates/js/tool/tool-detect.js": "server/tool/tool-detect.js"
+    "templates/js/tool/tool-detect.js": "server/tool/tool-detect.js",
+    "templates/_downloader/html/topbar/badge.html": "server/public/fragments/topbar/badge.html",
+    "templates/_downloader/html/scripts.html": "server/public/fragments/scripts.html",
+    "templates/_downloader/_gamebanana-mods/html/scripts-extra.html": "server/public/fragments/scripts-extra.html",
+    "templates/js/server/lib/auto-update.js": "server/lib/auto-update.js"
   },
   "init": false
 }

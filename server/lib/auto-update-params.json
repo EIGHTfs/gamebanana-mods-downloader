@@ -1,0 +1,11 @@
+{
+  "projectName": "gamebanana-mods-downloader",
+  "defaultRepo": "EIGHTfs/gamebanana-mods-downloader",
+  "extraExclude": [
+    "json/gamebanana.com.json"
+  ],
+  "extraChmodScripts": [
+    "crx/native-host/install-linux.sh",
+    "crx/native-host/host-wrapper.sh"
+  ]
+}
