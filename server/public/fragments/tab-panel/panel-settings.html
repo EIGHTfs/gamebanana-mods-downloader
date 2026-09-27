@@ -142,25 +142,8 @@
 
     <!-- @frag:auto-update-card -->
 
-    <div class="card">
-      <h2>修改密码</h2>
-      <div class="row">
-        <input type="password" id="oldPwd" placeholder="旧密码（已设密码时必填）">
-        <input type="password" id="newPwd" placeholder="新密码（至少 4 位）">
-        <button class="primary" id="changePwdBtn" type="button">修改</button>
-      </div>
-      <div class="status" id="pwdStatus"></div>
-    </div>
-
-    <div class="card">
-      <h2>📦 数据备份 / 恢复</h2>
-      <p class="hint">导出为 zip：包含全部用户数据（搜索记录、下载任务、游戏配置、角色映射、索引等，按 <code>userdata-manifest.json</code> 清单，保留目录结构）。换机/重装套件后导入即可恢复。</p>
-      <div class="row">
-        <button class="primary" id="exportDataBtn" type="button">⬇ 导出用户数据</button>
-        <button class="ghost" id="importDataBtn" type="button">⬆ 导入用户数据</button>
-        <input type="file" id="importDataFile" accept=".zip" style="display:none">
-      </div>
-      <div class="status" id="dataStatus"></div>
-    </div>
+    <!-- 修改密码 / 数据备份：纯通用卡，系级 panel-settings/ 提供（与 auto-update-card 同模式） -->
+    <!-- @frag:tab-panel/panel-settings/pwd -->
+    <!-- @frag:tab-panel/panel-settings/backup -->
 
   </div>
