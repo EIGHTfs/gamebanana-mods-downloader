@@ -93,5 +93,8 @@
     "templates/js/config/brand.js": "server/config/brand.js",
     "templates/_downloader/html/tab-panel/panel-settings/": "server/public/fragments/tab-panel/panel-settings/"
   },
-  "init": false
+  "init": false,
+  "commands": [
+    "node \"$SETUP_TEMPLATE_ROOT/scripts/build-userscript.js\" \"$SETUP_TEMPLATE_ROOT/templates/_downloader/_gamebanana-mods/userscript\" scripts/gamebanana-cookie-userscript.user.js"
+  ]
 }
