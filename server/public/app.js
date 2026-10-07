@@ -53,15 +53,15 @@ function downloadJsonFile(obj, filename) {
 // 2026-09-01 悬浮提示（右下角 toast，自动淡出；保存设置等操作反馈用）
 let _toastTimer = null;
 function showToast(msg, type) {
-  let el = $("#gbmdToast");
+  let el = $("#appToast");
   if (!el) {
     el = document.createElement("div");
-    el.id = "gbmdToast";
-    el.className = "gbmd-toast";
+    el.id = "appToast";
+    el.className = "app-toast";
     document.body.appendChild(el);
   }
   el.textContent = msg;
-  el.className = "gbmd-toast " + (type === "err" ? "err" : "ok") + " show";
+  el.className = "app-toast " + (type === "err" ? "err" : "ok") + " show";
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { el.classList.remove("show"); }, 3200);
 }
@@ -1166,14 +1166,14 @@ function bindSettingsCookie() {
   const saveBtn = $("#saveCookieBtn");
   if (saveBtn) saveBtn.addEventListener("click", async () => {
     const payload = {
-      gbCookie: $("#gbCookie").value.trim(),
+      gbCookie: $("#cookieInput").value.trim(),
       gbUserAgent: navigator.userAgent
     };
     try {
       const r = await api("/api/settings", "POST", payload);
       if (!r.ok) throw new Error(r.error || "保存失败");
       settings = r.settings;
-      const cookieEl = $("#gbCookie");
+      const cookieEl = $("#cookieInput");
       if (cookieEl) {
         cookieEl.value = "";
         cookieEl.placeholder = "已保存（再贴新凭证才会覆盖；留空不改）";
@@ -1298,7 +1298,7 @@ function bindSettingsTaskIO() {
 
 /** 设置-密码/数据备份恢复 */
 function bindSettingsSecurity() {
-  const gbLoginBtn = $("#gbLoginCheckBtn");
+  const gbLoginBtn = $("#loginCheckBtn");
   if (gbLoginBtn) gbLoginBtn.addEventListener("click", checkGbLoginStatus);
   checkGbLoginStatus();
   $("#changePwdBtn").addEventListener("click", async () => {
@@ -1562,8 +1562,8 @@ function fmtGbLoginBlock(r) {
 }
 
 async function checkGbLoginStatus() {
-  const el = $("#gbLoginStatus");
-  const btn = $("#gbLoginCheckBtn");
+  const el = $("#loginStatus");
+  const btn = $("#loginCheckBtn");
   if (!el) return;
   el.className = "login-detect";
   el.textContent = "检测中…";
@@ -1630,7 +1630,7 @@ async function loadSettings() {
     if (defPathEl && window.PathPicker) PathPicker.attach(defPathEl);
     // 2026-08-26：设置里不要并发数（只在「下载进度」页改）——不再回填 dlConcurrency
     // 2026-09-01 后端脱敏：不回传 gbCookie 明文，改用 hasGbCookie 提示 + dataset.filled 只填一次
-    const cookieEl = $("#gbCookie");
+    const cookieEl = $("#cookieInput");
     if (cookieEl && cookieEl.dataset.filled !== "1" && !cookieEl.value.trim()) {
       cookieEl.placeholder = settings.hasGbCookie
         ? "已保存 Cookie（再贴新凭证才会覆盖；留空不改）"
