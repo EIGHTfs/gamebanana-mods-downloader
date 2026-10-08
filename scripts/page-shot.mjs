@@ -26,7 +26,17 @@
 //                         {"goto":"/path"} | {"click":"选择器"} | {"fill":["选择器","值"]}
 //                         | {"select":["选择器","选项文本或值"]} | {"scroll":"选择器"}
 //                         | {"wait":1500} | {"shot":"名字"}（可加 "full":false 只截视口，用于聚焦某个区块）
+//
+// 打码（截图前模糊敏感内容，用于对外宣传：看得出在下载、看不出下的具体是什么）：
+//   --redact "<css1>,<css2>"   模糊匹配到的元素（CSS 选择器，逗号分隔）
+//   --redact-text "<正则>"     模糊「自身文本命中正则」的元素（如 mod 名/URL/路径）
+//   --redact-images            模糊页面内所有 <img>（预览缩略图等）
+//   --redact-exclude "<css>"   这些元素**不打码**（如自己的 logo/顶栏），优先级最高
+//   --redact-blur <px>         模糊强度，默认 7
+//   例：--redact-text "gamebanana\\.com|\\.zip|/volume|来自" --redact-images --redact-exclude ".topbar img,.logo"
 //   --timeout <ms>      单步超时（默认 30000）
+//   --theme dark|light  截图前切主题（dark/night、light/day 都认）；默认点 `#themeBtn` 切换，
+//                       可用 --theme-toggle 指定按钮选择器（模板家族统一：data-theme="night" + #themeBtn）
 //
 // 浏览器来源（与 headless-browser-env.mjs 同一套约定，无需硬编码路径）：
 //   ① 环境变量 DSH_PAGE_CHROME / DSH_PAGE_LIBS / DSH_PAGE_FONTCONF / DSH_PAGE_PWROOT
@@ -79,6 +89,17 @@ const FULL = !has("no-full");
 const TIMEOUT = Number(flag("timeout", "30000")) || 30000;
 const WANT_TABS = (flag("tabs", "") || "").split(",").map((s) => s.trim()).filter(Boolean);
 const PLAN_FILE = flag("plan", "");
+// 打码：截图前模糊敏感内容（对外宣传用）
+const REDACT_CSS = (flag("redact", "") || "").split(",").map((s) => s.trim()).filter(Boolean);
+const REDACT_TEXT = flag("redact-text", "") || "";
+const REDACT_IMAGES = has("redact-images");
+const REDACT_EXCLUDE = (flag("redact-exclude", "") || "").split(",").map((s) => s.trim()).filter(Boolean);
+const REDACT_BLUR = Number(flag("redact-blur", "7")) || 7;
+const REDACT_ON = REDACT_CSS.length > 0 || !!REDACT_TEXT || REDACT_IMAGES;
+// 主题：dark/night → 夜间；light/day → 白天；默认不动
+const THEME_RAW = (flag("theme", process.env.PAGE_SHOT_THEME) || "").toLowerCase();
+const WANT_NIGHT = THEME_RAW ? /^(dark|night|夜间|深色)$/.test(THEME_RAW) : null;
+const THEME_TOGGLE = flag("theme-toggle", "#themeBtn");
 
 // ---------- 浏览器环境：env → <DSH_HOME>/browser-env.json → 自动探测 ----------
 const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), ".dsh");
@@ -148,6 +169,7 @@ const errors = [];
   console.log("  浏览器  : " + CHROME);
   console.log("  libs    : " + (LIBS || "(无)") + " | fonts: " + (FONTS || "(无)"));
   console.log("  输出    : " + OUT);
+  if (REDACT_ON) console.log("  打码    : blur " + REDACT_BLUR + "px | css=" + (REDACT_CSS.join("|") || "-") + " | text=" + (REDACT_TEXT || "-") + " | images=" + REDACT_IMAGES);
 
   const browser = await chromium.launch({
     executablePath: CHROME,
@@ -160,11 +182,50 @@ const errors = [];
   page.on("pageerror", (e) => errors.push({ type: "pageerror", text: String(e).slice(0, 300) }));
   page.on("console", (m) => { if (m.type() === "error") errors.push({ type: "console.error", text: m.text().slice(0, 300) }); });
 
+  // 打码：截图前对命中元素加 CSS filter blur（幂等，每张截图前都可重复调用）
+  //   命中来源三种：CSS 选择器 / 自身文本命中正则 / 全部 img
+  const applyRedact = async () => {
+    if (!REDACT_ON) return 0;
+    try {
+      return await page.evaluate(({ css, text, images, blur, exclude }) => {
+        const hit = new Set();
+        for (const sel of css) { try { document.querySelectorAll(sel).forEach((el) => hit.add(el)); } catch (_) { /* 选择器非法，跳过 */ } }
+        if (text) {
+          let rx = null;
+          try { rx = new RegExp(text, "i"); } catch (_) { rx = null; }
+          if (rx) {
+            const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            while (w.nextNode()) {
+              const n = w.currentNode;
+              if (rx.test(String(n.nodeValue || ""))) hit.add(n.parentElement);
+            }
+          }
+        }
+        if (images) document.querySelectorAll("img").forEach((el) => hit.add(el));
+        // 排除：命中的元素若自身或祖先匹配 exclude（如自己的 logo/顶栏）→ 不打码
+        const protected_ = new Set();
+        for (const sel of exclude) { try { document.querySelectorAll(sel).forEach((el) => protected_.add(el)); } catch (_) { /* 选择器非法，跳过 */ } }
+        const isProtected = (el) => { for (let n = el; n; n = n.parentElement) if (protected_.has(n)) return true; return false; };
+        let count = 0;
+        for (const el of hit) {
+          if (!el || !el.style || isProtected(el)) continue;
+          el.style.filter = "blur(" + blur + "px)";
+          count++;
+        }
+        return count;
+      }, { css: REDACT_CSS, text: REDACT_TEXT, images: REDACT_IMAGES, blur: REDACT_BLUR, exclude: REDACT_EXCLUDE });
+    } catch (_) { return 0; }
+  };
+
   const shot = async (name, full) => {
     const useFull = full === undefined ? FULL : full;
+    if (REDACT_ON) {
+      const n = await applyRedact();
+      console.log("  🔒 打码 " + n + " 处（blur " + REDACT_BLUR + "px）");
+    }
     const file = path.join(OUT, String(shots.length).padStart(2, "0") + "-" + name.replace(/[^\w.-]/g, "_") + ".png");
     await page.screenshot({ path: file, fullPage: useFull }).catch((e) => console.log("  ⚠ 截图失败 " + name + ": " + e.message));
-    shots.push({ name, file, full: useFull });
+    shots.push({ name, file, full: useFull, redacted: REDACT_ON });
     console.log("  📷 " + name + (useFull ? "" : "（视口）") + " → " + file);
   };
 
@@ -184,6 +245,31 @@ const errors = [];
     }
   }
   await page.waitForTimeout(1000);
+  // 主题切换：按 --theme 切到夜间/白天（模板家族统一 data-theme="night" + #themeBtn）
+  if (WANT_NIGHT !== null) {
+    const isNight = () => page.evaluate(() => document.documentElement.getAttribute("data-theme") === "night");
+    let cur = await isNight().catch(() => false);
+    if (cur !== WANT_NIGHT) {
+      const btn = await page.$(THEME_TOGGLE);
+      if (btn) {
+        await btn.click().catch(() => {});
+        await page.waitForTimeout(900);
+        cur = await isNight().catch(() => cur);
+      } else {
+        // 登录页等没有切换按钮 → 直接写 localStorage + data-theme 后重载（key 可用 --theme-key 覆盖）
+        const key = flag("theme-key", "gbmd-theme");
+        await page.evaluate(({ k, wantNight }) => {
+          try { localStorage.setItem(k, wantNight ? "night" : "day"); } catch (_) { /* 隐私模式等 */ }
+          if (wantNight) document.documentElement.setAttribute("data-theme", "night");
+          else document.documentElement.removeAttribute("data-theme");
+        }, { k: key, wantNight: WANT_NIGHT }).catch(() => {});
+        await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+        await page.waitForTimeout(1200);
+        cur = await isNight().catch(() => WANT_NIGHT);
+      }
+    }
+    console.log("  主题    : " + (cur ? "夜间" : "白天") + (cur === WANT_NIGHT ? " ✓" : " ✗（期望" + (WANT_NIGHT ? "夜间" : "白天") + "）"));
+  }
   await shot("landing");
 
   // 逐个标签页截图：自动发现 .tab[data-tab=…]
