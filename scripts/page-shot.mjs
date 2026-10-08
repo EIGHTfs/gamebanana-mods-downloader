@@ -24,7 +24,8 @@
 //   --no-full           只截视口（默认整页 fullPage）
 //   --plan <file>       自定义步骤 JSON（数组），每步支持：
 //                         {"goto":"/path"} | {"click":"选择器"} | {"fill":["选择器","值"]}
-//                         | {"wait":1500} | {"shot":"名字"}
+//                         | {"select":["选择器","选项文本或值"]} | {"scroll":"选择器"}
+//                         | {"wait":1500} | {"shot":"名字"}（可加 "full":false 只截视口，用于聚焦某个区块）
 //   --timeout <ms>      单步超时（默认 30000）
 //
 // 浏览器来源（与 headless-browser-env.mjs 同一套约定，无需硬编码路径）：
@@ -159,11 +160,12 @@ const errors = [];
   page.on("pageerror", (e) => errors.push({ type: "pageerror", text: String(e).slice(0, 300) }));
   page.on("console", (m) => { if (m.type() === "error") errors.push({ type: "console.error", text: m.text().slice(0, 300) }); });
 
-  const shot = async (name) => {
+  const shot = async (name, full) => {
+    const useFull = full === undefined ? FULL : full;
     const file = path.join(OUT, String(shots.length).padStart(2, "0") + "-" + name.replace(/[^\w.-]/g, "_") + ".png");
-    await page.screenshot({ path: file, fullPage: FULL }).catch((e) => console.log("  ⚠ 截图失败 " + name + ": " + e.message));
-    shots.push({ name, file });
-    console.log("  📷 " + name + " → " + file);
+    await page.screenshot({ path: file, fullPage: useFull }).catch((e) => console.log("  ⚠ 截图失败 " + name + ": " + e.message));
+    shots.push({ name, file, full: useFull });
+    console.log("  📷 " + name + (useFull ? "" : "（视口）") + " → " + file);
   };
 
   console.log("\n① 打开 " + BASE);
@@ -208,8 +210,16 @@ const errors = [];
       if (s.goto) await page.goto(s.goto.startsWith("http") ? s.goto : BASE + s.goto, { waitUntil: "domcontentloaded", timeout: TIMEOUT }).catch((e) => console.log("  ⚠ goto 失败: " + e.message));
       if (s.click) await page.click(s.click).catch((e) => console.log("  ⚠ click 失败 " + s.click + ": " + e.message));
       if (s.fill) await page.fill(s.fill[0], s.fill[1]).catch((e) => console.log("  ⚠ fill 失败 " + s.fill[0] + ": " + e.message));
+      // select：先按选项文本选，失败再按 value 选（下拉选项文本常带中文/括号，value 是内部键）
+      if (s.select) {
+        const [sel, want] = s.select;
+        await page.selectOption(sel, { label: want }).catch(async () => {
+          await page.selectOption(sel, want).catch((e) => console.log("  ⚠ select 失败 " + sel + "=" + want + ": " + e.message));
+        });
+      }
+      if (s.scroll) await page.locator(s.scroll).scrollIntoViewIfNeeded().catch((e) => console.log("  ⚠ scroll 失败 " + s.scroll + ": " + e.message));
       if (s.wait) await page.waitForTimeout(Number(s.wait) || 1000);
-      if (s.shot) await shot(s.shot);
+      if (s.shot) await shot(s.shot, s.full === false ? false : undefined);
     }
   }
 

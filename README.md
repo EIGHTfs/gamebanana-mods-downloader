@@ -65,6 +65,22 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 | 搜索 | **三种独立搜索通道**：① 按关键词（中文/角色名/别号自动归一到英文）② 按角色（直接抓该角色的香蕉网分类，全量不漏）③ 按时间（新增/修改/更新任一命中）；结果勾选后一键下载 |
 | 设置 | 游戏下载路径（可读取本地目录）、GB Cookie 与登录检测、映射管理、文件夹合并、HTML 反查、修改密码（需旧密码） |
 
+### 界面预览
+
+| 登录 | 下载 |
+|---|---|
+| ![登录](docs/screenshots/01-login.jpg) | ![下载](docs/screenshots/02-download.jpg) |
+
+| 下载进度（多线程 + 逐文件状态 + 缩略图） | 搜索（三种独立通道） |
+|---|---|
+| ![下载进度](docs/screenshots/03-progress.jpg) | ![搜索](docs/screenshots/04-search.jpg) |
+
+| 设置（游戏路径 / 映射 / 凭证 / HTML 反查 / 自动更新） | 搜游戏（按游戏名查香蕉网 id 候选） |
+|---|---|
+| ![设置](docs/screenshots/05-settings.jpg) | ![搜游戏](docs/screenshots/06-settings-search-game.jpg) |
+
+> 截图由模板的通用截图脚本生成：`node scripts/page-shot.mjs --password <访问密码>`（自动登录 + 逐标签截图 + 收集前端错误）。
+
 ---
 
 ## 目录结构（2026-09 模板化改造后）
@@ -354,6 +370,7 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.2.1 | bugfix：GB 登录检测修复——GB 会话绑定浏览器完整 UA（OS+版本号），保存 Cookie 时自动同步当前浏览器 UA 到 `gbUserAgent`，解决 UA 不匹配导致 `_bIsLoggedIn` 始终返回 false 的问题 |
 | 1.3.0 | 三种独立搜索通道 + 设置页搜游戏：① 搜索页拆成「按关键词 / 按角色 / 按时间」三条独立通道（以前只有时间、关键词两种，「角色」实际走的就是关键词搜索，只按标题匹配会漏）；② 新增 `GET /api/role-mods`——角色 → 香蕉网分类网址 → `catId` → `_aFilters[Generic_Category]` 抓该角色**全量** mod（拿不到网址时自动刷新角色列表补网址，仍无则明确报错并指引，不再回退关键词搜索）；③ `json/role/<游戏>.json` 的 `characters` 改为对象数组 `[{name,url}]`（旧格式读取自动归一化 + 首次用到该游戏时懒迁移补网址）；④ 角色列表抓取由**一层**改为**两层下探**（修 bug：原神这类 `Skins → Characters → 角色` 两层结构原先一个角色都取不到），实测原神 144 个角色、130 个带分类网址；⑤ 设置页「➕ 添加游戏」新增「搜游戏」——按游戏名搜香蕉网游戏返回 id 候选，点选填入表单（新增 `GET /api/gb-search-games`）；⑥ 新增 `test/gb-role-category.test.cjs`（10 项）与联网实测脚本 `test/gb-verify.cjs`；README 测试章节同步真实结果（42/54，12 项为模板化遗留，见待办第 3 条） |
 | 1.3.1 | 接入模板通用网页截图脚本：`assemble.json` 增加 `templates/tools/page-shot.mjs → scripts/page-shot.mjs`（模板侧新增该脚本，下游按需接入）。用法：`node scripts/page-shot.mjs [--base URL] [--password 密码] [--tabs a,b] [--plan shots.json]`——自动推导端口、自动登录、自动发现 `.tab[data-tab=…]` 逐标签截图并收集 `console.error`/`pageerror`，输出到系统临时目录（`--out` 可改）。另把本轮改动的三个模板下发件（`js/app.js`、`html/tab-panel/panel-search.html`、`panel-settings.html`）同步回模板仓库，避免下次组装覆盖 |
+| 1.3.2 | README 新增「界面预览」六图（登录 / 下载 / 下载进度 / 搜索三通道 / 设置 / 搜游戏）——此前 `docs/screenshots/` 里的图从未被 README 引用；全部改由模板截图脚本在部署端实测生成（含真实下载进行中的进度页），旧图移入 `docs/screenshots/.trash/`（`.trash` 已被忽略）。`scripts/page-shot.mjs` 同步模板最新版（新增 `select`/`scroll` 步骤与单张截图 `full:false` 只截视口） |
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.2.5 | **同步模板：自动更新间隔治理 + 失败退避** —— `github` 模式默认间隔 300 → **3600 秒（1 小时）**；连续失败按设定值 ×2 退避（最多 3 次：1h→2h→4h→8h，成功后立即复位）；三种模式的区别写进前端下拉与卡片说明；间隔统一钳制到 `[30, 86400]`。验证脚本 `test/auto-update-interval.test.cjs`（13 项）+ `test/auto-update-backoff.test.cjs`（10 项）全通过 |
