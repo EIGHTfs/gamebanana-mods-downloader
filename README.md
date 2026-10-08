@@ -1,16 +1,15 @@
 # GameBanana Mod Downloader
 
-> 零依赖、单进程 Node.js 服务：从 [GameBanana](https://gamebanana.com) 搜索、下载并自动整理 Mod。
-> 自带网页界面（浏览器访问），另有配套浏览器扩展（`crx/`）与油猴脚本（`scripts/`）。
+> **从 [GameBanana](https://gamebanana.com) 搜索、下载并自动整理 Mod 的零依赖 Node.js 服务** —— 单进程、无 npm 依赖（无 `package.json`）、自带网页界面，NAS / 小主机上跑一个进程、局域网浏览器直接用。
+> 亮点：**按角色分类全量抓取**（关键词搜不到的同人 mod 也能一网打尽）、**四步下载**（断点续传 / 重试 / 停滞检测 / 自动归位）、**HTML 反查**，并附浏览器扩展与油猴脚本在 GB 页面**一键发送**到服务器。
 
 **核心能力一览**
 
 | 能力 | 说明 |
 |---|---|
-| 🔍 关键词搜索 | 中文/变体自动归一为英文（「桑多涅」→ Sandrone），命中 GB 全站 |
-| ⏱ 按时间搜索 | 按 新增/修改/更新 三字段筛选（OR 逻辑），支持多游戏批量 |
+| 🔍 三种搜索通道 | ① 关键词（中文/别名自动归一，「桑多涅」→ Sandrone）② **按角色**（直接抓该角色的香蕉网分类，全量不漏）③ 按时间（新增/修改/更新 OR） |
 | ⬇ 四步下载流程 | 生成 HTML → 查重归位 → 整理 → 并发下载（断点续传/重试/跳过）；下载内容可选压缩包 / 预览图 |
-| 📁 自动整理 | 按「仓库/角色/作者」规范路径存放；旧目录自动归位、重复进回收站（`.trash` 可恢复） |
+| 📁 自动整理 | 按「仓库/角色（英文 – 中文）/作者」规范路径存放；旧目录自动归位、重复进回收站（`.trash` 可恢复） |
 | 🔍 HTML 反查 | 输入文件 MD5 / 图片原始短名（GB 原名）反查所属 mod；三索引（GB 线上表 + 本地表 + HTML 原名表） |
 | 🗂 文件夹合并 | 纯英文目录按映射重命名为「英文 – 中文」规范名；清理空目录 |
 | ⚙️ 网页设置 | 游戏下载路径、GB Cookie、密码、映射管理、并发数，全部网页操作 |
@@ -69,18 +68,20 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 
 > 截图由模板的通用截图脚本生成：`node scripts/page-shot.mjs --password <访问密码> --theme dark`
 > （自动登录 → 切主题 → 逐标签截图 → 收集前端错误；进度页可加 `--redact-text/--redact-images` 打码）。
+>
+> 图片走 jsDelivr CDN（`cdn.jsdelivr.net/gh/…`）：GitHub 默认的图片域名 `raw.githubusercontent.com` 在国内多数网络不可达，用相对路径时 README 会显示裂图。
 
 | 登录（夜间） | 下载（夜间） |
 |---|---|
-| ![登录](docs/screenshots/01-login.jpg) | ![下载](docs/screenshots/02-download.jpg) |
+| ![登录](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/01-login.jpg) | ![下载](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/02-download.jpg) |
 
 | 下载进度（夜间，敏感信息已打码） | 搜索：三种独立通道（夜间） |
 |---|---|
-| ![下载进度](docs/screenshots/03-progress.jpg) | ![搜索](docs/screenshots/04-search.jpg) |
+| ![下载进度](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/03-progress.jpg) | ![搜索](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/04-search.jpg) |
 
 | 设置（夜间） | 设置（白天） |
 |---|---|
-| ![设置-夜间](docs/screenshots/05-settings-night.jpg) | ![设置-白天](docs/screenshots/06-settings-day.jpg) |
+| ![设置-夜间](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/05-settings-night.jpg) | ![设置-白天](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/06-settings-day.jpg) |
 
 ---
 
@@ -373,6 +374,7 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.3.1 | 接入模板通用网页截图脚本：`assemble.json` 增加 `templates/tools/page-shot.mjs → scripts/page-shot.mjs`（模板侧新增该脚本，下游按需接入）。用法：`node scripts/page-shot.mjs [--base URL] [--password 密码] [--tabs a,b] [--plan shots.json]`——自动推导端口、自动登录、自动发现 `.tab[data-tab=…]` 逐标签截图并收集 `console.error`/`pageerror`，输出到系统临时目录（`--out` 可改）。另把本轮改动的三个模板下发件（`js/app.js`、`html/tab-panel/panel-search.html`、`panel-settings.html`）同步回模板仓库，避免下次组装覆盖 |
 | 1.3.2 | README 新增「界面预览」六图（登录 / 下载 / 下载进度 / 搜索三通道 / 设置 / 搜游戏）——此前 `docs/screenshots/` 里的图从未被 README 引用；全部改由模板截图脚本在部署端实测生成（含真实下载进行中的进度页），旧图移入 `docs/screenshots/.trash/`（`.trash` 已被忽略）。`scripts/page-shot.mjs` 同步模板最新版（新增 `select`/`scroll` 步骤与单张截图 `full:false` 只截视口） |
 | 1.3.3 | 界面预览改为**夜间模式**为主（设置页给白天/夜间两张对照），进度页**打码**后再出图（模糊 mod 名/URL/目标路径/缩略图，保留进度条与速度 —— 对外宣传「看得出在下载、看不出下的具体是什么」）。配套：`scripts/page-shot.mjs` 新增 `--theme dark\|light` 与打码四件套（`--redact`/`--redact-text`/`--redact-images`/`--redact-exclude`）；`login.html` 补 `<script src="theme-init.js">`（此前登录页不跟随已选主题，永远白天） |
+| 1.3.4 | 文档与仓库元数据优化：① 界面预览图片改用 **jsDelivr CDN** 绝对地址 —— GitHub 默认图片域名 `raw.githubusercontent.com` 在国内多数网络不可达（实测 HTTP 000），用相对路径时 README 裂图；② README 开篇重写（点明零依赖/单进程/自托管，并把「按角色分类全量抓取」「四步下载」提到亮点位置），核心能力表首行改为「三种搜索通道」；③ 仓库简介与 GitHub topics 由自动生成的占位改为实际内容（16 个关键词：gamebanana / mod-downloader / game-mod / nodejs / zero-dependency / self-hosted / web-ui / downloader / nsfw / nas / synology / hoyoverse / genshin-impact / honkai-star-rail / userscript / chrome-extension） |
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.2.5 | **同步模板：自动更新间隔治理 + 失败退避** —— `github` 模式默认间隔 300 → **3600 秒（1 小时）**；连续失败按设定值 ×2 退避（最多 3 次：1h→2h→4h→8h，成功后立即复位）；三种模式的区别写进前端下拉与卡片说明；间隔统一钳制到 `[30, 86400]`。验证脚本 `test/auto-update-interval.test.cjs`（13 项）+ `test/auto-update-backoff.test.cjs`（10 项）全通过 |
