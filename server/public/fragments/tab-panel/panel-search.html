@@ -2,9 +2,10 @@
   <div class="tab-panel" id="panel-search">
 
     <!-- 2026-08-31：关键词搜索 Mod 和 按时间搜索 Mod 合并为一个卡片，共用 游戏选择/普通 NSFW 筛选 -->
+    <!-- 2026-10-08：拆成**三种独立搜索通道**——按关键词 / 按角色（走角色分类抓取）/ 按时间，各自有独立按钮 -->
     <div class="card">
       <h2>搜索 Mod</h2>
-      <p class="hint">关键词搜索（中文/角色名/别号，自动归一到英文）或按时间搜索（新增/修改/更新任一命中），共用下方游戏与分级筛选</p>
+      <p class="hint">三种独立搜索通道：<b>① 按关键词</b>（中文/角色名/别号，自动归一到英文）、<b>② 按角色</b>（直接抓该角色的香蕉网分类，全量不漏）、<b>③ 按时间</b>（新增/修改/更新任一命中）；共用下方游戏与分级筛选</p>
       <div class="row">
         <label>游戏
           <select id="searchGameSelect">
@@ -15,18 +16,21 @@
         <label><input type="checkbox" id="filterNsfw" checked> NSFW</label>
       </div>
       <div class="row mt">
-        <label>关键词 <input type="text" id="kwInput" placeholder="输入关键词" style="width:240px"></label>
-        <div style="position:relative">
-          <label>选角色 <input type="text" id="kwRoleInput" placeholder="输入过滤" style="width:150px" disabled autocomplete="off" title="从香蕉网获取该游戏角色列表，选中后自动填入关键词并搜索"></label>
-          <div class="combo-list" id="kwRoleCombo" style="display:none"></div>
-        </div>
-        <button class="primary" id="kwSearchBtn" type="button">搜索</button>
+        <label>① 按关键词 <input type="text" id="kwInput" placeholder="输入关键词" style="width:240px"></label>
+        <button class="primary" id="kwSearchBtn" type="button">关键词搜索</button>
       </div>
       <div class="row mt">
-        <label>开始日期 <input type="date" id="searchStart"></label>
+        <div style="position:relative">
+          <label>② 按角色 <input type="text" id="kwRoleInput" placeholder="输入过滤" style="width:150px" disabled autocomplete="off" title="从香蕉网获取该游戏角色列表；选中后按该角色的香蕉网分类抓取全部 mod"></label>
+          <div class="combo-list" id="kwRoleCombo" style="display:none"></div>
+        </div>
+        <button class="primary" id="roleSearchBtn" type="button">按角色抓取</button>
+      </div>
+      <div class="row mt">
+        <label>③ 按时间 <input type="date" id="searchStart"></label>
         <button class="ghost" id="earliestBtn" type="button" title="设为最早（2000-01-01，从第一个 mod 开始搜）">最早</button>
-        <label>结束日期 <input type="date" id="searchEnd"></label>
-        <button class="primary" id="searchBtn" type="button">查询 Mod</button>
+        <label>— <input type="date" id="searchEnd"></label>
+        <button class="primary" id="searchBtn" type="button">按时间查询</button>
         <button class="ghost" id="stopSearchBtn" type="button" style="display:none">停止搜索</button>
       </div>
       <div class="status" id="kwStatus"></div>

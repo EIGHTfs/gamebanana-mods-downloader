@@ -11,6 +11,13 @@
 
       <!-- 2026-08-26：输入香蕉网 id 添加游戏，游戏名自动获取 -->
       <h3 style="margin:14px 0 8px;font-size:14px;color:var(--primary)">➕ 添加游戏（输入香蕉网 id，游戏名自动获取）</h3>
+      <!-- 2026-10-08：按游戏名搜香蕉网游戏 → 返回 id 候选 → 点选填入下面的 id 框（不用再去网页查 id） -->
+      <div class="row">
+        <label>搜游戏 <input type="text" id="searchGameKw" placeholder="输入游戏名，如 Genshin / 原神" style="width:220px"></label>
+        <button class="ghost" id="searchGameBtn" type="button">搜索游戏</button>
+        <span class="status" id="searchGameStatus"></span>
+      </div>
+      <div id="searchGameCandidates" style="display:none;margin:6px 0 2px"></div>
       <div class="row">
         <label>香蕉网游戏 id <input type="number" id="addGameId" placeholder="8552（原神）" style="width:110px"></label>
         <button class="primary" id="fetchGameBtn" type="button">获取游戏名</button>

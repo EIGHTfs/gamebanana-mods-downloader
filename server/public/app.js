@@ -431,6 +431,8 @@ async function keywordSearch() {
 }
 
 function bindKeywordSearch() {
+  // 关键词搜索入口保留（2026-10-08：它是独立功能，浏览器扩展 crx/extension/search.js 也走同一端点；
+  //   只有「选角色」改成了按角色分类抓取，见下方 pickRole）。
   $("#kwSearchBtn").addEventListener("click", keywordSearch);
   $("#kwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") keywordSearch(); });
 
@@ -449,7 +451,8 @@ function bindKeywordSearch() {
       try {
         const r = await api("/api/gb-characters?game=" + encodeURIComponent(game));
         if (!r.ok) throw new Error(r.error || "获取失败");
-        kwRoleChars = r.characters || [];
+        // 2026-10-08：角色缓存改为对象数组 [{name,url}]，这里只取名字（兼容旧的字符串数组）
+        kwRoleChars = (r.characters || []).map((c) => (typeof c === "string" ? c : c.name)).filter(Boolean);
         roleInput.placeholder = "输入过滤";
         if (st) setStatus(st, `已加载 ${kwRoleChars.length} 个角色${r.fromCache ? "（缓存）" : ""}（选角色后自动搜索；设置页可手动刷新）`, "ok");
         return;
@@ -489,11 +492,40 @@ function bindKeywordSearch() {
     if (item) { roleInput.value = item.dataset.v; roleCombo.style.display = "none"; pickRole(item.dataset.v); return; }
     if (!e.target.closest("#kwRoleInput") && !e.target.closest("#kwRoleCombo")) roleCombo.style.display = "none";
   });
-  // 选中角色 → 填入关键词并自动搜索（英文名直接搜，含变体合并）
-  function pickRole(name) {
-    $("#kwInput").value = name;
-    keywordSearch();
+  // 2026-10-08：② 按角色通道 —— 选中角色 → 按该角色的**香蕉网分类**抓取全部 mod
+  //   （原实现是填关键词走关键词搜索，只按标题匹配、会漏；现在走 /api/role-mods：
+  //     角色网址 → catId → 该分类下全量）。与①关键词通道相互独立，各自有自己的按钮。
+  async function pickRole(name) {
+    const game = $("#searchGameSelect").value;
+    const st = $("#kwStatus");
+    if (!game) { if (st) setStatus(st, "请先选择游戏", "err"); return; }
+    if (!name) { if (st) setStatus(st, "请先选择角色", "err"); return; }
+    if (st) setStatus(st, `按角色「${name}」的分类抓取…`, "");
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await api("/api/role-mods?game=" + encodeURIComponent(game) + "&role=" + encodeURIComponent(name) + "&perpage=100");
+        if (!r || !r.ok) throw new Error((r && r.error) || "抓取失败");
+        searchResults = r.results || [];
+        // 与时间搜索共用「普通/NSFW」筛选
+        const wantNormal = $("#filterNormal") ? $("#filterNormal").checked : true;
+        const wantNsfw = $("#filterNsfw") ? $("#filterNsfw").checked : true;
+        if (!(wantNormal && wantNsfw)) {
+          searchResults = searchResults.filter((it) => (it.isNsfw ? wantNsfw : wantNormal));
+        }
+        renderSearchResults();
+        if (st) {
+          st.textContent = `角色「${name}」（分类 ${r.catId || "-"}）: ${searchResults.length} 个结果${(wantNormal && wantNsfw) ? "" : "（已按分级筛选）"}`;
+          st.className = "status ok";
+        }
+        return;
+      } catch (e) {
+        if (attempt < 2) { if (st) { setStatus(st, "网络抖动，重试 " + (attempt + 1) + "/2…", ""); } await new Promise((r2) => setTimeout(r2, 1500)); }
+        else { if (st) setStatus(st, "抓取失败: " + e.message, "err"); }
+      }
+    }
   }
+  // ② 通道的显式按钮：按输入框里当前的角色名抓取（与下拉选中同一入口）
+  $("#roleSearchBtn").addEventListener("click", () => pickRole(($("#kwRoleInput").value || "").trim()));
 }
 
 function startSearchPoll() {
@@ -1122,6 +1154,35 @@ function bindSettingsGames() {
       $("#gamesStatus").className = "status err";
     }
   });
+  // 2026-10-08：按游戏名搜香蕉网游戏 → 候选（id · 名称 · 缩写）→ 点选填入 id 框并自动走既有「获取游戏名」流程
+  $("#searchGameBtn").addEventListener("click", async () => {
+    const q = ($("#searchGameKw").value || "").trim();
+    const st = $("#searchGameStatus");
+    const box = $("#searchGameCandidates");
+    if (!q) { setStatus(st, "请输入游戏名", "err"); return; }
+    setStatus(st, "搜索中…", "");
+    box.style.display = "none";
+    try {
+      const r = await api("/api/gb-search-games?q=" + encodeURIComponent(q) + "&perpage=10");
+      if (!r.ok) throw new Error(r.error || "搜索失败");
+      const list = r.candidates || [];
+      if (!list.length) { setStatus(st, "没有匹配的游戏", "err"); return; }
+      box.innerHTML = list.map((c) =>
+        `<div class="cand-item" data-id="${c.id}" data-name="${esc(c.name)}" style="cursor:pointer;padding:4px 6px;border-radius:6px">`
+        + `<b>${c.id}</b> · ${esc(c.name)}${c.abbr ? ` <span class="sub">${esc(c.abbr)}</span>` : ""}</div>`).join("");
+      box.style.display = "block";
+      box.querySelectorAll(".cand-item").forEach((el) => el.addEventListener("click", () => {
+        $("#addGameId").value = el.dataset.id;
+        box.style.display = "none";
+        setStatus(st, `已选「${el.dataset.name}」（id ${el.dataset.id}），正在获取游戏名…`, "ok");
+        $("#fetchGameBtn").click(); // 复用既有流程：取游戏名 → 预览 → 添加到游戏列表
+      }));
+      setStatus(st, `找到 ${list.length} 个候选，点一条填入`, "ok");
+    } catch (e) {
+      setStatus(st, "搜索失败: " + e.message, "err");
+    }
+  });
+  $("#searchGameKw").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#searchGameBtn").click(); });
   $("#fetchGameBtn").addEventListener("click", async () => {
     const id = parseInt($("#addGameId").value, 10);
     const st = $("#addGameStatus");
@@ -1837,10 +1898,11 @@ async function loadGbCharacters(force) {
     try {
       const r = await api(qs);
       if (!r.ok) throw new Error(r.error || "获取失败");
-      window.__gbChars = r.characters || [];
+      // 2026-10-08：角色缓存改为对象数组 [{name,url}]，设置页下拉只需要名字（兼容旧格式）
+      window.__gbChars = (r.characters || []).map((c) => (typeof c === "string" ? c : c.name)).filter(Boolean);
       if (st) {
         st.textContent = force
-          ? `已重新获取并保存 ${window.__gbChars.length} 个角色（json/role-cache.json）`
+          ? `已重新获取并保存 ${window.__gbChars.length} 个角色（json/role/<游戏名>.json，含分类网址）`
           : `已加载 ${window.__gbChars.length} 个角色${r.fromCache ? "（缓存）" : "（新获取）"}（英文名输入时过滤选择）`;
         st.className = "status ok";
       }

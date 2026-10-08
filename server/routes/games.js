@@ -59,6 +59,20 @@ module.exports = createRoute({
     }
   },
 
+  // ---- 搜游戏（2026-10-08）：按游戏名搜香蕉网游戏，返回 id 候选（设置页「搜索游戏」用）----
+  // 走 apiv11/Util/Search/Results?_sModelName=Game（实测返回 _idRow/_sName/_sProfileUrl/_sAbbreviation）
+  "GET /api/gb-search-games": async (req, res, ctx) => {
+    const q = String(ctx.query.q || "").trim();
+    if (!q) return sendJson(res, { ok: false, error: "missing q" }, 400);
+    const perpage = Math.min(parseInt(ctx.query.perpage, 10) || 10, 30);
+    try {
+      const candidates = await gbApi.searchGames(q, perpage);
+      return sendJson(res, { ok: true, count: candidates.length, candidates }, 200);
+    } catch (e) {
+      return sendJson(res, { ok: false, error: e.message || String(e) }, 400);
+    }
+  },
+
   // ---- 香蕉网游戏信息：按 id 取游戏名 + 根分类（仓库）（2026-08-26）----
   "GET /api/gb-game-info": async (req, res, ctx) => {
     const id = parseInt(ctx.query.id, 10);

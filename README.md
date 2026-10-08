@@ -62,7 +62,7 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 |---|---|
 | 下载 | 批量输入 mod 链接或纯数字 id；可勾选「压缩包 / 预览图」（记住到设置）；一键开始；图片优先下载 |
 | 下载进度 | 每个文件的实时状态（下载中/成功/跳过/失败）、进度条、预览图（点击缩略图放大查看，Esc/滚轮/点遮罩关闭）；失败可单独重试/跳过；并发数即时调节；任务 json 导入/导出；分组可折叠/展开（默认展开，状态记忆） |
-| 搜索 | 关键词搜索（中文归一）＋ 按时间搜索；结果勾选后一键下载 |
+| 搜索 | **三种独立搜索通道**：① 按关键词（中文/角色名/别号自动归一到英文）② 按角色（直接抓该角色的香蕉网分类，全量不漏）③ 按时间（新增/修改/更新任一命中）；结果勾选后一键下载 |
 | 设置 | 游戏下载路径（可读取本地目录）、GB Cookie 与登录检测、映射管理、文件夹合并、HTML 反查、修改密码（需旧密码） |
 
 ---
@@ -165,6 +165,24 @@ gamebanana-mods-downloader/
 
 映射可在网页「设置 → 映射管理」中**手动添加**（选游戏 → 选仓库 → 从香蕉网拉取角色列表 → 填中文名）。
 
+### 角色列表缓存（json/role/&lt;游戏名&gt;.json）
+
+搜索页「按角色」与设置页「映射管理」共用同一份角色列表，落盘格式：
+
+```json
+{
+  "gameId": 8552,
+  "characters": [
+    { "name": "Aether", "url": "https://gamebanana.com/mods/cats/19510" }
+  ],
+  "at": 1759
+}
+```
+
+- `url` = 该角色的香蕉网**分类页**（`apiv11/Mod/Categories` 记录里的 `_sUrl`）。「按角色」搜索就是取它的 `catId`，再走 `_aFilters[Generic_Category]` 抓该分类**全量** mod（原实现走关键词搜索，只按标题匹配、会漏）。
+- 角色列表来源：游戏根分类里匹配 `/character|skin/i` 的根（如 `Skins`）→ 取其子分类；若子分类是**容器分区**（`Characters`/`Weapons` 等）则再下探一层取真角色。例：原神 `Skins(17510)` → `Characters(18140)` → 130 个角色分类（实测 144 个角色里 130 个带分类网址）。
+- 旧格式（只有名字的字符串数组）读取时自动归一化，并在**首次用到该游戏时**重新抓取补网址（懒迁移）；本地 mapping 手加的角色在香蕉网没有对应分类，`url` 为空。
+
 ---
 
 ## 下载四步流程
@@ -252,10 +270,16 @@ crx/
 零依赖 `node:test`，无 package.json：
 
 ```bash
-node --test    # 自动发现 test/**/*.test.cjs
+node --test                     # 自动发现 test/**/*.test.cjs
+node test/gb-verify.cjs         # 联网实测：按角色链路的四项能力（见下）
+node test/gb-verify.cjs --refresh   # 同上，并强制重抓角色列表补分类网址（会写 json/role/<游戏>.json）
 ```
 
-当前 50 项全绿，覆盖：路由清单（P1）、去重工具（P2）、bug#1 接线（P3）、auth 清过期 token / fs-async（P4）、改密旧密码（P5）、导入=纯追加（P6）、数据导入 manifest、gif 命名、未完成扫描、CJS 加载冒烟。测试日志落 `test/logs/<名>.log`。
+当前 **54 项：42 通过 / 12 失败**。新增 `test/gb-role-category.test.cjs`（10 项：分类网址解析、角色缓存新旧格式归一化、角色缓存数据、三通道接线守卫）与 `test/gb-verify.cjs`（联网实测脚本，不参与自动发现）均通过；覆盖还包括路由清单（P1）、去重工具（P2）、bug#1 接线（P3）、auth 清过期 token / fs-async（P4）、改密旧密码（P5）、导入=纯追加（P6）、数据导入 manifest、gif 命名、未完成扫描、CJS 加载冒烟。
+
+> ⚠️ 那 12 项失败是**模板化改造遗留**：`p1-routes`/`p2-dedup`/`p3-bug1`/`p4-auth-cleanup`/`incomplete-scan`/`scripts/test-auto-update` 仍 `require("../server/utils/*")`，而该目录已拆成 `server/core|http|route|config|store|update|assemble/`。详见「待办」第 3 条。
+
+测试日志落 `test/logs/<名>.log`。
 
 ---
 
@@ -287,6 +311,39 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 
 ---
 
+## 待办（进行中）
+
+### 1. ✅ 已完成：设置页「搜索游戏」→ 返回游戏 id 候选
+
+- 后端 `GET /api/gb-search-games?q=`（走 `apiv11/Util/Search/Results?_sModelName=Game`，返回 `{id,name,abbr,profileUrl}`）。
+- 前端设置页「➕ 添加游戏」卡片内新增「搜游戏」输入框 + 候选列表，点候选 → 填入 `#addGameId` → 自动走既有「获取游戏名 → 预览 → 添加到游戏列表」流程。
+- 实测：`Genshin` → `8552 Genshin Impact (GI)`。
+
+### 2. ✅ 已完成：三种独立搜索通道（按关键词 / 按角色 / 按时间）
+
+- 以前只有两种通道（按时间、按关键词），「角色」实际上走的就是关键词搜索（只按标题匹配）。
+- 现在拆成三条独立通道，各有独立按钮：
+  - ① 按关键词：`GET /api/keyword-search`（保留，浏览器扩展 crx 也走它）
+  - ② 按角色：`GET /api/role-mods`（角色网址 → catId → `_aFilters[Generic_Category]` 抓全量；拿不到网址时自动刷新角色列表补网址，仍无则明确报错并指引，**不再回退关键词搜索**）
+  - ③ 按时间：`POST /api/search`（原有）
+- `json/role/<游戏>.json` 的 `characters` 由字符串数组改为对象数组 `[{name,url}]`（旧格式读取自动归一化 + 懒迁移补网址）。
+- 实测（原神）：角色 144 个、带分类网址 130 个；`Aether → /mods/cats/19510` → 抓出该分类真实 mod 列表。
+
+### 3. 存量测试未跟上模板化改造（12 项红）
+
+- 状态：待处理
+- 现象：`node --test` 有 12 项失败，全部集中在 6 个**模板化改造前**的测试文件。
+- 根因：这些文件仍 `require("../server/utils/*")`，而该目录在 2026-09 模板化改造中已拆成 `server/core|http|route|config|store|update|assemble/`（例：`utils/path-safe` → `http/path-safe.js`、`utils/index-html` → `lib/index-html.js`、`utils/fs-async` → `http/fs-async.js`；`utils/http`、`utils/html` 需进一步定位对应模块）。
+- 涉及文件：`test/p1-routes.test.cjs`、`test/p2-dedup.test.cjs`、`test/p3-bug1.test.cjs`、`test/p4-auth-cleanup.test.cjs`、`test/incomplete-scan.test.cjs`、`scripts/test-auto-update.cjs`（另 `bug#5`/`isExcluded`/`copyTreeSafe` 等用例随这些文件一起红）。
+
+### 4. 两个文件已超 400 行，待按功能拆分
+
+- 状态：待处理
+- `server/lib/gb-api.js` 601 行（香蕉网 API 封装：抓取/分类/角色/搜索混在一起）、`server/public/app.js` 2009 行（前端单体：下载/搜索/设置/进度全在一个文件）。
+- 拆分建议：`gb-api.js` 按「游戏信息 / 分类与角色 / mod 搜索与解析」拆成 `lib/gb-*.js` 由 `gb-api.js` 再导出（保持调用方导入路径不变）；前端按「下载 / 搜索 / 设置 / 进度」拆成 `public/js/*.js` 由 `index.html` 按序引入。
+
+---
+
 ## 版本
 
 | 版本 | 内容 |
@@ -295,6 +352,7 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.1.0 | P5 改密校验旧密码 + P6 导入=纯追加、任务事件日志、便携测试、文档重写 |
 | 1.2.0 | 自动更新（watch / git / github 三模式 + 防抖重启 + 前端开关 UI）；github 模式无需服务端 .git，定时从 GitHub 拉取并安全更新代码 |
 | 1.2.1 | bugfix：GB 登录检测修复——GB 会话绑定浏览器完整 UA（OS+版本号），保存 Cookie 时自动同步当前浏览器 UA 到 `gbUserAgent`，解决 UA 不匹配导致 `_bIsLoggedIn` 始终返回 false 的问题 |
+| 1.3.0 | 三种独立搜索通道 + 设置页搜游戏：① 搜索页拆成「按关键词 / 按角色 / 按时间」三条独立通道（以前只有时间、关键词两种，「角色」实际走的就是关键词搜索，只按标题匹配会漏）；② 新增 `GET /api/role-mods`——角色 → 香蕉网分类网址 → `catId` → `_aFilters[Generic_Category]` 抓该角色**全量** mod（拿不到网址时自动刷新角色列表补网址，仍无则明确报错并指引，不再回退关键词搜索）；③ `json/role/<游戏>.json` 的 `characters` 改为对象数组 `[{name,url}]`（旧格式读取自动归一化 + 首次用到该游戏时懒迁移补网址）；④ 角色列表抓取由**一层**改为**两层下探**（修 bug：原神这类 `Skins → Characters → 角色` 两层结构原先一个角色都取不到），实测原神 144 个角色、130 个带分类网址；⑤ 设置页「➕ 添加游戏」新增「搜游戏」——按游戏名搜香蕉网游戏返回 id 候选，点选填入表单（新增 `GET /api/gb-search-games`）；⑥ 新增 `test/gb-role-category.test.cjs`（10 项）与联网实测脚本 `test/gb-verify.cjs`；README 测试章节同步真实结果（42/54，12 项为模板化遗留，见待办第 3 条） |
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.2.5 | **同步模板：自动更新间隔治理 + 失败退避** —— `github` 模式默认间隔 300 → **3600 秒（1 小时）**；连续失败按设定值 ×2 退避（最多 3 次：1h→2h→4h→8h，成功后立即复位）；三种模式的区别写进前端下拉与卡片说明；间隔统一钳制到 `[30, 86400]`。验证脚本 `test/auto-update-interval.test.cjs`（13 项）+ `test/auto-update-backoff.test.cjs`（10 项）全通过 |

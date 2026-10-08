@@ -323,8 +323,11 @@ async function fetchOnePage(gameId, page, signal) {
 //   _aSubCategory._sProfileUrl 的 /mods/cats/<id> 提取）。关键词搜索只按标题匹配，
 //   角色分类浏览能拉出该角色全部 mod（如 Jane Doe → cat 30580 → 144 个）。
 async function fetchModsByCategory(gameId, catId, page, perpage = 50) {
+  // 2026-10-08：香蕉网 Index 接口 _nPerpage 上限 50（给 100 会回 INPUT_ERRORS/HTTP 400），
+  //   这里统一夹住，避免任何调用方触发 400；需要更多请翻页。
+  const pp = Math.max(1, Math.min(Number(perpage) || 50, 50));
   const url =
-    `${API_BASE}/Index?_nPage=${page}&_nPerpage=${perpage}` +
+    `${API_BASE}/Index?_nPage=${page}&_nPerpage=${pp}` +
     `&_aFilters%5BGeneric_Game%5D=${gameId}` +
     `&_aFilters%5BGeneric_Category%5D=${catId}` +
     `&_sSort=Generic_NewAndUpdated`;
@@ -338,7 +341,8 @@ async function fetchModsByCategory(gameId, catId, page, perpage = 50) {
       author: (r._aSubmitter && r._aSubmitter._sName) || "",
       isNsfw: isNsfwRecord(r)
     })),
-    hasMore: records.length >= perpage
+    hasMore: records.length >= pp,
+    total: Number((data._aMetadata && data._aMetadata._nRecordCount) || 0)
   };
 }
 
@@ -388,76 +392,121 @@ const LEGACY_CACHE_FILE = path.join(__dirname, "..", "..", "json", "role-cache.j
 function roleCachePath(gameName) {
   return path.join(CHAR_CACHE_DIR, String(gameName || "unknown").replace(/[\\/:*?"<>|]/g, "_") + ".json");
 }
+// 角色条目归一化：新格式 [{name,url}]；旧格式 ["名字"] → 补 url:""（兼容历史缓存）。
+// legacy=true 表示这批条目没有网址（需重新抓取补全）。
+function normRoleEntries(list) {
+  const entries = [];
+  let legacy = false;
+  for (const it of Array.isArray(list) ? list : []) {
+    if (typeof it === "string") {
+      const n = it.trim();
+      if (n) { entries.push({ name: n, url: "" }); legacy = true; }
+    } else if (it && it.name) {
+      const n = String(it.name).trim();
+      if (n) entries.push({ name: n, url: String(it.url || "") });
+    }
+  }
+  return { entries, legacy };
+}
 function loadRoleCache(gameName) {
   try {
     const d = JSON.parse(require("fs").readFileSync(roleCachePath(gameName), "utf8"));
-    if (d && Array.isArray(d.characters)) return d;
+    if (d && Array.isArray(d.characters)) {
+      const { entries, legacy } = normRoleEntries(d.characters);
+      return { gameId: d.gameId, characters: entries, at: d.at, legacy };
+    }
   } catch (_) { /* 文件不存在或解析失败，尝试旧版 */ }
   // 兼容旧版：单文件 role-cache.json 里的 gameId key / 游戏名 key
   try {
-    const legacy = JSON.parse(require("fs").readFileSync(LEGACY_CACHE_FILE, "utf8"));
-    return legacy[gameName] || legacy[String(cfg.gameIdOf(gameName))] || null;
+    const legacyFile = JSON.parse(require("fs").readFileSync(LEGACY_CACHE_FILE, "utf8"));
+    const hit = legacyFile[gameName] || legacyFile[String(cfg.gameIdOf(gameName))] || null;
+    if (!hit) return null;
+    const { entries } = normRoleEntries(hit.characters);
+    return { gameId: hit.gameId, characters: entries, at: hit.at, legacy: true };
   } catch (_) { /* 旧版缓存文件不存在或解析失败 */ }
   return null;
 }
 function saveRoleCache(gameName, obj) {
   try {
     require("fs").mkdirSync(CHAR_CACHE_DIR, { recursive: true });
-    require("fs").writeFileSync(roleCachePath(gameName), JSON.stringify({ gameId: obj.gameId, characters: obj.characters, at: obj.at }, null, 2));
+    const { entries } = normRoleEntries(obj.characters);
+    require("fs").writeFileSync(roleCachePath(gameName), JSON.stringify({ gameId: obj.gameId, characters: entries, at: obj.at }, null, 2));
   } catch (_) { /* 写入失败（权限/磁盘满），静默忽略 */ }
+}
+
+// 取某分类的子分类（香蕉网 apiv11/Mod/Categories；记录带 _idRow/_sName/_sUrl/_nCategoryCount）
+async function fetchCategories(catId) {
+  const url = `${API_BASE}/Categories?_idCategoryRow=${catId}&_sSort=a_to_z&_bShowEmpty=true`;
+  const data = await fetchJson(url, {}, 2);
+  return (data && data._aRecords) || (Array.isArray(data) ? data : []) || [];
+}
+// 容器分类名：这些是「分区」不是角色，需要再下探一层取真角色（如原神 Skins → Characters → 角色）
+const ROLE_CONTAINER_RE = /^(characters?|skins?|weapons?|entities\/npcs|entities|npcs|other\/misc|ui|objects|misc)$/i;
+// 从分类网址取 catId：https://gamebanana.com/mods/cats/19510 → 19510
+function catIdFromUrl(url) {
+  const m = String(url || "").match(/\/mods\/cats\/(\d+)/);
+  return m ? Number(m[1]) : 0;
 }
 
 async function fetchGameCharacterList(gameId, gameName, forceRefresh) {
   if (!gameId) return [];
   const now = Date.now();
   const gameKey = String(gameName && gameName.trim() ? gameName : gameId);
+  const roles = new Map(); // name -> 分类网址（来自香蕉网分类记录 _sUrl）
+  const addRole = (name, url) => {
+    const n = String(name || "").trim();
+    if (n.length < 2 || ROLE_CONTAINER_RE.test(n)) return;
+    if (!roles.has(n) || (!roles.get(n) && url)) roles.set(n, String(url || ""));
+  };
   // 1) JSON 持久化缓存（默认）：有且未强制刷新 → 直接返回（含本地 mapping 补全）
+  //    旧格式（只有名字、无网址）**不早退**：继续走 API 抓取补全网址后写回新格式
   const jc = loadRoleCache(gameKey);
-  if (!forceRefresh && jc && Array.isArray(jc.characters) && jc.characters.length) {
-    // 合并本地 mapping roles（可能后续手动加过角色）
-    const merged = new Set(jc.characters);
+  if (!forceRefresh && jc && jc.characters.length && !jc.legacy) {
+    for (const e of jc.characters) addRole(e.name, e.url);
     try {
       const map = cfg.readGameMapping(gameName);
-      for (const en of Object.keys((map && map.roles) || {})) if (en && en.trim().length >= 2) merged.add(en.trim());
-    } catch (_) {}
-    const list = [...merged].sort((a, b) => a.localeCompare(b, "en"));
+      for (const en of Object.keys((map && map.roles) || {})) addRole(en, "");
+    } catch (_) { /* mapping 读取失败：忽略 */ }
+    const list = [...roles.entries()].map(([name, url]) => ({ name, url })).sort((a, b) => a.name.localeCompare(b.name, "en"));
     charCache.set(gameKey, { at: now, chars: list });
     return list;
   }
-  // 2) 内存缓存（10 分钟）——避免短时间重复翻页
+  // 2) 内存缓存（10 分钟）——避免短时间重复翻页（旧格式缓存不适用，需抓取补网址）
   const hit = charCache.get(gameKey);
-  if (!forceRefresh && hit && now - hit.at < CHAR_CACHE_MS) return hit.chars;
-  const chars = new Set();
-  // 2026-08-30 修复（用户指出：获取角色原名不准——旧实现翻最新 mod 的 _aSubCategory，
-  //   会把简写/非官方名混入，如 "Anton" 与 "Anton Ivanov" 并存）：
-  //   改用香蕉网官方接口 Mod/Categories——直接拉角色性根分类（Character Skins/Bangboo Skins
-  //   等）的官方子分类列表（_sName 即官方角色原名，如 "Anton Ivanov"），A-Z 全量、含空分类。
+  if (!forceRefresh && hit && now - hit.at < CHAR_CACHE_MS && !(jc && jc.legacy)) return hit.chars;
+  // 3) 香蕉网官方分类接口：根分类 →（容器分区再下探一层）→ 角色 + 分类网址
+  //    2026-08-30 起用 Mod/Categories 取官方原名；2026-10-08 改为**两层下探**并保存 _sUrl：
+  //    像原神这种 Skins(17510) → Characters(18140) → 各角色的两层结构，
+  //    只下探一层会把容器名过滤掉、一个角色都取不到。
   try {
     const info = await fetchGameInfo(gameId);
     const roleRoots = ((info && info.roots) || []).filter((r) => /character|skin/i.test(r.name || ""));
     for (const root of roleRoots) {
       try {
-        const url = `${API_BASE}/Categories?_idCategoryRow=${root.id}&_sSort=a_to_z&_bShowEmpty=true`;
-        const data = await fetchJson(url, {}, 2);
-        const cats = (data && data._aRecords) || (Array.isArray(data) ? data : []);
-        for (const c of cats || []) {
-          const clean = String((c && c._sName) || "").trim();
-          if (clean && clean.length >= 2 && !/^(characters|skins|weapons)$/i.test(clean)) chars.add(clean);
+        const subs = await fetchCategories(root.id);
+        for (const c of subs) {
+          const nm = String((c && c._sName) || "").trim();
+          if (!nm) continue;
+          const kids = Number((c && c._nCategoryCount) || 0);
+          if (kids > 0 && ROLE_CONTAINER_RE.test(nm)) {
+            const inner = await fetchCategories(c._idRow); // 容器分区：子分类才是角色
+            for (const k of inner) addRole((k && k._sName) || "", (k && k._sUrl) || "");
+            await new Promise((r) => setTimeout(r, 350));
+          } else {
+            addRole(nm, (c && c._sUrl) || "");
+          }
         }
       } catch (_) { /* 单个分类请求失败，继续处理其他分类 */ }
       await new Promise((r) => setTimeout(r, 350));
     }
   } catch (_) { /* fetchGameInfo 失败，跳过 API 获取 */ }
-  // 本地 mapping roles 英文 key 补全
+  // 4) 本地 mapping roles 英文 key 补全（无网址 → url 留空，搜索时回退关键词）
   try {
     const map = cfg.readGameMapping(gameName);
-    for (const en of Object.keys((map && map.roles) || {})) {
-      if (en && en.trim().length >= 2) chars.add(en.trim());
-    }
+    for (const en of Object.keys((map && map.roles) || {})) addRole(en, "");
   } catch (_) { /* mapping 文件读取失败，跳过本地补全 */ }
-  const list = [...chars].sort((a, b) => a.localeCompare(b, "en"));
+  const list = [...roles.entries()].map(([name, url]) => ({ name, url })).sort((a, b) => a.name.localeCompare(b.name, "en"));
   charCache.set(gameKey, { at: now, chars: list });
-  // 3) 写回 JSON 持久化（json/role/<游戏名>.json）
   saveRoleCache(gameKey, { gameId, characters: list, at: now });
   return list;
 }
@@ -488,6 +537,45 @@ async function fetchGameInfo(gameId) {
   return info;
 }
 
+// ---------- 搜游戏（2026-10-08）----------
+// 按游戏名搜香蕉网游戏，返回 id 候选（设置页「搜索游戏」用）。
+// 端点实测：apiv11/Util/Search/Results?_sModelName=Game&_sSearchString=<q>
+//   → _idRow / _sName / _sProfileUrl / _sAbbreviation（注意：**不含条目数**）
+async function searchGames(keyword, perpage = 10) {
+  const q = String(keyword || "").trim();
+  if (!q) return [];
+  const url =
+    "https://gamebanana.com/apiv11/Util/Search/Results?_sModelName=Game&_sOrder=best_match" +
+    `&_sSearchString=${encodeURIComponent(q)}&_nPerpage=${Math.max(1, Math.min(50, Number(perpage) || 10))}`;
+  const data = await fetchJson(url, {}, 2);
+  const rec = (data && data._aRecords) || [];
+  return rec
+    .map((r) => ({
+      id: Number(r._idRow) || 0,
+      name: r._sName || "",
+      abbr: r._sAbbreviation || "",
+      profileUrl: r._sProfileUrl || (r._idRow ? "https://gamebanana.com/games/" + r._idRow : "")
+    }))
+    .filter((x) => x.id && x.name);
+}
+
+// 取某角色的分类网址（优先用角色缓存里的 _sUrl；旧数据回退到「角色名 → catId」映射）
+async function fetchRoleUrl(gameId, gameName, roleName) {
+  const want = String(roleName || "").trim();
+  if (!want) return "";
+  try {
+    const list = await fetchGameCharacterList(gameId, gameName, false);
+    const hit = list.find((x) => x.name === want);
+    if (hit && hit.url) return hit.url;
+  } catch (_) { /* 取列表失败：回退到 catId 映射 */ }
+  try {
+    const catIds = await fetchRoleCatIds(gameId);
+    const id = catIds && catIds[want];
+    if (id) return "https://gamebanana.com/mods/cats/" + id;
+  } catch (_) { /* 无映射 */ }
+  return "";
+}
+
 module.exports = {
   API_BASE,
   fetchJson,
@@ -504,5 +592,10 @@ module.exports = {
   normalizeKeyword,
   fetchGameCharacterList,
   fetchGameInfo,
+  fetchCategories,
+  catIdFromUrl,
+  searchGames,
+  fetchRoleUrl,
+  normRoleEntries,
   PAGE_SIZE
 };

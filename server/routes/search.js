@@ -20,6 +20,9 @@ module.exports = createRoute({
   // ---- 关键词搜索（中文/变体 → 英文归一后搜 GB Results API）----
   "GET /api/keyword-search": keywordSearch(api),
 
+  // ---- 按角色分类抓取（2026-10-08）：角色网址 → catId → 该分类下全部 mod ----
+  "GET /api/role-mods": roleMods(api),
+
   // ---- 按时间搜索（保留）----
   "POST /api/search": searchByDate(api),
   "GET /api/search-status": (req, res) => sendJson(res, { ok: true, task: search.getQueryTask() }, 200),
@@ -35,6 +38,71 @@ module.exports = createRoute({
 });
 
 // ---- 模块级 handler 工厂 ----
+
+// 按角色分类抓取 handler（2026-10-08）：
+//   角色名 → 角色分类网址（json/role/<游戏>.json 里的 url，或「角色名 → catId」映射）
+//   → catId → apiv11/Mod/Index?_aFilters[Generic_Category]=<catId> 取该角色**全部** mod。
+//   与关键词搜索返回同一结构（results[].modId/name/profileUrl…），前端可直接复用渲染。
+//   拿不到分类网址时**回退关键词搜索**（旧缓存/新角色），并在响应里注明 mode=keyword。
+function roleMods(api) {
+  const { sendJson, cfg, gbApi } = api;
+  return async (req, res, ctx) => {
+    const game = String(ctx.query.game || "").trim();
+    const role = String(ctx.query.role || "").trim();
+    const catUrlQ = String(ctx.query.url || "").trim(); // 也支持直接传分类网址
+    if (!game || (!role && !catUrlQ)) return sendJson(res, { ok: false, error: "missing game or role" }, 400);
+    const gameId = cfg.gameIdOf(game);
+    if (!gameId) return sendJson(res, { ok: false, error: "unknown game id: " + game }, 400);
+    const shape = (r) => ({
+      modId: r.id,
+      name: r.name,
+      author: r.author || "",
+      profileUrl: r.profileUrl || "https://gamebanana.com/mods/" + r.id,
+      game,
+      isNsfw: !!r.isNsfw,
+      dateAdded: 0, dateModified: 0, dateUpdated: 0
+    });
+    try {
+      let url = catUrlQ || (await gbApi.fetchRoleUrl(gameId, game, role));
+      // 角色缓存可能是旧格式（只有名字、没网址）→ 强制刷新一次补网址（两层下探会写入 _sUrl）
+      if (!url && !catUrlQ) {
+        try {
+          await gbApi.fetchGameCharacterList(gameId, game, true);
+          url = await gbApi.fetchRoleUrl(gameId, game, role);
+        } catch (_) { /* 刷新失败：走下面的报错分支 */ }
+      }
+      const catId = gbApi.catIdFromUrl(url);
+      if (!catId) {
+        // 角色搜索**不走关键词搜索**（2026-10-08）：拿不到分类网址时明确报错并给出指引
+        return sendJson(res, {
+          ok: false, mode: "category", role,
+          error: "该角色暂无香蕉网分类网址（可能是本地 mapping 手加的角色，或官方无对应分类）",
+          hint: "在设置页「手动添加映射」处点「刷新角色列表」可补全分类网址；关键词搜索请用上方「关键词」输入框"
+        }, 404);
+      }
+      // 香蕉网 _nPerpage 上限 50 → 服务端**翻页取全量**（默认最多 200 条，可用 max 调整）
+      const perpage = Math.min(parseInt(ctx.query.perpage, 10) || 50, 50);
+      const max = Math.min(parseInt(ctx.query.max, 10) || 200, 500);
+      let page = Math.max(parseInt(ctx.query.page, 10) || 1, 1);
+      const all = [];
+      let hasMore = false;
+      let total = 0;
+      for (let i = 0; i < 10 && all.length < max; i++) {
+        const r = await gbApi.fetchModsByCategory(gameId, catId, page, perpage);
+        const recs = r.records || [];
+        total = r.total || total;
+        all.push(...recs);
+        hasMore = !!r.hasMore;
+        if (!hasMore || !recs.length) break;
+        page++;
+      }
+      const results = all.slice(0, max).map(shape);
+      return sendJson(res, { ok: true, count: results.length, results, pages: hasMore, mode: "category", role, catId, catUrl: url, total }, 200);
+    } catch (e) {
+      return sendJson(res, { ok: false, error: e.message || String(e) }, 400);
+    }
+  };
+}
 
 // 关键词搜索 handler：归一 → 变体合并搜索 → 无结果回退原词
 function keywordSearch(api) {
@@ -52,7 +120,7 @@ function keywordSearch(api) {
       const maxResults = Math.min(parseInt(ctx.query.max || 100, 10) || 100, 500);
       // 2026-08-27：合并搜索——搜角色名时自动补搜变体（短名/中文），合并去重。
       const variants = genKeywordVariants(api, game, q);
-      const { all, seen } = collectSearchResults(api, gameId, variants, perpage, maxResults);
+      const { all, seen } = await collectSearchResults(api, gameId, variants, perpage, maxResults); // 2026-10-08 修：collectSearchResults 是 async，漏 await 会让 all 为 undefined → 关键词搜索必崩（Cannot read properties of undefined (reading 'slice')）
       const results = all.slice(0, maxResults).map((r) => ({
         modId: r.id, name: r.name, author: r.author || "",
         profileUrl: r.profileUrl || ("https://gamebanana.com/mods/" + r.id),

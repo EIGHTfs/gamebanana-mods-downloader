@@ -1,149 +1,582 @@
 {
   "gameId": 8552,
   "characters": [
-    "Aether",
-    "Aino",
-    "Albedo",
-    "Alhaitham",
-    "Aloy",
-    "Alyosha",
-    "Amber",
-    "Arataki Itto",
-    "Arlecchino",
-    "Ayaka",
-    "Ayato",
-    "Baizhu",
-    "Barbara",
-    "Beidou",
-    "Bennett",
-    "Bows",
-    "Candace",
-    "Catalysts",
-    "Charlotte",
-    "Chasca",
-    "Chevreuse",
-    "Childe",
-    "Chiori",
-    "Chongyun",
-    "Citlali",
-    "Claymores",
-    "Clorinde",
-    "Collei",
-    "Columbina",
-    "Cyno",
-    "Dahlia",
-    "Dainsleif",
-    "Dehya",
-    "Diluc",
-    "Diona",
-    "Dori",
-    "Durin",
-    "Emilie",
-    "Entities/NPCs",
-    "Escoffier",
-    "Eula",
-    "Eula Lawrence",
-    "Faruzan",
-    "Fischl",
-    "Flins",
-    "Freminet",
-    "Furina",
-    "Gaming",
-    "Ganyu",
-    "Gorou",
-    "Heizou",
-    "Hu Tao",
-    "Iansan",
-    "Ifa",
-    "Il Dottore",
-    "Illuga",
-    "Ineffa",
-    "Itto",
-    "Jahoda",
-    "Jean",
-    "Kachina",
-    "Kaedehara Kazuha",
-    "Kaeya",
-    "Kamisato Ayaka",
-    "Kamisato Ayato",
-    "Kaveh",
-    "Kazuha",
-    "Keqing",
-    "Kinich",
-    "Kirara",
-    "Klee",
-    "Kokomi",
-    "Kujou Sara",
-    "Kuki Shinobu",
-    "Lan Yan",
-    "Lauma",
-    "Layla",
-    "Linnea",
-    "Lisa",
-    "Lisa Minci",
-    "Lohen",
-    "Lumine",
-    "Lynette",
-    "Lyney",
-    "Mavuika",
-    "Mika",
-    "Mizuki",
-    "Mona",
-    "Mualani",
-    "Nahida",
-    "Navia",
-    "Nefer",
-    "Neuvillette",
-    "Nicole",
-    "Nicole Reeyn",
-    "Nilou",
-    "Ningguang",
-    "Noelle",
-    "Odette",
-    "Ororon",
-    "Paimon",
-    "Polearms",
-    "Prune",
-    "Qiqi",
-    "Raiden Shogun",
-    "Razor",
-    "Rina",
-    "Rosaria",
-    "Sandrone",
-    "Sangonomiya Kokomi",
-    "Sayu",
-    "Sethos",
-    "Shenhe",
-    "Shikanoin Heizou",
-    "Sigewinne",
-    "Skirk",
-    "Sucrose",
-    "Swords",
-    "Tartaglia",
-    "Thoma",
-    "Tighnari",
-    "Varesa",
-    "Varka",
-    "Venti",
-    "Vesna",
-    "Vodyanitsa",
-    "Wanderer",
-    "Wriothesley",
-    "Xiangling",
-    "Xianyun",
-    "Xiao",
-    "Xilonen",
-    "Xingqiu",
-    "Xinyan",
-    "Yae Miko",
-    "Yanfei",
-    "Yaoyao",
-    "Yelan",
-    "Yoimiya",
-    "Yumemizuki Mizuki",
-    "Yun Jin",
-    "Zhongli",
-    "Zibai"
+    {
+      "name": "Aether",
+      "url": "https://gamebanana.com/mods/cats/19510"
+    },
+    {
+      "name": "Aino",
+      "url": "https://gamebanana.com/mods/cats/39454"
+    },
+    {
+      "name": "Albedo",
+      "url": "https://gamebanana.com/mods/cats/19467"
+    },
+    {
+      "name": "Alhaitham",
+      "url": "https://gamebanana.com/mods/cats/21708"
+    },
+    {
+      "name": "Aloy",
+      "url": "https://gamebanana.com/mods/cats/19469"
+    },
+    {
+      "name": "Alyosha",
+      "url": "https://gamebanana.com/mods/cats/48152"
+    },
+    {
+      "name": "Amber",
+      "url": "https://gamebanana.com/mods/cats/19470"
+    },
+    {
+      "name": "Arataki Itto",
+      "url": "https://gamebanana.com/mods/cats/19471"
+    },
+    {
+      "name": "Arlecchino",
+      "url": "https://gamebanana.com/mods/cats/28961"
+    },
+    {
+      "name": "Ayaka",
+      "url": ""
+    },
+    {
+      "name": "Ayato",
+      "url": ""
+    },
+    {
+      "name": "Baizhu",
+      "url": "https://gamebanana.com/mods/cats/22790"
+    },
+    {
+      "name": "Barbara",
+      "url": "https://gamebanana.com/mods/cats/19472"
+    },
+    {
+      "name": "Beidou",
+      "url": "https://gamebanana.com/mods/cats/19473"
+    },
+    {
+      "name": "Bennett",
+      "url": "https://gamebanana.com/mods/cats/19474"
+    },
+    {
+      "name": "Bows",
+      "url": "https://gamebanana.com/mods/cats/26229"
+    },
+    {
+      "name": "Candace",
+      "url": "https://gamebanana.com/mods/cats/19475"
+    },
+    {
+      "name": "Catalysts",
+      "url": "https://gamebanana.com/mods/cats/26228"
+    },
+    {
+      "name": "Charlotte",
+      "url": "https://gamebanana.com/mods/cats/23440"
+    },
+    {
+      "name": "Chasca",
+      "url": "https://gamebanana.com/mods/cats/33346"
+    },
+    {
+      "name": "Chevreuse",
+      "url": "https://gamebanana.com/mods/cats/27117"
+    },
+    {
+      "name": "Childe",
+      "url": ""
+    },
+    {
+      "name": "Chiori",
+      "url": "https://gamebanana.com/mods/cats/28268"
+    },
+    {
+      "name": "Chongyun",
+      "url": "https://gamebanana.com/mods/cats/19476"
+    },
+    {
+      "name": "Citlali",
+      "url": "https://gamebanana.com/mods/cats/32438"
+    },
+    {
+      "name": "Claymores",
+      "url": "https://gamebanana.com/mods/cats/26227"
+    },
+    {
+      "name": "Clorinde",
+      "url": "https://gamebanana.com/mods/cats/29719"
+    },
+    {
+      "name": "Collei",
+      "url": "https://gamebanana.com/mods/cats/19141"
+    },
+    {
+      "name": "Columbina",
+      "url": "https://gamebanana.com/mods/cats/42455"
+    },
+    {
+      "name": "Cyno",
+      "url": "https://gamebanana.com/mods/cats/19477"
+    },
+    {
+      "name": "Dahlia",
+      "url": "https://gamebanana.com/mods/cats/37552"
+    },
+    {
+      "name": "Dainsleif",
+      "url": ""
+    },
+    {
+      "name": "Dehya",
+      "url": "https://gamebanana.com/mods/cats/21555"
+    },
+    {
+      "name": "Diluc",
+      "url": "https://gamebanana.com/mods/cats/19478"
+    },
+    {
+      "name": "Diona",
+      "url": "https://gamebanana.com/mods/cats/19479"
+    },
+    {
+      "name": "Dori",
+      "url": "https://gamebanana.com/mods/cats/19480"
+    },
+    {
+      "name": "Durin",
+      "url": "https://gamebanana.com/mods/cats/41470"
+    },
+    {
+      "name": "Emilie",
+      "url": "https://gamebanana.com/mods/cats/31115"
+    },
+    {
+      "name": "Escoffier",
+      "url": "https://gamebanana.com/mods/cats/36767"
+    },
+    {
+      "name": "Eula",
+      "url": "https://gamebanana.com/mods/cats/19481"
+    },
+    {
+      "name": "Eula Lawrence",
+      "url": ""
+    },
+    {
+      "name": "Faruzan",
+      "url": "https://gamebanana.com/mods/cats/20310"
+    },
+    {
+      "name": "Fischl",
+      "url": "https://gamebanana.com/mods/cats/19482"
+    },
+    {
+      "name": "Flins",
+      "url": "https://gamebanana.com/mods/cats/39455"
+    },
+    {
+      "name": "Freminet",
+      "url": "https://gamebanana.com/mods/cats/24625"
+    },
+    {
+      "name": "Furina",
+      "url": "https://gamebanana.com/mods/cats/25471"
+    },
+    {
+      "name": "Gaming",
+      "url": "https://gamebanana.com/mods/cats/27550"
+    },
+    {
+      "name": "Ganyu",
+      "url": "https://gamebanana.com/mods/cats/19483"
+    },
+    {
+      "name": "Gorou",
+      "url": "https://gamebanana.com/mods/cats/19484"
+    },
+    {
+      "name": "Heizou",
+      "url": ""
+    },
+    {
+      "name": "Hu Tao",
+      "url": "https://gamebanana.com/mods/cats/19485"
+    },
+    {
+      "name": "Iansan",
+      "url": "https://gamebanana.com/mods/cats/35985"
+    },
+    {
+      "name": "Ifa",
+      "url": "https://gamebanana.com/mods/cats/37119"
+    },
+    {
+      "name": "Il Dottore",
+      "url": ""
+    },
+    {
+      "name": "Illuga",
+      "url": "https://gamebanana.com/mods/cats/42457"
+    },
+    {
+      "name": "Ineffa",
+      "url": "https://gamebanana.com/mods/cats/38532"
+    },
+    {
+      "name": "Itto",
+      "url": ""
+    },
+    {
+      "name": "Jahoda",
+      "url": "https://gamebanana.com/mods/cats/41469"
+    },
+    {
+      "name": "Jean",
+      "url": "https://gamebanana.com/mods/cats/19465"
+    },
+    {
+      "name": "Kachina",
+      "url": "https://gamebanana.com/mods/cats/31499"
+    },
+    {
+      "name": "Kaedehara Kazuha",
+      "url": "https://gamebanana.com/mods/cats/19486"
+    },
+    {
+      "name": "Kaeya",
+      "url": "https://gamebanana.com/mods/cats/19487"
+    },
+    {
+      "name": "Kamisato Ayaka",
+      "url": "https://gamebanana.com/mods/cats/19488"
+    },
+    {
+      "name": "Kamisato Ayato",
+      "url": "https://gamebanana.com/mods/cats/19489"
+    },
+    {
+      "name": "Kaveh",
+      "url": "https://gamebanana.com/mods/cats/22586"
+    },
+    {
+      "name": "Kazuha",
+      "url": ""
+    },
+    {
+      "name": "Keqing",
+      "url": "https://gamebanana.com/mods/cats/19490"
+    },
+    {
+      "name": "Kinich",
+      "url": "https://gamebanana.com/mods/cats/32109"
+    },
+    {
+      "name": "Kirara",
+      "url": "https://gamebanana.com/mods/cats/22960"
+    },
+    {
+      "name": "Klee",
+      "url": "https://gamebanana.com/mods/cats/19491"
+    },
+    {
+      "name": "Kokomi",
+      "url": ""
+    },
+    {
+      "name": "Kujou Sara",
+      "url": "https://gamebanana.com/mods/cats/19492"
+    },
+    {
+      "name": "Kuki Shinobu",
+      "url": "https://gamebanana.com/mods/cats/19493"
+    },
+    {
+      "name": "Lan Yan",
+      "url": "https://gamebanana.com/mods/cats/34699"
+    },
+    {
+      "name": "Lauma",
+      "url": "https://gamebanana.com/mods/cats/39453"
+    },
+    {
+      "name": "Layla",
+      "url": "https://gamebanana.com/mods/cats/20057"
+    },
+    {
+      "name": "Linnea",
+      "url": "https://gamebanana.com/mods/cats/44803"
+    },
+    {
+      "name": "Lisa",
+      "url": "https://gamebanana.com/mods/cats/19494"
+    },
+    {
+      "name": "Lisa Minci",
+      "url": ""
+    },
+    {
+      "name": "Lohen",
+      "url": "https://gamebanana.com/mods/cats/45458"
+    },
+    {
+      "name": "Lumine",
+      "url": "https://gamebanana.com/mods/cats/19763"
+    },
+    {
+      "name": "Lynette",
+      "url": "https://gamebanana.com/mods/cats/24624"
+    },
+    {
+      "name": "Lyney",
+      "url": "https://gamebanana.com/mods/cats/24623"
+    },
+    {
+      "name": "Manekin",
+      "url": "https://gamebanana.com/mods/cats/40553"
+    },
+    {
+      "name": "Manekina",
+      "url": "https://gamebanana.com/mods/cats/40554"
+    },
+    {
+      "name": "Mavuika",
+      "url": "https://gamebanana.com/mods/cats/31621"
+    },
+    {
+      "name": "Mika",
+      "url": "https://gamebanana.com/mods/cats/23151"
+    },
+    {
+      "name": "Mizuki",
+      "url": ""
+    },
+    {
+      "name": "Mona",
+      "url": "https://gamebanana.com/mods/cats/18959"
+    },
+    {
+      "name": "Mualani",
+      "url": "https://gamebanana.com/mods/cats/31500"
+    },
+    {
+      "name": "Nahida",
+      "url": "https://gamebanana.com/mods/cats/20058"
+    },
+    {
+      "name": "Navia",
+      "url": "https://gamebanana.com/mods/cats/26790"
+    },
+    {
+      "name": "Nefer",
+      "url": "https://gamebanana.com/mods/cats/40519"
+    },
+    {
+      "name": "Neuvillette",
+      "url": "https://gamebanana.com/mods/cats/25403"
+    },
+    {
+      "name": "Nicole",
+      "url": "https://gamebanana.com/mods/cats/45459"
+    },
+    {
+      "name": "Nicole Reeyn",
+      "url": ""
+    },
+    {
+      "name": "Nilou",
+      "url": "https://gamebanana.com/mods/cats/19495"
+    },
+    {
+      "name": "Ningguang",
+      "url": "https://gamebanana.com/mods/cats/19496"
+    },
+    {
+      "name": "Noelle",
+      "url": "https://gamebanana.com/mods/cats/19466"
+    },
+    {
+      "name": "Odette",
+      "url": "https://gamebanana.com/mods/cats/48177"
+    },
+    {
+      "name": "Ororon",
+      "url": "https://gamebanana.com/mods/cats/33339"
+    },
+    {
+      "name": "Paimon",
+      "url": "https://gamebanana.com/mods/cats/20975"
+    },
+    {
+      "name": "Polearms",
+      "url": "https://gamebanana.com/mods/cats/26225"
+    },
+    {
+      "name": "Prune",
+      "url": "https://gamebanana.com/mods/cats/45457"
+    },
+    {
+      "name": "Qiqi",
+      "url": "https://gamebanana.com/mods/cats/19497"
+    },
+    {
+      "name": "Raiden Shogun",
+      "url": "https://gamebanana.com/mods/cats/19498"
+    },
+    {
+      "name": "Razor",
+      "url": "https://gamebanana.com/mods/cats/19499"
+    },
+    {
+      "name": "Rina",
+      "url": ""
+    },
+    {
+      "name": "Rosaria",
+      "url": "https://gamebanana.com/mods/cats/19500"
+    },
+    {
+      "name": "Sandrone",
+      "url": "https://gamebanana.com/mods/cats/47014"
+    },
+    {
+      "name": "Sangonomiya Kokomi",
+      "url": "https://gamebanana.com/mods/cats/19501"
+    },
+    {
+      "name": "Sayu",
+      "url": "https://gamebanana.com/mods/cats/19502"
+    },
+    {
+      "name": "Sethos",
+      "url": "https://gamebanana.com/mods/cats/29730"
+    },
+    {
+      "name": "Shenhe",
+      "url": "https://gamebanana.com/mods/cats/19503"
+    },
+    {
+      "name": "Shikanoin Heizou",
+      "url": "https://gamebanana.com/mods/cats/19504"
+    },
+    {
+      "name": "Sigewinne",
+      "url": "https://gamebanana.com/mods/cats/30166"
+    },
+    {
+      "name": "Skirk",
+      "url": "https://gamebanana.com/mods/cats/37532"
+    },
+    {
+      "name": "Sucrose",
+      "url": "https://gamebanana.com/mods/cats/19506"
+    },
+    {
+      "name": "Swords",
+      "url": "https://gamebanana.com/mods/cats/26226"
+    },
+    {
+      "name": "Tartaglia",
+      "url": "https://gamebanana.com/mods/cats/19507"
+    },
+    {
+      "name": "Thoma",
+      "url": "https://gamebanana.com/mods/cats/19508"
+    },
+    {
+      "name": "Tighnari",
+      "url": "https://gamebanana.com/mods/cats/19509"
+    },
+    {
+      "name": "Varesa",
+      "url": "https://gamebanana.com/mods/cats/35962"
+    },
+    {
+      "name": "Varka",
+      "url": "https://gamebanana.com/mods/cats/43740"
+    },
+    {
+      "name": "Venti",
+      "url": "https://gamebanana.com/mods/cats/19340"
+    },
+    {
+      "name": "Vesna",
+      "url": "https://gamebanana.com/mods/cats/49500"
+    },
+    {
+      "name": "Vodyanitsa",
+      "url": "https://gamebanana.com/mods/cats/49490"
+    },
+    {
+      "name": "Wanderer",
+      "url": "https://gamebanana.com/mods/cats/20311"
+    },
+    {
+      "name": "Wriothesley",
+      "url": "https://gamebanana.com/mods/cats/25512"
+    },
+    {
+      "name": "Xiangling",
+      "url": "https://gamebanana.com/mods/cats/19511"
+    },
+    {
+      "name": "Xianyun",
+      "url": "https://gamebanana.com/mods/cats/27548"
+    },
+    {
+      "name": "Xiao",
+      "url": "https://gamebanana.com/mods/cats/19512"
+    },
+    {
+      "name": "Xilonen",
+      "url": "https://gamebanana.com/mods/cats/32435"
+    },
+    {
+      "name": "Xingqiu",
+      "url": "https://gamebanana.com/mods/cats/19513"
+    },
+    {
+      "name": "Xinyan",
+      "url": "https://gamebanana.com/mods/cats/19514"
+    },
+    {
+      "name": "Yae Miko",
+      "url": "https://gamebanana.com/mods/cats/19515"
+    },
+    {
+      "name": "Yanfei",
+      "url": "https://gamebanana.com/mods/cats/19516"
+    },
+    {
+      "name": "Yaoyao",
+      "url": "https://gamebanana.com/mods/cats/21034"
+    },
+    {
+      "name": "Yelan",
+      "url": "https://gamebanana.com/mods/cats/19517"
+    },
+    {
+      "name": "Yoimiya",
+      "url": "https://gamebanana.com/mods/cats/19518"
+    },
+    {
+      "name": "Yumemizuki Mizuki",
+      "url": "https://gamebanana.com/mods/cats/35144"
+    },
+    {
+      "name": "Yun Jin",
+      "url": "https://gamebanana.com/mods/cats/19519"
+    },
+    {
+      "name": "Zhongli",
+      "url": "https://gamebanana.com/mods/cats/18989"
+    },
+    {
+      "name": "Zibai",
+      "url": "https://gamebanana.com/mods/cats/42456"
+    }
   ],
-  "at": 1787952080707
+  "at": 1791467675298
 }
