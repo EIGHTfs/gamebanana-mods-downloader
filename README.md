@@ -7,7 +7,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 🔍 三种搜索通道 | ① 关键词（中文/别名自动归一，「桑多涅」→ Sandrone）② **按角色**（直接抓该角色的香蕉网分类，全量不漏）③ 按时间（新增/修改/更新 OR） |
+| 🔍 三种搜索通道 | ① 关键词（中文/别名自动归一为英文规范名）② **按角色**（直接抓该角色的香蕉网分类，全量不漏）③ 按时间（新增/修改/更新 OR） |
 | ⬇ 四步下载流程 | 生成 HTML → 查重归位 → 整理 → 并发下载（断点续传/重试/跳过）；下载内容可选压缩包 / 预览图 |
 | 📁 自动整理 | 按「仓库/角色（英文 – 中文）/作者」规范路径存放；旧目录自动归位、重复进回收站（`.trash` 可恢复） |
 | 🔍 HTML 反查 | 输入文件 MD5 / 图片原始短名（GB 原名）反查所属 mod；三索引（GB 线上表 + 本地表 + HTML 原名表） |
@@ -375,6 +375,7 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 | 1.3.2 | README 新增「界面预览」六图（登录 / 下载 / 下载进度 / 搜索三通道 / 设置 / 搜游戏）——此前 `docs/screenshots/` 里的图从未被 README 引用；全部改由模板截图脚本在部署端实测生成（含真实下载进行中的进度页），旧图移入 `docs/screenshots/.trash/`（`.trash` 已被忽略）。`scripts/page-shot.mjs` 同步模板最新版（新增 `select`/`scroll` 步骤与单张截图 `full:false` 只截视口） |
 | 1.3.3 | 界面预览改为**夜间模式**为主（设置页给白天/夜间两张对照），进度页**打码**后再出图（模糊 mod 名/URL/目标路径/缩略图，保留进度条与速度 —— 对外宣传「看得出在下载、看不出下的具体是什么」）。配套：`scripts/page-shot.mjs` 新增 `--theme dark\|light` 与打码四件套（`--redact`/`--redact-text`/`--redact-images`/`--redact-exclude`）；`login.html` 补 `<script src="theme-init.js">`（此前登录页不跟随已选主题，永远白天） |
 | 1.3.4 | 文档与仓库元数据优化：① 界面预览图片改用 **jsDelivr CDN** 绝对地址 —— GitHub 默认图片域名 `raw.githubusercontent.com` 在国内多数网络不可达（实测 HTTP 000），用相对路径时 README 裂图；② README 开篇重写（点明零依赖/单进程/自托管，并把「按角色分类全量抓取」「四步下载」提到亮点位置），核心能力表首行改为「三种搜索通道」；③ 仓库简介与 GitHub topics 由自动生成的占位改为实际内容（16 个关键词：gamebanana / mod-downloader / game-mod / nodejs / zero-dependency / self-hosted / web-ui / downloader / nsfw / nas / synology / hoyoverse / genshin-impact / honkai-star-rail / userscript / chrome-extension） |
+| 1.3.5 | 修油猴脚本「添加密码报 HTTP 200」：脚本管理器（Tampermonkey/Violentmonkey）默认隐藏响应头 `Set-Cookie`，旧逻辑要求解析到它才算登录成功 → 密码正确也判失败。现 `POST /api/login` 在响应体回传 `token` + `cookieName`，脚本按「响应体 token → 响应头 Set-Cookie → GM_cookie → `/api/status` authed 兜底」取会话。同时修面板文案：把「有凭证但 GB 会话失效」与「未配置凭证」分开显示（原来都显示「○ 服务器未配置凭证」，明明 `cookieSet=true` 却报未配置，误导排查）。实测：无头 chromium 跑真实脚本 + 假 gamebanana 页面 + 本地沙箱服务端，7/7 断言通过，「🔄 注入登录态到浏览器」注入前后 cookie jar 0 → 27 项（含 HttpOnly 的 sess/rmc） |
 | 1.3.0 | 代码质量重构：crx/background.js 拆分（432→105行，提取 constants/settings/probe/cookie/search/download 6个模块）；server/lib/downloader.js prepareMod 拆分（298→82行，提取 step2FindAndMove/step3TrashRestore/step4MarkExists）；空 catch 块加注释；魔数提取为常量；删除冗余 docs/ 副本 |
 | 1.3.1 | 代码质量重构续：server/public/app.js bindSettings 拆分（430→17行，提取 bindSettingsGames/SettingsCookie/SettingsScanIncomplete/SettingsTaskIO/SettingsSecurity/SettingsHashQuery/SettingsHashSearch 7个子函数）；bindMerge 拆分（227→8行，提取 bindMergeMapping/bindMergeAutoUpdate 2个子函数） |
 | 1.2.5 | **同步模板：自动更新间隔治理 + 失败退避** —— `github` 模式默认间隔 300 → **3600 秒（1 小时）**；连续失败按设定值 ×2 退避（最多 3 次：1h→2h→4h→8h，成功后立即复位）；三种模式的区别写进前端下拉与卡片说明；间隔统一钳制到 `[30, 86400]`。验证脚本 `test/auto-update-interval.test.cjs`（13 项）+ `test/auto-update-backoff.test.cjs`（10 项）全通过 |

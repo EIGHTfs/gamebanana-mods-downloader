@@ -256,15 +256,15 @@ const errors = [];
         await page.waitForTimeout(900);
         cur = await isNight().catch(() => cur);
       } else {
-        // 登录页等没有切换按钮 → 直接写 localStorage + data-theme 后重载（key 可用 --theme-key 覆盖）
+        // 没有切换按钮（如登录页）→ 直接设 data-theme + localStorage：CSS 立即生效、无需重载，
+        //   也不依赖页面自己加载 theme-init.js（对外截图更通用）
         const key = flag("theme-key", "gbmd-theme");
         await page.evaluate(({ k, wantNight }) => {
           try { localStorage.setItem(k, wantNight ? "night" : "day"); } catch (_) { /* 隐私模式等 */ }
           if (wantNight) document.documentElement.setAttribute("data-theme", "night");
           else document.documentElement.removeAttribute("data-theme");
         }, { k: key, wantNight: WANT_NIGHT }).catch(() => {});
-        await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
-        await page.waitForTimeout(1200);
+        await page.waitForTimeout(500);
         cur = await isNight().catch(() => WANT_NIGHT);
       }
     }

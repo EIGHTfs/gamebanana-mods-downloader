@@ -25,12 +25,16 @@ async function handleLogin(req, res) {
     // 初次未设密码 → 只警告，直接视为登录成功（可正常使用）
     const { token } = auth.createSession({ hours });
     setSessionCookie(res, token, hours);
-    return sendJson(res, { ok: true, noPassword: true, message: "未设置访问密码，可直接使用（建议尽快设置）" }, 200);
+    // 2026-10-08：token 一并回给调用方。油猴脚本所在的管理器默认隐藏响应头 Set-Cookie，
+    //   拿不到会话就带不上 Cookie 访问受保护接口（跨站 XHR 又受 SameSite=Lax 限制）。
+    //   浏览器端仍走 HttpOnly cookie，此字段对网页端无影响。
+    return sendJson(res, { ok: true, noPassword: true, token, cookieName: auth.cookieName(), message: "未设置访问密码，可直接使用（建议尽快设置）" }, 200);
   }
   if (cfg.verifyPassword(body.password || "", cfgNow.passwordHash, cfgNow.passwordSalt)) {
     const { token } = auth.createSession({ hours });
     setSessionCookie(res, token, hours);
-    return sendJson(res, { ok: true }, 200);
+    // 2026-10-08：同上一并回传 token + cookie 名（供油猴脚本组装 Cookie 头）
+    return sendJson(res, { ok: true, token, cookieName: auth.cookieName() }, 200);
   }
   return sendJson(res, { ok: false, error: "密码错误" }, 401);
 }
