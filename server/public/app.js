@@ -7,6 +7,12 @@ const $ = (sel) => document.querySelector(sel);
 
 let settings = null;
 let searchResults = [];
+// 2026-10-09：已渲染到列表里的 modId 集合（增量渲染用）。
+// 背景（实测）：搜索任务每 2 秒轮询一次 → searchResults = t.results; renderSearchResults()，
+//   而旧实现每次整块重建 #searchResultList.innerHTML ⇒ 用户刚勾的复选框被全部清空，
+//   表现为「1680 项点全选后点下载无效」（实测：全选后 +145ms 勾中 1680，+830ms 变 0）；
+//   同时 1680 行每 2 秒白重建一次。改为增量渲染：只追加尚未渲染的行，已有行的 DOM 与勾选状态保持不动。
+let renderedIds = new Set();
 let searchPollTimer = null;
 let taskPollTimer = null;
 
@@ -286,7 +292,7 @@ function bindSearchStopClear() {
 
   $("#clearSearchBtn").addEventListener("click", async () => {
     searchResults = [];
-    renderSearchResults();
+    renderSearchResults(true);   // 清空 → 全量重建（重置增量状态）
     await api("/api/search/clear", "POST", {});
     $("#searchStatus").textContent = "列表已清空";
   });
@@ -332,7 +338,7 @@ function bindSearchImport() {
       if (!r.ok) throw new Error(r.error || "导入失败");
       // 刷新显示：重新拉取合并后的 cache
       const c = await api("/api/search/cache");
-      if (c.cache && c.cache.results) { searchResults = c.cache.results; renderSearchResults(); }
+      if (c.cache && c.cache.results) { searchResults = c.cache.results; renderSearchResults(true); }   // 载入缓存 = 新结果集 → 全量重建
       $("#searchStatus").textContent = `✅ 导入完成：新增 ${r.added} 条，覆盖 ${r.replaced} 条，当前共 ${r.total} 条`;
       $("#searchStatus").className = "status";
     } catch (e) {
@@ -350,9 +356,11 @@ function bindSearchSelectAll() {
   $("#selectAllBtn").addEventListener("click", () => {
     const wantNormal = $("#filterNormal").checked;
     const wantNsfw = $("#filterNsfw").checked;
+    // 2026-10-09 改：先按 modId 建索引（O(n)），替代「每个复选框都 searchResults.find()」的 O(n²)。
+    //   实测 1680 项时旧写法要做 ~280 万次比较（约 119ms，随条数平方增长）。
+    const byId = new Map(searchResults.map((x) => [String(x.modId), x]));
     document.querySelectorAll("#searchResultList input[type=checkbox]").forEach((cb) => {
-      const id = cb.id.replace(/^cb-/, "");
-      const it = searchResults.find((x) => String(x.modId) === id);
+      const it = byId.get(cb.id.replace(/^cb-/, ""));
       cb.checked = !!it && (it.isNsfw ? wantNsfw : wantNormal);
     });
   });
@@ -379,10 +387,13 @@ function bindSearchSave() {
 // 下载选中项（勾选的搜索结果显示 mod → 启动后台下载）
 function bindSearchDownloadSelected() {
   $("#downloadSelectedBtn").addEventListener("click", async () => {
-    const selected = searchResults.filter((it) => {
-      const cb = document.getElementById("cb-" + it.modId);
-      return cb && cb.checked;
-    });
+    // 2026-10-09 改：一次性拿全部已勾选 id（Set），替代「每个结果都 getElementById」的逐条查询
+    const checkedIds = new Set(
+      Array.from(document.querySelectorAll("#searchResultList input[type=checkbox]"))
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.id.replace(/^cb-/, ""))
+    );
+    const selected = searchResults.filter((it) => checkedIds.has(String(it.modId)));
     if (!selected.length) { $("#searchStatus").textContent = "请先勾选要下载的 mod"; return; }
     $("#searchStatus").textContent = `正在启动 ${selected.length} 个 mod 的下载…`;
     try {
@@ -416,7 +427,7 @@ async function keywordSearch() {
       if (!(wantNormal && wantNsfw)) {
         searchResults = searchResults.filter((it) => (it.isNsfw ? wantNsfw : wantNormal));
       }
-      renderSearchResults();
+      renderSearchResults(true);   // 关键词搜索 = 新结果集 → 全量重建
       if (st) {
         const norm = r.normalized ? `（${r.normalized.from} → ${r.normalized.to}）` : "";
         st.textContent = `关键词「${q}」${norm}: ${searchResults.length} 个结果${(wantNormal && wantNsfw) ? "" : "（已按分级筛选）"}`;
@@ -512,7 +523,7 @@ function bindKeywordSearch() {
         if (!(wantNormal && wantNsfw)) {
           searchResults = searchResults.filter((it) => (it.isNsfw ? wantNsfw : wantNormal));
         }
-        renderSearchResults();
+        renderSearchResults(true);   // 按角色抓取 = 新结果集 → 全量重建
         if (st) {
           st.textContent = `角色「${name}」（分类 ${r.catId || "-"}）: ${searchResults.length} 个结果${(wantNormal && wantNsfw) ? "" : "（已按分级筛选）"}`;
           st.className = "status ok";
@@ -558,20 +569,49 @@ function startSearchPoll() {
   }, 2000);
 }
 
-function renderSearchResults() {
+/** 渲染搜索结果列表。
+ *  @param {boolean} reset 结果集被整体替换（新搜索/清空/载入缓存）时传 true → 全量重建；
+ *                         默认 false → **增量追加**（搜索任务只增不减，保留已有行与用户勾选）。
+ *  2026-10-09 改：原来无条件整块重建 innerHTML，导致搜索轮询每 2 秒清空用户勾选（且 1680 行重复重建）。 */
+function renderSearchResults(reset) {
+  const list = $("#searchResultList");
   $("#resultCount").textContent = `共 ${searchResults.length} 个`;
   if (!searchResults.length) {
-    $("#searchResultList").innerHTML = '<div class="empty">暂无结果</div>';
+    list.innerHTML = '<div class="empty">暂无结果</div>';
+    renderedIds.clear();
     return;
   }
-  $("#searchResultList").innerHTML = searchResults.map((it) => `
+  // 需要全量重建的兜底情形：显式 reset / 列表为空 / 结果被换成另一批（首项变了或变少）
+  const firstKey = String(searchResults[0].modId);
+  const needFull = reset === true
+    || !list.querySelector(".result-item")
+    || searchResults.length < renderedIds.size
+    || !renderedIds.has(firstKey);
+  if (needFull) { list.innerHTML = ""; renderedIds.clear(); }
+
+  const rowHtml = (it) => `
     <div class="result-item">
       <input type="checkbox" id="cb-${it.modId}">
       <span class="badge ${it.isNsfw ? "nsfw" : "normal"}">${it.isNsfw ? "NSFW" : "普通"}</span>
       <span class="name"><a href="${esc(it.profileUrl)}" target="_blank">${esc(it.name)}</a></span>
       <span class="meta">${esc(it.game)} · ${esc(it.author)}</span>
       <span class="meta">${(() => { const a = fmtTs(it.dateAdded); return a !== "-" ? a : fmtTs(it.dateUpdated); })()}</span>
-    </div>`).join("");
+    </div>`;
+  const frag = document.createDocumentFragment();
+  let added = 0;
+  for (const it of searchResults) {
+    const key = String(it.modId);
+    if (renderedIds.has(key)) continue;   // 已渲染过 → 保持原 DOM（勾选状态不丢）
+    const tmp = document.createElement("div");
+    tmp.innerHTML = rowHtml(it);
+    frag.appendChild(tmp.firstElementChild);
+    renderedIds.add(key);
+    added++;
+  }
+  if (added) list.appendChild(frag);
+
+  // 旧实现（保留备查，勿删）：
+  // $("#searchResultList").innerHTML = searchResults.map((it) => `...rows...`).join("");
 }
 
 // ---------- 下载进度 ----------
@@ -1982,7 +2022,7 @@ async function init() {
     const c = await api("/api/search/cache");
     if (c.cache && c.cache.results && c.cache.results.length) {
       searchResults = c.cache.results;
-      renderSearchResults();
+      renderSearchResults(true);   // 启动恢复缓存 = 新结果集 → 全量重建
     }
     // 恢复「搜索正在后台运行」的状态：若 search-status 是 running 才继续轮询
     const st = await api("/api/search-status");
