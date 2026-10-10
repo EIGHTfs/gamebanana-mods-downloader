@@ -1111,7 +1111,7 @@ async function runDownloadLoop() {
 }
 
 async function doDownloadLoop() {
-  if (!task || (task.status !== "running" && task.status !== "preparing")) return;
+  if (!isTaskActive(task)) return;
   const settings = cfg.readConfig();
   task.status = "running";
 
@@ -1431,6 +1431,7 @@ function modInTask(url, excludePendingIdx) {
 // 返回 { reset: "new"|"done"|"stopped"|null, append: [url], dedupSkipped, listSkipped }
 function planForAppend(t, urls, extractModId) {
   const ex = (u) => { try { return String((extractModId || gbApi.extractModId)(u) || "").trim(); } catch (_) { return ""; } };
+  // status-check-ok: 这里不是「是否结束」判定，而是要在 done/stopped 之间区分重置模式（两者语义不同）
   const reset = !t ? "new" : (t.status === "done" ? "done" : (t.status === "stopped" ? "stopped" : null));
   let list = (urls || []).slice();
   // 本批内重复 modId 只留一个
@@ -1554,6 +1555,7 @@ function pauseTask() {
 }
 
 function resumeTask() {
+  // status-check-ok: 「继续」动作只对 paused 有意义，其它状态一律拒绝（正向语义，不会因新增状态而误放行）
   if (!task || task.status !== "paused") return { ok: false, error: "没有可继续的任务" };
   task.status = "running";
   task.message = "继续下载…";
@@ -1699,6 +1701,19 @@ function skipAllFailed() {
 //      不重试（本来就会继续下载）；仅任务已结束（done/paused）时的无结果残留（卡住）才重试
 //   ④ 重试没有重置任务列表状态 → 清 task.results 旧快照、重算 doneCount/currentIndex，
 //      前端 resultOf 不再回退读到旧失败结果
+// ---------- 任务状态判定（统一入口，勿在别处重写）----------
+// 2026-10-11 两次事故后收敛：**新增状态时排除式写法会静默并入旧分支**（paused 曾被当成「已结束」，
+//   导致前端在途行冒出重试按钮、后端「重试失败」把 3 万多条未下载项全部重新入队 ⇒ 写盘风暴）。
+//   规则由 scripts/check-status-logic.mjs 机械检查（已纳入 node --test）。
+/** 任务是否处于「活跃」（会继续推进下载） */
+function isTaskActive(task) {
+  return !!task && (task.status === "running" || task.status === "preparing");
+}
+/** 任务是否已「结束」（只有这三个终态；paused 不算） */
+function isTaskEnded(task) {
+  return !!task && (task.status === "done" || task.status === "stopped" || task.status === "error");
+}
+
 // 调用：retryFailed() 全量；retryFailed({ url, path }) 单项
 function retryFailed(q = {}) {
   if (!task) return { ok: false, error: "无下载任务" };
@@ -1711,7 +1726,7 @@ function retryFailed(q = {}) {
   //   原来用 stillRunning 取反当结束判断 ⇒ **暂停**也被当成结束 ⇒ 暂停态点「重试失败」会把
   //   所有「尚无结果」（其实只是还没轮到下载）的项判为卡住并全部重新入队——实测 3 万多条一起重试，
   //   结果表被清空、任务文件反复重写，直接把服务拖到接口超时（写盘 ≈76–95MB/s）。
-  const ended = task.status === "done" || task.status === "stopped" || task.status === "error";
+  const ended = isTaskEnded(task);   // 统一判定（见文件上方 isTaskEnded 说明）
   const failedIdx = [];
   for (let i = 0; i < (task.items || []).length; i++) {
     const item = task.items[i];

@@ -105,6 +105,7 @@ async function runQueryLoop() {
 }
 
 async function doQueryLoop() {
+  // status-check-ok: 搜索循环只在 running 时推进（正向语义：非 running 即停，不会误放行）
   if (!queryTask || queryTask.status !== "running") return;
   try {
     while (queryTask.status === "running") {

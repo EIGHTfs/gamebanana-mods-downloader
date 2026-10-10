@@ -254,7 +254,8 @@ function bind() {
       const st = await send({ type: "searchStatus" });
       renderSearch(st.results);
       setStatus($("#searchStatus"), (st.message || st.status || "搜索中") + "（" + ((st.results || []).length) + "）", st.status === "done" ? "ok" : "");
-      if (st.status && st.status !== "running") return;
+      // status-check-ok: 扩展弹窗只在 running 时显示进度（正向语义：非 running 即不显示）
+    if (st.status && st.status !== "running") return;
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   });
