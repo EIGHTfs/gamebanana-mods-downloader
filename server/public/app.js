@@ -846,6 +846,19 @@ function fmtSpeed(s) {
   return s >= 1048576 ? (s / 1048576).toFixed(2) + " MB/s" : Math.round(s / 1024) + " KB/s";
 }
 
+// 文件大小格式化：**按量级自动选单位**（B / KB / MB / GB / TB）
+//   2026-10-11 新增：下载列表每行显示「已下载大小 / 文件大小」，单位随数值自动切换，
+//   不再固定 MB（小图显示 0.0 MB、大包显示 4096.0 MB 都不好读）。
+function fmtSize(n) {
+  const b = Number(n);
+  if (!b || b < 0) return "";
+  if (b < 1024) return Math.round(b) + " B";
+  if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+  if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
+  if (b < 1099511627776) return (b / 1073741824).toFixed(2) + " GB";
+  return (b / 1099511627776).toFixed(2) + " TB";
+}
+
 function updateSpeedHud(task) {
   const el = $("#speedHud");
   if (!el) return;
@@ -1084,11 +1097,25 @@ function rowHtml(item, idx, task, doneMap) {
     if (ap.speed) statusText += ` ⚡${fmtSpeed(ap.speed)}`;
   }
   const bar = `<span class="row-bar ${barCls}"><span class="row-bar-fill" style="width:${barPct}%"></span></span>`;
+  // 2026-10-11 新增：每行显示「已下载大小 / 文件大小」（单位按量级自动切换，见 fmtSize）
+  //   下载中 → activeItems 的 received/total；已完成 → 结果里的 size；未开始但已知大小 → 0 B / size
+  let sizeText = "";
+  if (activeMap[idx]) {
+    const ap = activeMap[idx];
+    const recv = fmtSize(ap.received);
+    const tot = fmtSize(ap.total);
+    if (recv || tot) sizeText = (recv || "0 B") + " / " + (tot || "—");
+  } else if (r && r.size) {
+    sizeText = fmtSize(r.size);
+  } else if (item.size) {
+    sizeText = "0 B / " + fmtSize(item.size);
+  }
+  const sizeHtml = sizeText ? `<span class="row-size" title="已下载 / 文件大小">${esc(sizeText)}</span>` : "";
   // 2026-09-02 新增：失败/错误文本可点击复制（点击 .mm-err-copy 复制错误内容，便于排查/反馈）
   const statusHtml = (cls === "fail" && statusText && statusText !== "失败" && statusText !== "错误")
     ? `<span class="mm-err-copy" title="点击复制错误文本" data-copy="${esc(statusText)}">${esc(statusText)}</span>`
     : esc(statusText);
-  return `<div class="item ${cls}"><span class="icon">${icon}</span><span class="item-name">${esc(item.displayName || item.path || item.url || "")}${bar}</span><span class="status-text">${statusHtml}${actBtns}</span>${thumb}</div>`;
+  return `<div class="item ${cls}"><span class="icon">${icon}</span><span class="item-name">${esc(item.displayName || item.path || item.url || "")}${bar}${sizeHtml}</span><span class="status-text">${statusHtml}${actBtns}</span>${thumb}</div>`;
 }
 
 // 分组外层 HTML（折叠头 + 行列表）

@@ -395,9 +395,24 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 
 ---
 
+### 6. ✅ 已完成：下载列表每行显示「已下载大小 / 文件大小」（单位自动切换）
+
+- **需求**：进度页每个文件行显示「已下载 / 总大小」，单位按量级自动选择（不再固定 MB）。
+- **实现**：
+  - `server/public/app.js` 新增 `fmtSize()`：B / KB / MB / GB / TB **按量级自动切换**（1–2 位小数）。
+  - `rowHtml()` 三种取值来源——**下载中**取 `task.activeItems[].received/total`（与实时进度条同源，`idx` 对齐）；
+    **已完成**取 `resultsMap[i].size`；**未开始但已知大小**取 `item.size`（显示 `0 B / size`）；未知则不显示。
+  - 样式 `server/public/fragments/styles/task-list.css` 的 `.row-size`（右对齐、次要色、11px，进度条下一行）。
+- **模板同步**：`app.js` 与 `task-list.css` 都是模板下发件，已同步
+  `templates/_downloader/_gamebanana-mods/js/app.js` 与 `templates/_downloader/styles/task-list.css` 并组装回项目（逐字节一致）。
+- **验证**：本地沙箱夹具（下载中 / 已完成 / 未开始三种）+ 无头浏览器实测渲染出
+  `0 B / 43.6 MB`、`120.6 KB`、`0 B / 2.00 GB`（**三种单位自动切换** ✓，排版见附图）；
+  生产态 `/api/task` 的 `activeItems` 确认带 `received/total`（样本 `received=72,542,972 / total=198,155,255`）
+  ⇒ 下载中行显示为 `69.2 MB / 189.0 MB`；`node --test` 86/86 全绿。
+
 ## 版本
 
 > 版本记录已**外置**到 **[docs/CHANGELOG.md](docs/CHANGELOG.md)** —— 由 dsh-git-push 插件的 `doc-version`
 > 从 git log 聚合（`apply` 更新 / `check` 查漂移，可接 CI），启用该工具前的历史版本一并保留在该文件里。
 
-当前版本：**1.3.6**
+当前版本：**1.3.9**
