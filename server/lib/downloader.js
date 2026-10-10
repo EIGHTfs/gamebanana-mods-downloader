@@ -1134,7 +1134,12 @@ async function doDownloadLoop() {
   task.doneAt = Date.now();
   task.message = "全部完成";
   saveTask();
+  // 2026-10-11 收尾耗时探针：finalizeHtmls 每批只跑一次，但内含 8 处同步 fs 调用 + 6 个循环
+  //   （圈复杂度 84，审计拦截项）。万级任务时可能在「全部完成」瞬间阻塞事件循环——
+  //   先量出真实耗时再决定是否拆分/优化（避免凭直觉拆函数换来 1% 收益）。
+  const __finT0 = Date.now();
   try { await finalizeHtmls(); } catch (_) {}
+  console.log("[task] finalizeHtmls 收尾耗时 " + (Date.now() - __finT0) + "ms");
 }
 
 // ---------- 生产者循环体：逐个 mod 准备 ----------
