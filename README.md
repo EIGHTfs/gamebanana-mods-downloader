@@ -69,6 +69,11 @@ PID 文件：项目根 `gamebanana-mods-downloader.pid`（不入库）。日志�
 > 截图由模板的通用截图脚本生成：`node scripts/page-shot.mjs --password <访问密码> --theme dark`
 > （自动登录 → 切主题 → 逐标签截图 → 收集前端错误；进度页可加 `--redact-text/--redact-images` 打码）。
 >
+> **进度页配图用固化脚本**（元素选择不再现推，避免漏掉文件名）：
+> `GB_BASE=http://<本机IP>:8642 GB_PWD=<访问密码> bash scripts/shot-progress.sh`
+> —— 打码覆盖分组头的 mod 标识/香蕉网 URL、目标目录、行内文件名、进行中文件名（按扩展名）、缩略图与 `/volume` 路径；
+> 保留进度条、统计行、速度、状态文字与顶栏品牌（`--redact-exclude .brand-block`）。
+>
 > 图片走 jsDelivr CDN（`cdn.jsdelivr.net/gh/…`）：GitHub 默认的图片域名 `raw.githubusercontent.com` 在国内多数网络不可达，用相对路径时 README 会显示裂图。
 
 | 登录（夜间） | 下载（夜间） |
