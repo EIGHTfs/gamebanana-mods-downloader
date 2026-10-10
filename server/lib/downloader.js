@@ -1352,11 +1352,16 @@ async function finalizeHtmls() {
       //   图片/gif（含已存在/跳过的）补算内容 md5 写回 HTML。
       // 2026-08-30：纯本地已失去记录的旧文件不再「磁盘扫描追加记录」（不移动不删除）
       let md5Filled = 0;
+      // 2026-10-11 性能修复：补算 hash 改**流式异步 fileMd5**——原来 fileMd5Sync 用 readFileSync 把整个文件
+      //   读进内存，大图/大包会造成内存尖峰；并每 20 个文件让出一次事件循环，避免整组补算长时间占满磁盘 IO。
+      //   实测背景：批次收尾阶段进程读速 ≈8MB/s、日志连续刷 [md5-fill]，表现为「一开始任务硬盘大量读」。
+      let md5Seen = 0;
       for (const im of obj.images || []) {
         if (!im || im.hash) continue;
         const ip = path.join(finalDir, im.file || im.gbFile || "");
         if (ip && fs.existsSync(ip)) {
-          const h = fileMd5Sync(ip);
+          if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+          const h = await fileMd5(ip);
           if (h) { im.hash = h; md5Filled++; changed = true; }
         }
       }
@@ -1364,7 +1369,8 @@ async function finalizeHtmls() {
         if (!g || g.hash) continue;
         const gp = path.join(finalDir, g.localFile || g.file || "");
         if (gp && fs.existsSync(gp)) {
-          const h = fileMd5Sync(gp);
+          if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+          const h = await fileMd5(gp);
           if (h) {
             g.hash = h;
             if (!g.size) { try { g.size = fs.statSync(gp).size; } catch (_) {} }
