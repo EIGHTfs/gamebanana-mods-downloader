@@ -920,8 +920,18 @@ function downloadToFile(item, settings, onProgress) {
           return doFetch(u, redirLeft, false);
         }
         if (code >= 400) {
-          res.resume();
-          return reject(new Error(`下载失败 HTTP ${code}: ${u}`));
+          // 2026-10-11 诊断增强：4xx/5xx 时抓响应体前 200 字一并报出。
+          //   香蕉网的 404/403 常在 body 里给原因（文件已删/需登录/链接过期），
+          //   原实现只 res.resume() 丢弃响应体，导致任务被清空后无法回溯根因。
+          let snippet = "";
+          try { res.setEncoding("utf8"); } catch (_) {}
+          res.on("data", (c) => { if (snippet.length < 200) snippet += c; });
+          res.on("end", () => {
+            const tail = snippet ? ` | 响应体: ${snippet.replace(/\s+/g, " ").slice(0, 200)}` : "";
+            reject(new Error(`下载失败 HTTP ${code}: ${u}${tail}`));
+          });
+          res.on("error", () => reject(new Error(`下载失败 HTTP ${code}: ${u}`)));
+          return;
         }
         if (useRange && resumeOffset > 0 && code === 200) {
           // 服务器忽略 Range → 从头下
@@ -1022,6 +1032,13 @@ async function executeDownloadItem(item, settings, onProgress) {
     }
   }
   const errMsg = (lastErr && (lastErr.message || String(lastErr))) || "下载失败";
+  // 2026-10-11 失败诊断日志（可 grep）：把失败原因落进服务端日志，而不只写进 resultsMap。
+  //   原因：resultsMap 会被「清除失败」「终止任务」清掉，清完就再也查不到根因（实测踩过：
+  //   某个 mod 的压缩包全部 404，用户清掉失败项后无从定位）。日志保留 URL + HTTP 状态码 + 目标路径 + 原因。
+  if (!item.isGif) {
+    const httpHit = (String(errMsg).match(/HTTP \d+/) || ["HTTP -"])[0];
+    console.log(`[dl-fail] ${item.type || "file"} | ${httpHit} | url=${item.url || "-"} | path=${item.path || "-"} | ${String(errMsg).slice(0, 300)}`);
+  }
   // gif 失败 → 自动跳过（不显示失败）；其他文件失败 → 正常显示失败（可重试/跳过）
   if (item.isGif) return { path: item.path, ok: true, skipped: true, skipReason: "gif 下载失败，已跳过（不强求）: " + errMsg };
   return { path: item.path, ok: false, error: errMsg };
