@@ -928,13 +928,21 @@ function renderEmptyTask() {
   }
 }
 
+// 2026-10-11 修：任务是否已「收尾」（done/stopped/error）。
+//   旧写法用「status 不是 running/preparing」当收尾判断，把**暂停**也算进去了 ⇒ 手动暂停时
+//   在途项（尚无结果）被判为「卡住/失败」：全局「重试失败」按钮亮起、每行冒出 🔄重试/🚫跳过
+//   ——表现为「手动暂停被算作任务失败」。暂停只是没下完，不属于收尾。
+function isTaskEnded(task) {
+  return !!task && (task.status === "done" || task.status === "stopped" || task.status === "error");
+}
+
 // 任务总览统计：进度/成功失败跳过/全局重试按钮判定
 function taskStats(task, doneMap) {
-  // 2026-08-26 修复：失败项 + 卡住项（无结果且任务已结束）都可重试 → 全局重试按钮启用判定
+  // 2026-08-26 修复：失败项 + 卡住项（无结果且任务已收尾）都可重试 → 全局重试按钮启用判定
   const stuckOrFailed = (task.items || []).some((it, i) => {
     if (!it || !it.path) return false;
     const rr = doneMap[i];
-    return (rr && !rr.ok && !rr.skipped) || (!rr && task.status !== "running" && task.status !== "preparing");
+    return (rr && !rr.ok && !rr.skipped) || (!rr && isTaskEnded(task));
   });
   $("#retryBtn").disabled = !stuckOrFailed;
   const itemsLen = (task.items || []).length;
@@ -1037,11 +1045,12 @@ function rowHtml(item, idx, task, doneMap) {
   // 2026-09-02 错误项（构建失败，无 path）原因也显示
   else if (item.buildError) statusText += `（${item.buildError}）`;
   // 2026-08-26 加回：失败行 🔄重试 / 🚫跳过 按钮；
-  //   2026-08-26 修复：卡住行（无结果且任务非运行中）也显示按钮（重试/跳过后才能处理它）
+  //   2026-08-26 修复：卡住行（无结果且任务已收尾）也显示按钮（重试/跳过后才能处理它）
+  //   2026-10-11 修：收尾判定改用 isTaskEnded()——暂停不属于收尾，在途行不再冒出重试/跳过按钮
   //   2026-09-02 新增：type=error 且 path="" 的错误项（构建失败，只有 mod url）
   //     ——无法重试（无文件可下），但可清除（标记跳过）；显示「🚫 清除」
   let actBtns = "";
-  const canAct = r ? (r.ok === false && !r.skipped) : (task.status !== "running" && task.status !== "preparing");
+  const canAct = r ? (r.ok === false && !r.skipped) : isTaskEnded(task);
   if (canAct && item.path) {
     actBtns = ` <button class="mm-retry-btn" data-url="${esc(item.url || "")}" data-path="${esc(item.path || "")}" title="重试下载此文件">🔄 重试</button>` +
       ` <button class="mm-skip-btn" data-url="${esc(item.url || "")}" data-path="${esc(item.path || "")}" title="跳过此文件（下次请求可再下载）">🚫 跳过</button>`;
