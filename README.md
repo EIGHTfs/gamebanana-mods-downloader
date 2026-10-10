@@ -272,6 +272,11 @@ gamebanana-mods-downloader/
 > —— 实测批次收尾持续 ≈7–8MB/s 读盘，连 `/api/task` 都被拖到无响应。
 > 需要内容 hash 时：临时恢复 `server/lib/downloader.js`（finalizeHtmls）里注释的补算段即可 ——
 > 「重建索引」只重建索引表（读 description.html 的 JSON 块），**不会**补算内容 md5。
+>
+> **遗留物无需处理**：旧 md5 命名的文件、以及 `im.hash` 相关分支（downloader.js 的 `md5name` 匹配等）都不必清理 ——
+> 反查以 `gbMd5` 与 GB 原名为准；实测某图片条目 `hash` 为空也能正常按名反查（返回 `source:"html"`）。
+> 重新下载旧文件亦无影响（新下载仍按下载流算 hash，只是额外信息，不再回填历史文件）。
+> 另注：反查需输入**完整文件名**（含扩展名）；无后缀补全实测未命中，属已知小限制。
 
 ---
 
