@@ -1707,6 +1707,11 @@ function retryFailed(q = {}) {
   const single = !!(wantUrl || wantPath);
   const active = new Set((task.activeItems || []).map((a) => a.idx));
   const stillRunning = task.status === "running" || task.status === "preparing";
+  // 2026-10-11 修（与前端 isTaskEnded 对齐）：只有 done/stopped/error 才算「任务已结束」。
+  //   原来用 stillRunning 取反当结束判断 ⇒ **暂停**也被当成结束 ⇒ 暂停态点「重试失败」会把
+  //   所有「尚无结果」（其实只是还没轮到下载）的项判为卡住并全部重新入队——实测 3 万多条一起重试，
+  //   结果表被清空、任务文件反复重写，直接把服务拖到接口超时（写盘 ≈76–95MB/s）。
+  const ended = task.status === "done" || task.status === "stopped" || task.status === "error";
   const failedIdx = [];
   for (let i = 0; i < (task.items || []).length; i++) {
     const item = task.items[i];
@@ -1721,7 +1726,7 @@ function retryFailed(q = {}) {
     const r = resultAt(i);
     if (r && r.ok && !r.skipped) continue; // 已成功
     if (r && r.skipped) continue;          // 已跳过
-    if (!r && stillRunning) continue;      // 未开始（任务运行中无结果）→ 不重试，本来就会继续下载
+    if (!r && !ended) continue;            // 未结束（含暂停）：无结果 = 还没轮到，不是失败/卡住 → 不重试
     failedIdx.push(i); // 确实失败 或 卡住（任务已结束的无结果残留）→ 重新入队
   }
   // 2026-10-11 新增：type=error 的项（mod 解析/构建失败，无 path）也支持重试——
