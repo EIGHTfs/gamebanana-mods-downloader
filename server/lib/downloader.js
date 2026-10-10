@@ -1365,10 +1365,17 @@ async function consumeTaskItem(settings) {
 // 2026-08-26 修复：不再依赖 produce 阶段的 modDirByItem（重试/跳过补下载时 produce 未运行，
 //   modDirByItem 为空 → HTML 不会更新）——改为按 item.targetDir 从 task.items 直接分组，
 //   目标目录的 HTML 对象从磁盘读取（readIndexObj）
+// 2026-10-11 性能修复：记录已收尾过的 item（WeakSet，内存态、不入库）——
+//   收尾会对每个 item 做 existsSync + statSync，并读其所在目录的 description.html；
+//   实测 36,739 项 ⇒ ≈7 万次同步 stat + 58.5MB 索引读，是收尾耗时的主要构成之一。
+//   已收尾过且状态未变的项不必重做（重试/新下载会换 item 对象，WeakSet 自然失效）。
+const finalizedItems = new WeakSet();
+
 async function finalizeHtmls() {
   const dirs = new Map(); // finalDir -> { obj, items: [] }
   for (const item of task.items || []) {
     if (!item || !item.targetDir || !item.path) continue;
+    if (finalizedItems.has(item)) continue;   // 已收尾过 → 跳过（省掉重复 stat / 读索引）
     if (!dirs.has(item.targetDir)) {
       dirs.set(item.targetDir, { obj: readIndexObj(item.targetDir), items: [] });
     }
@@ -1462,9 +1469,15 @@ async function finalizeHtmls() {
       // }
       if (md5Filled > 0) console.log(`[md5-fill] ${(finalDir.split("/Mods/")[1] || finalDir).slice(0, 50)} ← 补算 ${md5Filled} 个 hash`);
       // 图片按 GB 原名不重命名（不再 md5 收敛）；gif 的 原名_大小MB 命名在 gifs 构建处完成
-      if (changed) writeIndexHtml(finalDir, obj);
-      // bug#1：下载完成后接线 ingestModDir——本 mod 的文件/图片名+hash 增量入反查索引（下次能反查命中）
-      try { hashIndex.ingestModDir(finalDir); } catch (_) {}
+      if (changed) {
+        writeIndexHtml(finalDir, obj);
+        // 2026-10-11 性能修复（实测 363–455 秒收尾的真凶）：ingestModDir 会**重写整个游戏索引文件**，
+        //   原来它无条件对**每个** mod 目录调用（数千次 × 数 MB ⇒ [io] 归因实测写盘 121MB/s）。
+        //   只有该目录的内容真的变了才需要并入索引。
+        try { hashIndex.ingestModDir(finalDir); } catch (_) {}
+      }
+      // 本目录处理完 → 标记这些 item 已收尾（下次 finalize 直接跳过，不再重复 stat/读索引）
+      for (const it of g.items) finalizedItems.add(it);
     } catch (_) {}
   }
 }
