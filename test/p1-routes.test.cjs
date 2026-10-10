@@ -24,7 +24,7 @@ const EXPECT = {
   cred: { pub: [], authed: ["GET /api/gb-login-status", "GET /api/cred"] },
   games: { pub: [], authed: ["GET /api/games", "POST /api/games", "GET /api/mapping", "POST /api/mapping/add-role", "GET /api/gb-characters", "GET /api/gb-search-games", "GET /api/gb-game-info", "GET /api/gb-warehouses"] },
   search: { pub: [], authed: ["GET /api/keyword-search", "GET /api/role-mods", "POST /api/search", "GET /api/search-status", "POST /api/search/stop", "GET /api/search/cache", "POST /api/search/clear", "POST /api/search/import", "POST /api/search/save", "GET /api/search/export"] },
-  download: { pub: [], authed: ["POST /api/download", "POST /api/receive", "POST /api/download-selected", "GET /api/task", "POST /api/task/pause", "POST /api/task/resume", "POST /api/task/stop", "POST /api/task/retry-failed", "POST /api/task/concurrency", "POST /api/task/restore-mode", "GET /api/task/restore-mode", "GET /api/task/export", "POST /api/task/import", "POST /api/skip", "POST /api/skip-all-failed", "POST /api/scan-incomplete", "POST /api/scan-incomplete/download"] },
+  download: { pub: [], authed: ["POST /api/download", "POST /api/receive", "POST /api/download-selected", "GET /api/task", "POST /api/task/pause", "POST /api/task/resume", "POST /api/task/stop", "POST /api/task/retry-failed", "POST /api/task/concurrency", "POST /api/task/restore-mode", "GET /api/task/restore-mode", "GET /api/task/export", "POST /api/task/import", "POST /api/skip", "POST /api/skip-all-failed", "POST /api/scan-incomplete", "POST /api/scan-incomplete/download", "GET /api/task/items", "GET /api/task/done"] },
   hashindex: { pub: [], authed: ["GET /api/hash-query", "GET /api/hash-index-status", "POST /api/hash-rebuild", "GET /api/hash-index-search"] },
   browse: { pub: [], authed: ["GET /api/browse", "GET /api/image"] },
   data: { pub: [], authed: ["GET /api/data/export", "POST /api/data/import"] },
@@ -32,7 +32,7 @@ const EXPECT = {
   "auto-update": { pub: [], authed: ["GET /api/auto-update/status", "POST /api/auto-update/config", "POST /api/auto-update/check", "POST /api/auto-update/restart"] }
 };
 
-loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 59 条）", async () => {
+loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 61 条）", async () => {
   let total = 0;
   for (const [file, exp] of Object.entries(EXPECT)) {
     const got = collect(file);
@@ -40,8 +40,8 @@ loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 59 条�
     assert.deepEqual(got.authed.slice().sort(), exp.authed.slice().sort(), file + " authed 路由不一致");
     total += got.pub.length + got.authed.length;
   }
-  assert.equal(total, 59);
-  log.info("共 " + total + " 条路由注册（拆分前 51 条一条未丢；新增含 GET /api/io 的 IO 监测）");
+  assert.equal(total, 61);
+  log.info("共 " + total + " 条路由注册（拆分前 51 条一条未丢；新增含 /api/io 与 /api/task/items|done 分页）");
 });
 
 // ---------- bug#6 ----------

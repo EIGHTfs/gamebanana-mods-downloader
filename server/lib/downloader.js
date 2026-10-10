@@ -1102,6 +1102,79 @@ function getTask() {
   return task;
 }
 
+// ---------- 任务查询：摘要 / 分页（2026-10-11 P0-2 接口瘦身）----------
+// 背景：任务涨到 3.6 万项后 `/api/task` 单次 34.3MB，而前端每 2 秒轮询一次 ⇒ ≈17MB/s，
+//   任何页面（含搜索页）都在拉，页面直接卡死。
+// 现在拆成三个查询：
+//   · getTaskSummary() —— 状态/统计/活动项，**不含** items/resultsMap（体积几十 KB 级）
+//   · getTaskItems()   —— 按区间回「未完成」项 + 其结果（进度页列表用，filter=open）
+//   · getTaskDone()    —— 按区间回「已完成」项 + 其结果（已完成列表按需拉，filter=done）
+// 终态判据：结果 ok===true 或 skipped===true；ok:false 属**失败**，仍算未完成（要留在列表里可重试）。
+
+/** 取某下标的结果（resultsMap 优先，回退 results 实时快照） */
+function resultAt(idx) {
+  if (task && task.resultsMap && task.resultsMap[idx] != null) return task.resultsMap[idx];
+  const arr = (task && task.results) || [];
+  return idx < arr.length ? arr[idx] : null;
+}
+
+/** 是否终态（成功或跳过） */
+function isTerminal(r) {
+  return !!(r && (r.ok === true || r.skipped === true));
+}
+
+/** 任务摘要（不含 items/resultsMap/results，供前端轮询） */
+function getTaskSummary() {
+  if (!task) return null;
+  getTask(); // 刷新 totalSpeed
+  const items = task.items || [];
+  const rm = task.resultsMap || {};
+  let ok = 0, skipped = 0, failed = 0;
+  for (const k of Object.keys(rm)) {
+    const r = rm[k];
+    if (!r || typeof r !== "object") continue;
+    if (r.skipped) skipped++;
+    else if (r.ok === true) ok++;
+    else if (r.ok === false) failed++;
+  }
+  const { items: _i, resultsMap: _r, results: _res, ...rest } = task;
+  return Object.assign(rest, {
+    itemsTotal: items.length,
+    okCount: ok,
+    skippedCount: skipped,
+    failCount: failed,
+    pendingModsCount: (task.pendingMods || []).length,
+    itemsIncluded: false // 明确告知前端：本次未带 items（列表请用 /api/task/items）
+  });
+}
+
+/**
+ * 分页取项 + 结果。
+ * @param {object} opts { filter: "open"(默认)|"done"|"all", offset, limit }
+ * @returns {{ ok:boolean, items:Array<{idx:number,item:object,result:object|null}>, total:number, offset:number, limit:number, filter:string }}
+ */
+function getTaskItems(opts = {}) {
+  const out = { ok: true, items: [], total: 0, offset: 0, limit: 0, filter: "open" };
+  if (!task) return out;
+  const all = task.items || [];
+  const filter = ["open", "done", "all"].indexOf(opts.filter) >= 0 ? opts.filter : "open";
+  const offset = Math.max(0, Number(opts.offset) || 0);
+  const limit = Math.min(2000, Math.max(1, Number(opts.limit) || 500));
+  const picked = [];
+  for (let i = 0; i < all.length; i++) {
+    if (!all[i]) continue;
+    const terminal = isTerminal(resultAt(i));
+    if (filter === "open" && terminal) continue;
+    if (filter === "done" && !terminal) continue;
+    picked.push(i);
+  }
+  out.total = picked.length; out.offset = offset; out.limit = limit; out.filter = filter;
+  for (const i of picked.slice(offset, offset + limit)) {
+    out.items.push({ idx: i, item: all[i], result: resultAt(i) || null });
+  }
+  return out;
+}
+
 // ---------- 主循环 ----------
 async function runDownloadLoop() {
   if (running) return;
@@ -1830,6 +1903,8 @@ function restorePendingTask() {
 
 module.exports = {
   getTask,
+  getTaskSummary,
+  getTaskItems,
   startDownloadTask,
   pauseTask,
   resumeTask,

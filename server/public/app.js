@@ -623,11 +623,30 @@ function bindProgress() {
   startTaskPoll();
 }
 
+// 2026-10-11 P0-2：进度页数据 = 后端摘要（状态/统计/活动项）+ 按需拉取的「未完成项」分页。
+//   为什么：/api/task 原来回整个任务（3.6 万项 ⇒ 34.3MB/次 × 每 2 秒 ≈17MB/s），页面被拖死。
+//   这里把「摘要 + 未完成项」拼成 renderTask 需要的形状（items 用稀疏数组、resultsMap 只放未完成项），
+//   渲染逻辑本身不用改。
+async function loadTaskView() {
+  const r = await api("/api/task");
+  const t = r && r.task;
+  if (!t) return null;
+  const page = await api("/api/task/items?filter=open&limit=2000");
+  const merged = Object.assign({}, t, { items: [], resultsMap: {} });
+  for (const row of ((page && page.items) || [])) {
+    if (!row || row.idx == null) continue;
+    merged.items[row.idx] = row.item;
+    if (row.result) merged.resultsMap[row.idx] = row.result;
+  }
+  merged.openTotal = (page && page.total) || 0;
+  return merged;
+}
+
 // 暂停/继续/停止后立即刷新列表（不等 2s 轮询）+ 停止清空列表
 async function refreshTaskView() {
   try {
-    const t = await api("/api/task");
-    renderTask(t.task);
+    const t = await loadTaskView();
+    if (t) renderTask(t);
   } catch (_) {}
 }
 
@@ -649,13 +668,13 @@ function bindTaskControlButtons() {
   });
   $("#retryBtn").addEventListener("click", async () => {
     const r = await api("/api/task/retry-failed", "POST", {});
-    if (r && r.ok) { if (r.message) showFeedback(r.message, "ok"); try { const t = await api("/api/task"); renderTask(t.task); } catch (_) {} }
+    if (r && r.ok) { if (r.message) showFeedback(r.message, "ok"); try { const t = await loadTaskView(); if (t) renderTask(t); } catch (_) {} }
     else showFeedback((r && r.error) || "重试失败", "err");
   });
   // 2026-08-26 加回：一键清除下载失败（失败项标记跳过，前端立即消失）
   $("#clearFailBtn").addEventListener("click", async () => {
     const r = await api("/api/skip-all-failed", "POST", {});
-    if (r && r.ok) { if (r.skipped > 0 && r.message) showFeedback(r.message, "ok"); try { const t = await api("/api/task"); renderTask(t.task); } catch (_) {} }
+    if (r && r.ok) { if (r.skipped > 0 && r.message) showFeedback(r.message, "ok"); try { const t = await loadTaskView(); if (t) renderTask(t); } catch (_) {} }
     else showFeedback((r && r.error) || "清除失败失败", "err");
   });
 }
@@ -726,7 +745,7 @@ function bindRowActionDelegation() {
       ev.preventDefault();
       // 2026-09-01 修复（问题：单任务重试变成全部重试）——行级按钮只重试这一项
       const r = await api("/api/task/retry-failed", "POST", { url: retryBtn.dataset.url || "", path: retryBtn.dataset.path || "" });
-      if (r && r.ok) { if (r.message) showFeedback(r.message, "ok"); try { const t = await api("/api/task"); renderTask(t.task); } catch (_) {} }
+      if (r && r.ok) { if (r.message) showFeedback(r.message, "ok"); try { const t = await loadTaskView(); if (t) renderTask(t); } catch (_) {} }
       else showFeedback((r && r.error) || "重试失败", "err");
       return;
     }
@@ -734,7 +753,7 @@ function bindRowActionDelegation() {
     if (skipBtn) {
       ev.preventDefault();
       const r = await api("/api/skip", "POST", { url: skipBtn.dataset.url, path: skipBtn.dataset.path });
-      if (r && r.ok) { try { const t = await api("/api/task"); renderTask(t.task); } catch (_) {} }
+      if (r && r.ok) { try { const t = await loadTaskView(); if (t) renderTask(t); } catch (_) {} }
       else showFeedback((r && r.error) || "跳过失败", "err");
       return;
     }
@@ -840,8 +859,8 @@ function startTaskPoll() {
     if (!listEl || listEl.offsetParent === null) return;
     inFlight = true;
     try {
-      const r = await api("/api/task");
-      renderTask(r.task);
+      const t = await loadTaskView();
+      if (t) renderTask(t);
     } catch (_) {}
     finally { inFlight = false; }
   }, 2000);
@@ -972,9 +991,11 @@ function taskStats(task, doneMap) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const doneValues = Object.values(task.resultsMap || {});
-  const okCount = doneValues.filter((r) => r && r.ok && !r.skipped).length;
-  const skipCount = doneValues.filter((r) => r && r.skipped).length;
-  const failCount = doneValues.filter((r) => r && !r.ok).length;
+  // 2026-10-11 P0-2：/api/task 只回摘要时，列表里只有「未完成项」，resultsMap 不再是全量 ⇒
+  //   统计优先用后端摘要给的计数（okCount/skippedCount/failCount），回退到本地结果表。
+  const okCount = task.okCount != null ? task.okCount : doneValues.filter((r) => r && r.ok && !r.skipped).length;
+  const skipCount = task.skippedCount != null ? task.skippedCount : doneValues.filter((r) => r && r.skipped).length;
+  const failCount = task.failCount != null ? task.failCount : doneValues.filter((r) => r && !r.ok).length;
   let metaText = `${done}/${total} 项 | 成功 ${okCount} | 失败 ${failCount}`;
   if (skipCount) metaText += ` | 跳过 ${skipCount}`;
   return { total, done, pct, metaText, okCount, skipCount, failCount };

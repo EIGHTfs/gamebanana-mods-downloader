@@ -23,7 +23,19 @@ module.exports = createRoute({
 
   "POST /api/download-selected": downloadSelected(api),
 
-  "GET /api/task": (req, res) => sendJson(res, { ok: true, task: downloader.getTask() }, 200),
+  // 2026-10-11 P0-2：`/api/task` 只回摘要（状态/统计/活动项）——原来回整个 task（3.6 万项 ⇒ 34.3MB/次，
+//   前端每 2 秒轮询 ⇒ ≈17MB/s，任何页面都在拉、页面卡死）。列表改用下面的分页接口按需拉。
+  "GET /api/task": (req, res) => sendJson(res, { ok: true, task: downloader.getTaskSummary() }, 200),
+  // 任务项分页：filter=open（未完成，默认）/ done / all；offset+limit（limit 上限 2000）
+  "GET /api/task/items": (req, res, ctx) => {
+    const q = (ctx && ctx.query) || {};
+    return sendJson(res, downloader.getTaskItems({ filter: q.filter, offset: q.offset, limit: q.limit }), 200);
+  },
+  // 已完成项分页（与 items 同实现，filter 固定 done）
+  "GET /api/task/done": (req, res, ctx) => {
+    const q = (ctx && ctx.query) || {};
+    return sendJson(res, downloader.getTaskItems({ filter: "done", offset: q.offset, limit: q.limit }), 200);
+  },
   "POST /api/task/pause": (req, res) => sendJson(res, downloader.pauseTask(), 200),
   "POST /api/task/resume": (req, res) => sendJson(res, downloader.resumeTask(), 200),
   "POST /api/task/stop": (req, res) => sendJson(res, downloader.stopTask(), 200),
