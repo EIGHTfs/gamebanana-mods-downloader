@@ -30,6 +30,13 @@ const { parseIndexObj, readIndexObj } = require("./index-html");
 let gbIndex = new Map();      // hash -> {modId, modName, author, game, url, fileName, gbMd5}
 let localIndex = new Map();   // hash -> {modDir, file, hash, gbMd5}
 let nameIndex = new Map();    // GB 原名(短名/压缩包名) -> {modId, modName, author, game, url, kind}
+// 2026-10-11 新增：**去掉后缀的 GB 原名** -> 同名条目（查询不带后缀时用，如输入 69b46e18405cc 命中 69b46e18405cc.jpg）
+//   只存在于内存（不落盘、不进 name 表），由 mergeAll 重建 + ingest 时增量补；首见优先。
+let stemIndex = new Map();
+/** 取名字的「无后缀」形态（小写、去尾部 .ext） */
+function stemOf(name) {
+  return String(name || "").toLowerCase().trim().replace(/\.[a-z0-9]+$/i, "");
+}
 let loadedGames = new Map();  // game -> { game, gb: Map, local: Map, name: Map }（每游戏内存副本）
 let buildState = { running: false, lastAt: 0, lastMs: 0, error: "" };
 
@@ -100,6 +107,12 @@ function mergeAll() {
     mergeInto(gbIndex, g.gb);
     mergeInto(localIndex, g.local);
     mergeInto(nameIndex, g.name);
+  }
+  // 2026-10-11：同步重建「无后缀名」索引（只登记真正带后缀的名字，首见优先）
+  stemIndex = new Map();
+  for (const [k, v] of nameIndex) {
+    const st = stemOf(k);
+    if (st && st !== k && !stemIndex.has(st)) stemIndex.set(st, { ...v, matchedName: k });
   }
 }
 
@@ -175,17 +188,21 @@ function queryByHash(hash) {
   // HTML 反查：GB 原名（图片短名如 69b46e18405cc.jpg / 压缩包名）
   const byName = nameIndex.get(key);
   if (byName) return { source: "html", ...byName, file: byName.fileName || byName.file || key, kind: byName.kind || "file", modDir: "" };
-  // 忽略后缀再查：输入 "69b46e18405cc"（无 .jpg）→ 补后缀匹配
-  const noExt = key.replace(/\.[a-z0-9]+$/i, "");
-  if (noExt !== key) {
-    const byName2 = nameIndex.get(noExt);
-    if (byName2) return { source: "html", ...byName2, file: byName2.fileName || byName2.file || key, kind: byName2.kind || "file", modDir: "" };
-    // 也尝试已知图片后缀补齐
-    for (const ext of [".jpg", ".png", ".jpeg", ".gif", ".webp"]) {
-      const cand = nameIndex.get(noExt + ext);
-      if (cand) return { source: "html", ...cand, file: cand.fileName || cand.file || key, kind: cand.kind || "file", modDir: "" };
-    }
-  }
+  // 2026-10-11 修：**忽略已记录名的后缀**再查一次——原来只在「查询带后缀」时补后缀（方向反了，
+  //   输入 69b46e18405cc 命不中已记录的 69b46e18405cc.jpg）。现在用 stemIndex 双向覆盖：
+  //   查询不带后缀 → 直接命中；查询带后缀 → 用其无后缀形态命中。
+  const byStem = stemIndex.get(key.replace(/\.[a-z0-9]+$/i, ""));
+  if (byStem) return { source: "html", ...byStem, file: byStem.fileName || byStem.matchedName || key, kind: byStem.kind || "file", modDir: "" };
+  // 旧逻辑（只在查询带后缀时补全后缀；已被 stemIndex 覆盖，注释保留备查）：
+  // const noExt = key.replace(/\.[a-z0-9]+$/i, "");
+  // if (noExt !== key) {
+  //   const byName2 = nameIndex.get(noExt);
+  //   if (byName2) return { source: "html", ...byName2, file: byName2.fileName || byName2.file || key, kind: byName2.kind || "file", modDir: "" };
+  //   for (const ext of [".jpg", ".png", ".jpeg", ".gif", ".webp"]) {
+  //     const cand = nameIndex.get(noExt + ext);
+  //     if (cand) return { source: "html", ...cand, file: cand.fileName || cand.file || key, kind: cand.kind || "file", modDir: "" };
+  //   }
+  // }
   return null;
 }
 
@@ -261,8 +278,12 @@ function ingestModDir(modDir) {
   const putName = (name, kind) => {
     const key = String(name || "").toLowerCase().trim();
     if (!key) return;
-    if (!g.name.has(key)) g.name.set(key, { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: name, kind });
-    if (!nameIndex.has(key)) nameIndex.set(key, { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: name, kind });
+    const entry = { modId: gbMeta.modId, modName: gbMeta.modName, author: gbMeta.author, game: gbMeta.game, url: gbMeta.url, fileName: name, kind };
+    if (!g.name.has(key)) g.name.set(key, entry);
+    if (!nameIndex.has(key)) nameIndex.set(key, entry);
+    // 2026-10-11：同时登记「无后缀名」形态，供不带后缀的查询命中
+    const st = stemOf(key);
+    if (st && st !== key && !stemIndex.has(st)) stemIndex.set(st, { ...entry, matchedName: key });
   };
   for (const f of obj.files || []) {
     putGb(f.gbMd5, f.file);
