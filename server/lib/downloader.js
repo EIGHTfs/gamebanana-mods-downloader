@@ -1709,7 +1709,29 @@ function retryFailed(q = {}) {
     if (!r && stillRunning) continue;      // 未开始（任务运行中无结果）→ 不重试，本来就会继续下载
     failedIdx.push(i); // 确实失败 或 卡住（任务已结束的无结果残留）→ 重新入队
   }
-  if (!failedIdx.length) return { ok: true, retried: 0, message: single ? "无匹配的失败项" : "无失败项可重试" };
+  // 2026-10-11 新增：type=error 的项（mod 解析/构建失败，无 path）也支持重试——
+  //   实测 mods/552273 因响应被截断（瞬时故障）被记为 error，而前端对无 path 的 error 项只给「🚫清除」、
+  //   后端下面也显式跳过 error 项 ⇒ 该 mod 只能被丢弃、无法补救。
+  //   修法：把该 mod 重新放回 pendingMods，由生产者循环重新解析构建（条目结构与追加任务一致：{profileUrl,name}）。
+  let reQueued = 0;
+  for (let i = 0; i < (task.items || []).length; i++) {
+    const item = task.items[i];
+    if (!item || item.type !== "error" || item._skip) continue;
+    if (single) {
+      const hit = (wantUrl && item.url && String(item.url) === wantUrl) ||
+                  (wantPath && item.path && String(item.path) === wantPath);
+      if (!hit) continue;
+    }
+    const rr = resultAt(i);
+    if (rr && rr.skipped) continue;
+    task.pendingMods = task.pendingMods || [];
+    task.pendingMods.push({ profileUrl: item.modUrl || item.url, name: item.modName || item.url });
+    if (task.resultsMap) delete task.resultsMap[i];
+    resultsByIndex.delete(i);
+    item._skip = true;   // 旧错误项标记跳过，避免与新解析出的项重复显示
+    reQueued++;
+  }
+  if (!failedIdx.length && !reQueued) return { ok: true, retried: 0, message: single ? "无匹配的失败项" : "无失败项可重试" };
   failedIdx.sort((a, b) => a - b);
   let minIdx = Infinity;
   for (const i of failedIdx) {
@@ -1733,7 +1755,7 @@ function retryFailed(q = {}) {
   task.updatedAt = Date.now();
   saveTask();
   runDownloadLoop();
-  return { ok: true, retried: failedIdx.length, message: task.message };
+  return { ok: true, retried: failedIdx.length + reQueued, message: task.message };
 }
 
 // 启动时恢复任务（2026-08-26 修复：重启后下载列表不应消失）

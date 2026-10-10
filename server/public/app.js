@@ -1055,8 +1055,10 @@ function rowHtml(item, idx, task, doneMap) {
     actBtns = ` <button class="mm-retry-btn" data-url="${esc(item.url || "")}" data-path="${esc(item.path || "")}" title="重试下载此文件">🔄 重试</button>` +
       ` <button class="mm-skip-btn" data-url="${esc(item.url || "")}" data-path="${esc(item.path || "")}" title="跳过此文件（下次请求可再下载）">🚫 跳过</button>`;
   } else if (canAct && item.type === "error" && (item.url || item.displayName)) {
-    // 无 path 的错误项：无文件可重试，只提供清除（标记跳过，避免反复显示错误）
-    actBtns = ` <button class="mm-skip-btn" data-url="${esc(item.url || "")}" data-path="" title="清除此错误（下次请求可再尝试此 mod）">🚫 清除</button>`;
+    // 2026-10-11 修：无 path 的错误项（mod 解析/构建失败）原先只给「清除」⇒ 瞬时故障（响应被截断）
+    //   也只能把 mod 丢掉。现在同时给「🔄 重试」——后端会把该 mod 放回 pendingMods 重新解析构建。
+    actBtns = ` <button class="mm-retry-btn" data-url="${esc(item.url || "")}" data-path="" title="重新解析并下载此 mod">🔄 重试</button>` +
+      ` <button class="mm-skip-btn" data-url="${esc(item.url || "")}" data-path="" title="清除此错误（下次请求可再尝试此 mod）">🚫 清除</button>`;
   }
   // 2026-08-26：跳过的图片也显示预览图（已存在/已下载的图片项都显示缩略图）
   const hasFile = r && (r.ok || (r.skipped && r.exists)) && item.path;
