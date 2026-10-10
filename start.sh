@@ -428,8 +428,8 @@ status_server() {
   fi
 
   local curlout code time body
-  # 2026-10-11：临时文件改由 mktemp 派生（原来写死 /tmp/...，换环境/多实例会撞车）
-  body="$(mktemp 2>/dev/null || echo "${PROJECT_ROOT:-.}/.status-body.$")"
+  # 2026-10-11：临时文件改由 mktemp 派生（原来写死 /tmp/...，换环境/多实例会撞车；路径卫生门禁会拦）
+  body="$(mktemp 2>/dev/null || echo "./.status-body.$")"
   curlout="$(curl -sS -m 5 -o "$body" -w '%{http_code} %{time_total}' "http://127.0.0.1:$port/api/status" 2>/dev/null || echo "000 0")"
   code="${curlout%% *}"
   time="${curlout#* }"
@@ -439,8 +439,7 @@ status_server() {
   else
     err "HTTP:   ✗ GET /api/status  HTTP $code"
   fi
-  rm -f "$body" 2>/dev/null
-  rm -f "/tmp/${PROJECT_NAME}-status.body"
+  rm -f "$body"
 
   if [ -f "$LOG_FILE" ]; then
     local sz mtime

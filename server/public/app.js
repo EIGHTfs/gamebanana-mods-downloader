@@ -832,6 +832,12 @@ function startTaskPoll() {
   let inFlight = false;
   taskPollTimer = setInterval(async () => {
     if (inFlight) return;
+    // 2026-10-11 修（搜索页卡死的真因）：**不在进度页时不拉任务**。
+    //   实测 /api/task 全量单次 34.3MB（items 36,739 条），每 2 秒一轮 ⇒ ≈17MB/s 持续拉取；
+    //   而轮询是全局的，切到「搜索」页也照拉 ⇒ 页面直接卡死（用户反馈「点搜索后卡死」）。
+    //   判据用「任务列表元素是否可见」，不依赖标签状态实现；切回进度页后 2 秒内自动恢复刷新。
+    const listEl = $("#taskList");
+    if (!listEl || listEl.offsetParent === null) return;
     inFlight = true;
     try {
       const r = await api("/api/task");
