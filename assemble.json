@@ -61,6 +61,7 @@
     "templates/js/core/index.js": "server/core/index.js",
     "templates/js/store/json-dir.js": "server/store/json-dir.js",
     "templates/js/store/marker-manifest.js": "server/store/marker-manifest.js",
+    "templates/js/store/state-store.js": "server/store/state-store.js",
     "templates/js/http/path-safe.js": "server/http/path-safe.js",
     "templates/js/http/require-sibling.js": "server/http/require-sibling.js",
     "templates/js/route/route-core.js": "server/route/route-core.js",
