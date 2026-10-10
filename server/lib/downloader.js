@@ -161,10 +161,25 @@ function isImageExt(name) {
 //   <h1>mod名</h1>
 //   <p class="meta">作者 / 游戏 / 分类 / 版本 / 时间 / 原链接 / 下载路径</p>
 //   + 文件列表（文件名/大小/MD5）+ 图片 + 描述（gif 外链替换为本地重命名名 localFile）
-function buildHtmlContent(obj) {
+// 2026-10-11 修复：状态列原来读 `f.exists` —— 而 `f` 来自 GB 索引（obj.files[]），**从来没有 exists 字段**
+//   ⇒ 该列恒为空（HTML 文件表格"状态"没有数据来源）。
+//   改为接真实数据源：文件是否已落在本 mod 的下载目录下。
+//   ⚠️ obj.dir 是**相对**路径（相对 target.root，仅供展示），直接给 fs 用会按进程 CWD 解析 ⇒ 全部误判；
+//      故由调用方传入绝对目录 absDir（writeIndexHtml 本来就拿到绝对 modDir）；拿不到时如实显示 "-"。
+// @param {object} obj 索引对象
+// @param {string} [absDir] 该 mod 的绝对目录（判定文件是否已下载用）
+function buildHtmlContent(obj, absDir) {
   const cat = [obj.category, obj.superCategory].filter(Boolean).join(" / ");
+  const baseDir = absDir || (path.isAbsolute(String(obj.dir || "")) ? obj.dir : "");
   const filesHtml = (obj.files || [])
-    .map((f) => `<tr><td>${escapeHtml(f.file)}</td><td>${fmtSize(f.size)}</td><td><code>${escapeHtml(f.gbMd5 || f.hash || "-")}</code></td><td>${f.exists ? "已存在" : ""}</td></tr>`)
+    .map((f) => {
+      let exists = f.exists;
+      if (exists === undefined && baseDir) {
+        try { exists = fs.existsSync(path.join(String(baseDir), String(f.file || ""))); } catch (_) { exists = false; }
+      }
+      const statusTxt = exists === undefined ? "-" : (exists ? "已下载" : "未下载");
+      return `<tr><td>${escapeHtml(f.file)}</td><td>${fmtSize(f.size)}</td><td><code>${escapeHtml(f.gbMd5 || f.hash || "-")}</code></td><td>${statusTxt}</td></tr>`;
+    })
     .join("");
   const imagesHtml = (obj.images || [])
     .map((img) => `<a href="${escapeHtml(img.file)}" target="_blank"><img src="${escapeHtml(img.file)}" loading="lazy" class="thumb" alt="preview"></a>`)
@@ -228,7 +243,8 @@ function buildHtmlContent(obj) {
 
 function writeIndexHtml(modDir, obj) {
   fs.mkdirSync(modDir, { recursive: true });
-  fs.writeFileSync(path.join(modDir, "description.html"), buildHtmlContent(obj), "utf8");
+  // 传绝对 modDir：HTML 里文件状态列要按真实磁盘存在性判定（obj.dir 是相对路径，不能给 fs 用）
+  fs.writeFileSync(path.join(modDir, "description.html"), buildHtmlContent(obj, modDir), "utf8");
 }
 
 // ---------- 第一步：解析 + 算路径 + 生成 HTML ----------
@@ -1931,6 +1947,8 @@ module.exports = {
   getTaskItems,
   // 2026-10-11：导出以便单测覆盖「追加去重」的语义与复杂度（原 O(n×m) 曾致 12.8 秒无响应）
   planForAppend,
+  // 2026-10-11：导出以便单测覆盖 HTML 文件表格「状态」列的数据来源（原读不存在的 f.exists ⇒ 恒为空）
+  buildHtmlContent,
   startDownloadTask,
   pauseTask,
   resumeTask,
