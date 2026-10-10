@@ -32,7 +32,10 @@ loggedTest(log, "isExcluded: 运行态/敏感路径必须排除", () => {
     ".auto-update-tmp/repo.tar.gz",    // 本模式临时目录
     ".auto-update-state.json",         // 状态文件
     "release/gbmd.zip",                // 构建产物
-    "dist/x.js"
+    "dist/x.js",
+    // 2026-10-11 修：start*.sh 是「重启入口」，2026-10-08 起被显式排除（保护启停脚本不被远端旧版覆盖）
+    "start.sh",
+    "start-linux.sh"
   ];
   for (const p of MUST_EXCLUDE) {
     assert.equal(au.isExcluded(p), true, "应当排除: " + p);
@@ -48,8 +51,8 @@ loggedTest(log, "isExcluded: 代码/资源路径必须放行", () => {
     "server/config.js",
     "server/public/index.html",
     "server/public/app.js",
-    "start.sh",
-    "start-linux.sh",
+    // 2026-10-11 修：start*.sh 是「重启入口」，2026-10-08 起被显式排除（保护启停脚本不被远端旧版覆盖），
+    //   断言随之从「放行」改为「排除」（见下方 MUST_EXCLUDE）。
     "scripts/gen-mapping.js",
     "scripts/installer",
     "crx/extension/content.js",
@@ -121,7 +124,8 @@ loggedTest(log, "copyTreeSafe: 运行态保留 + 代码更新 + 不误删目标�
     assert.equal(fs.readFileSync(path.join(dst, "server", "app.js"), "utf8"), "NEW-APP", "app.js 应更新");
     assert.equal(fs.readFileSync(path.join(dst, "server", "lib", "auto-update.js"), "utf8"), "NEW-AU", "auto-update.js 应更新");
     assert.equal(fs.readFileSync(path.join(dst, "json", "role", "Genshin Impact.json"), "utf8"), "NEW-ROLE", "角色缓存应更新");
-    assert.equal(fs.readFileSync(path.join(dst, "start.sh"), "utf8"), "NEW-START", "start.sh 应更新");
+    // 2026-10-11 修：重启入口按排除规则跳过——源里的 start.sh 不得覆盖目标（否则自动更新会换掉启停脚本）
+    assert.equal(fs.existsSync(path.join(dst, "start.sh")), false, "start.sh 应按排除规则跳过，不复制到目标");
 
     // 目标多余文件不得删除
     assert.equal(fs.existsSync(path.join(dst, "README.keep.md")), true, "目标多余文件不得删除");

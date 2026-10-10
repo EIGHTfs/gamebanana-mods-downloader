@@ -347,12 +347,15 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 - `json/role/<游戏>.json` 的 `characters` 由字符串数组改为对象数组 `[{name,url}]`（旧格式读取自动归一化 + 懒迁移补网址）。
 - 实测（原神）：角色 144 个、带分类网址 130 个；`Aether → /mods/cats/19510` → 抓出该分类真实 mod 列表。
 
-### 3. 存量测试未跟上模板化改造（12 项红）
+### 3. ✅ 已完成：存量测试跟上模板化改造（原 12 项红 → 86/86 全绿）
 
-- 状态：待处理
-- 现象：`node --test` 有 12 项失败，全部集中在 6 个**模板化改造前**的测试文件。
-- 根因：这些文件仍 `require("../server/utils/*")`，而该目录在 2026-09 模板化改造中已拆成 `server/core|http|route|config|store|update|assemble/`（例：`utils/path-safe` → `http/path-safe.js`、`utils/index-html` → `lib/index-html.js`、`utils/fs-async` → `http/fs-async.js`；`utils/http`、`utils/html` 需进一步定位对应模块）。
-- 涉及文件：`test/p1-routes.test.cjs`、`test/p2-dedup.test.cjs`、`test/p3-bug1.test.cjs`、`test/p4-auth-cleanup.test.cjs`、`test/incomplete-scan.test.cjs`、`scripts/test-auto-update.cjs`（另 `bug#5`/`isExcluded`/`copyTreeSafe` 等用例随这些文件一起红）。
+- 结果：`node --test` **86 项全绿**（改造前 64 项 / 52 通过 / 12 失败）。
+- 修法：
+  ① **require 路径按现结构改写**：`utils/index-html`→`lib/index-html`、`utils/http`→`http/http-utils`、`utils/path-safe`→`http/path-safe`、`utils/html`→`http/html-utils`、`utils/fs-async`→`http/fs-async`、`lib/json-dir`→`store/json-dir`；`routes/auth.js` 的 `../server/auth` 改为 `../server/auth/auth`（该目录无 index.js）。
+  ② **测试收集方式随范式更新**：`createRoute` 改成表式导出后，旧写法「传假 api 对象拦截 `route`/`routePublic`」收集到 0 条。模板侧在工厂返回值上挂了**只读路由表**（`templates/js/route/route-factory.js` 的 `routeHandler.routes`），`test/p1-routes.test.cjs` 直接读表，`test/p5-bug5.test.cjs` 从表里取 change-password handler + `require.cache` 注入 mock 配置 + mock req/res 调用。
+  ③ **路由清单按实际注册更新为 11 文件 / 58 条**：拆分前 51 条**一条未丢**；新增 7 条来自后续功能（`auto-update` 文件 4 条、`GET /api/gb-search-games`、`GET /api/role-mods`、`settings` 的 `* /api/status` 展开为 GET+POST）。
+  ④ `start*.sh` 断言对齐 2026-10-08 的「保护重启入口」设计（从「应放行」改为「应排除」），并修正 `copyTreeSafe` 对 `dst/start.sh` 的过时期望。
+  ⑤ p4 的 auth 用例按框架版 API 重写：无 `auth.sessions` 导出 → 用 `loadSessions()` 取条数、`createSession({hours})` 返回 `{token}`、`pruneExpired` 取代 `cleanupExpired`；断言改用**相对条数**避免用例间共享内存会话互相污染。
 
 ### 4. 两个文件已超 400 行，待按功能拆分
 

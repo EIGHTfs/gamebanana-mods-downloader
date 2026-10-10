@@ -7,7 +7,8 @@ const os = require("node:os");
 const path = require("node:path");
 const log = makeLog("p3-bug1");
 
-const indexHtml = require("../server/utils/index-html");
+// 2026-10-11 修：utils/index-html → lib/index-html
+const indexHtml = require("../server/lib/index-html");
 const hashIndex = require("../server/lib/hash-index");
 const DOWNLOADER_SRC = fs.readFileSync(path.join(__dirname, "..", "server", "lib", "downloader.js"), "utf8");
 

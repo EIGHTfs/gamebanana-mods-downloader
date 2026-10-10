@@ -11,8 +11,9 @@ const os = require("node:os");
 const path = require("node:path");
 const log = makeLog("p2-dedup");
 
-const indexHtml = require("../server/utils/index-html");
-const { escapeHtml } = require("../server/utils/html");
+// 2026-10-11 修：utils/index-html → lib/index-html、utils/html → http/html-utils
+const indexHtml = require("../server/lib/index-html");
+const { escapeHtml } = require("../server/http/html-utils");
 const organize = require("../server/lib/organize");
 require("../server/lib/hash-index");   // 加载即验证：parseIndexObj/readIndexObj 来自 utils 无 ReferenceError
 require("../server/lib/incomplete-scan");

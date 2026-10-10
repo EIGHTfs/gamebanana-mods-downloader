@@ -16,11 +16,12 @@ const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "gbmd-p4-"));
 process.env.GBMD_DATA_DIR = TEST_DIR;
 
 // 清除 require 缓存，让 auth.js 用新的 GBMD_DATA_DIR
-delete require.cache[require.resolve("../server/lib/json-dir")];
-delete require.cache[require.resolve("../server/auth")];
+// 2026-10-11 修：json-dir 已迁 server/store/、auth 模块实际文件是 server/auth/auth.js
+delete require.cache[require.resolve("../server/store/json-dir")];
+delete require.cache[require.resolve("../server/auth/auth")];
 
-const auth = require("../server/auth");
-const fsAsync = require("../server/utils/fs-async");
+const auth = require("../server/auth/auth");
+const fsAsync = require("../server/http/fs-async");
 
 test.after(() => {
   auth.stopCleanup();
@@ -28,60 +29,63 @@ test.after(() => {
   delete process.env.GBMD_DATA_DIR;
 });
 
-test("P4 auth: cleanupExpired 删除过期 session", async () => {
-  // 插入一个已过期的 session（expiresAt = 过去）
-  auth.sessions.set("expired-token", { expiresAt: Date.now() - 1000 });
-  // 插入一个有效 session
-  auth.sessions.set("valid-token", { expiresAt: Date.now() + 3600 * 1000 });
+// 2026-10-11 重写：模板化后 auth 换成框架版，API 与旧版不同——
+//   · 没有 auth.sessions 导出（用 loadSessions() 取当前条数）
+//   · createSession({ hours }) 同步返回 { token }（旧写法 createSession(72) 返回裸 token）
+//   · 清理方法名是 pruneExpired（旧名 cleanupExpired）；isValidSession/destroySession 同步
+//   断言统一用「相对条数」，避免用例间共享内存会话导致相互污染。
+test("P4 auth: pruneExpired 删除过期 session", () => {
+  auth.init({ sessionFile: path.join(TEST_DIR, "sessions.json"), cookieName: "gbmd_test_session" });
+  const expired = auth.createSession({ hours: -1 });   // 负数小时 → expiresAt 已是过去
+  const valid = auth.createSession({ hours: 1 });
+  const before = auth.loadSessions();
 
-  const removed = await auth.cleanupExpired();
-  assert.equal(removed, 1);
-  assert.equal(auth.sessions.has("expired-token"), false);
-  assert.equal(auth.sessions.has("valid-token"), true);
+  const removed = auth.pruneExpired();
+  assert.equal(removed, 1, "应清掉 1 个过期会话");
+  assert.equal(auth.loadSessions(), before - 1);
+  assert.equal(auth.isValidSession(valid.token), true, "有效会话必须保留");
+  assert.equal(auth.isValidSession(expired.token), false, "过期会话必须失效");
 });
 
-test("P4 auth: cleanupExpired 无过期时返回 0", async () => {
-  auth.sessions.clear();
-  auth.sessions.set("valid-token", { expiresAt: Date.now() + 3600 * 1000 });
-
-  const removed = await auth.cleanupExpired();
-  assert.equal(removed, 0);
-  assert.equal(auth.sessions.has("valid-token"), true);
+test("P4 auth: pruneExpired 无过期时返回 0", () => {
+  auth.createSession({ hours: 1 });
+  assert.equal(auth.pruneExpired(), 0);
 });
 
-test("P4 auth: startCleanup/stopCleanup 管理 timer", async () => {
-  auth.sessions.clear();
-
+test("P4 auth: startCleanup/stopCleanup 管理 timer", () => {
   const timer = auth.startCleanup(60000);
   assert.ok(timer && typeof timer === "object", "startCleanup 返回 timer 对象");
-
   auth.stopCleanup();
-  // stopCleanup 后 timer 已清除（不阻塞测试）
+  // stopCleanup 后 timer 已清除（不阻塞测试进程退出）
 });
 
-test("P4 auth: createSession 异步返回 token 并写入磁盘", async () => {
-  auth.sessions.clear();
-  const token = await auth.createSession(72);
+test("P4 auth: createSession 返回 64 位 hex token 并写入磁盘", () => {
+  const sessionFile = path.join(TEST_DIR, "sessions-create.json");
+  auth.init({ sessionFile, cookieName: "gbmd_test_session" });
+  const { token } = auth.createSession({ hours: 72 });
   assert.ok(token && token.length === 64, "token 为 64 位 hex");
-  assert.equal(auth.sessions.has(token), true);
-  // 验证写盘
-  const sessionFile = path.join(TEST_DIR, "..", "json", "sessions.json");
-  assert.equal(fs.existsSync(sessionFile), true, "sessions.json 已写入磁盘");
+  assert.equal(auth.isValidSession(token), true);
+  assert.equal(fs.existsSync(sessionFile), true, "会话文件已写入磁盘");
+  const saved = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+  assert.ok(saved[token] && saved[token].expiresAt > Date.now(), "落盘内容含该 token 且未过期");
 });
 
-test("P4 auth: isValidSession 过期 token 返回 false 并删除", async () => {
-  auth.sessions.set("expired-token", { expiresAt: Date.now() - 1000 });
-  const valid = await auth.isValidSession("expired-token");
-  assert.equal(valid, false);
-  assert.equal(auth.sessions.has("expired-token"), false);
+test("P4 auth: isValidSession 过期 token 返回 false 并删除", () => {
+  const { token } = auth.createSession({ hours: -1 });
+  const before = auth.loadSessions();
+  assert.equal(auth.isValidSession(token), false);
+  assert.equal(auth.loadSessions(), before - 1, "失效会话应被删除");
 });
 
-test("P4 auth: destroySession 异步删除并写盘", async () => {
-  auth.sessions.clear();
-  await auth.createSession(72);
-  const token = auth.sessions.keys().next().value;
-  await auth.destroySession(token);
-  assert.equal(auth.sessions.has(token), false);
+test("P4 auth: destroySession 删除并写盘", () => {
+  const sessionFile = path.join(TEST_DIR, "sessions-destroy.json");
+  auth.init({ sessionFile, cookieName: "gbmd_test_session" });
+  const { token } = auth.createSession({ hours: 1 });
+  const before = auth.loadSessions();
+  auth.destroySession(token);
+  assert.equal(auth.loadSessions(), before - 1);
+  const saved = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+  assert.equal(saved[token], undefined, "落盘文件里已无该 token");
 });
 
 test("P4 fs-async: readJson/writeJson 往返", async () => {

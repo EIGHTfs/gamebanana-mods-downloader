@@ -38,13 +38,16 @@ section("1. isExcluded 排除规则");
     "json/userdata-manifest.json", "server/server.log", "gamebanana-mods-downloader.pid",
     "test/logs/smoke.log", "@eaDir", "json/@eaDir/x.json", "node_modules",
     ".auto-update-tmp/repo.tar.gz", ".auto-update-state.json",
-    "release/gbmd.zip", "dist/x.js"
+    "release/gbmd.zip", "dist/x.js",
+    // 2026-10-11 修：start*.sh 属「重启入口」，2026-10-08 起被显式排除（保护启停脚本不被远端旧版覆盖）——
+    //   断言随之从「放行」改为「排除」，与 server/update/auto-update.js 的排除表保持一致。
+    "start.sh", "start-linux.sh", "start-macos.sh"
   ];
   for (const p of MUST_EXCLUDE) ok("排除 " + p, au.isExcluded(p) === true);
   const MUST_PASS = [
     "server/app.js", "server/lib/auto-update.js", "server/routes/auto-update.js",
     "server/config.js", "server/public/index.html", "server/public/app.js",
-    "start.sh", "scripts/gen-mapping.js", "crx/extension/content.js",
+    "scripts/gen-mapping.js", "crx/extension/content.js",
     "mapping/Genshin Impact.json", "json/role/Genshin Impact.json",
     "test/p1-routes.test.cjs", "README.md"
   ];
@@ -133,7 +136,9 @@ if (!OFFLINE) {
         // 复制到沙箱 dst，验证排除规则对真实 tarball 也生效
         const dst = path.join(sandbox, "dst");
         au.copyTreeSafe(extractDir, dst);
-        ok("代码已复制", fs.existsSync(path.join(dst, "server", "lib", "auto-update.js")) && fs.existsSync(path.join(dst, "start.sh")));
+        ok("代码已复制", fs.existsSync(path.join(dst, "server", "lib", "auto-update.js")));
+        // 2026-10-11 修：重启入口（start*.sh）按设计被排除，真实 tarball 也不应把它覆盖进 dst
+        ok("重启入口未被覆盖（start.sh 按排除规则跳过）", !fs.existsSync(path.join(dst, "start.sh")));
         ok("真实仓库里跑出了 config.json 示例，但未进入 dst", !fs.existsSync(path.join(dst, "server", "config.json")) || true);
         // tarball 本身可能不含运行态（git 忽略），关键断言：若源里有 userdata-manifest 示例则按规则处理
         console.log("  (tarball 含文件数: " + countFiles(dst) + ")");

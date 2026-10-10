@@ -7,7 +7,8 @@ const path = require("path");
 const os = require("os");
 const log = makeLog("incomplete-scan");
 
-const { buildIndexBlock } = require("../server/utils/index-html");
+// 2026-10-11 修：模板化改造后 utils/ 已拆到 lib/ 与 http/，require 路径随之更新
+const { buildIndexBlock } = require("../server/lib/index-html");
 const { scanModDir, toTaskJson, extractLinks } = require("../server/lib/incomplete-scan");
 
 // 造假 mod 目录：description.html 内嵌索引块 + 指定文件落盘（其余即「缺失」）

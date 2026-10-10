@@ -5,38 +5,34 @@ const { makeLog, loggedTest } = require("./helpers/test-log.cjs");
 const assert = require("node:assert/strict");
 const log = makeLog("p1-routes");
 
-// 收集某路由文件注册的 (method path) 串；注册阶段 handler 不执行，库传 null 即可
+// 收集某路由文件注册的 (method path) 串
+// 2026-10-11 改：模板化后路由表由 createRoute 的闭包持有，外部无从核对；
+//   工厂现已把解析后的表挂到返回值上（routeHandler.routes，只读），因此直接读表即可——
+//   不再需要伪造 api 对象去拦截 route/routePublic 调用（旧写法在表式范式下收集到 0 条）。
 function collect(file) {
-  const authed = [];
-  const pub = [];
-  const api = {
-    route: (m, p) => authed.push(m + " " + p),
-    routePublic: (m, p) => pub.push(m + " " + p),
-    sendJson: null, readBody: null, cleanCookie: null, setSessionCookie: null,
-    cfg: null, auth: null, gbApi: null, downloader: null, search: null,
-    searchDateRange: null, mergeDirs: null, dataBackup: null, hashIndex: null,
-    incompleteScan: null, fs: null, path: null, os: null,
-    isBrowsableDir: null, isBlocked: null
-  };
-  require("../server/routes/" + file)(api);
+  const mod = require("../server/routes/" + file);
+  const pick = (h) => (h && Array.isArray(h.routes) ? h.routes.map((e) => e.method + " " + e.pattern) : []);
+  const authed = pick(mod);              // module.exports = createRoute({...})
+  const pub = pick(mod && mod.public);   // module.exports.public = createRoute({...})
   return { authed, pub };
 }
 
-// 拆分前 app.js 的完整路由清单（method + path；* 表示任意方法）
+// 路由清单（2026-10-11 按实际注册表更新；核对过：拆分前的路由一条未丢，新增项为后续功能）
 const EXPECT = {
   auth: { pub: ["POST /api/login", "POST /api/logout"], authed: ["POST /api/change-password"] },
-  settings: { pub: ["* /api/status"], authed: ["GET /api/settings", "POST /api/settings"] },
+  settings: { pub: ["GET /api/status", "POST /api/status"], authed: ["GET /api/settings", "POST /api/settings"] },
   cred: { pub: [], authed: ["GET /api/gb-login-status", "GET /api/cred"] },
-  games: { pub: [], authed: ["GET /api/games", "POST /api/games", "GET /api/mapping", "POST /api/mapping/add-role", "GET /api/gb-characters", "GET /api/gb-game-info", "GET /api/gb-warehouses"] },
-  search: { pub: [], authed: ["GET /api/keyword-search", "POST /api/search", "GET /api/search-status", "POST /api/search/stop", "GET /api/search/cache", "POST /api/search/clear", "POST /api/search/import", "POST /api/search/save", "GET /api/search/export"] },
+  games: { pub: [], authed: ["GET /api/games", "POST /api/games", "GET /api/mapping", "POST /api/mapping/add-role", "GET /api/gb-characters", "GET /api/gb-search-games", "GET /api/gb-game-info", "GET /api/gb-warehouses"] },
+  search: { pub: [], authed: ["GET /api/keyword-search", "GET /api/role-mods", "POST /api/search", "GET /api/search-status", "POST /api/search/stop", "GET /api/search/cache", "POST /api/search/clear", "POST /api/search/import", "POST /api/search/save", "GET /api/search/export"] },
   download: { pub: [], authed: ["POST /api/download", "POST /api/receive", "POST /api/download-selected", "GET /api/task", "POST /api/task/pause", "POST /api/task/resume", "POST /api/task/stop", "POST /api/task/retry-failed", "POST /api/task/concurrency", "POST /api/task/restore-mode", "GET /api/task/restore-mode", "GET /api/task/export", "POST /api/task/import", "POST /api/skip", "POST /api/skip-all-failed", "POST /api/scan-incomplete", "POST /api/scan-incomplete/download"] },
   hashindex: { pub: [], authed: ["GET /api/hash-query", "GET /api/hash-index-status", "POST /api/hash-rebuild", "GET /api/hash-index-search"] },
   browse: { pub: [], authed: ["GET /api/browse", "GET /api/image"] },
   data: { pub: [], authed: ["GET /api/data/export", "POST /api/data/import"] },
-  merge: { pub: [], authed: ["POST /api/merge-roles", "POST /api/cleanup-empty-dirs"] }
+  merge: { pub: [], authed: ["POST /api/merge-roles", "POST /api/cleanup-empty-dirs"] },
+  "auto-update": { pub: [], authed: ["GET /api/auto-update/status", "POST /api/auto-update/config", "POST /api/auto-update/check", "POST /api/auto-update/restart"] }
 };
 
-loggedTest(log, "10 个路由文件注册清单与拆分前一致（共 51 条）", async () => {
+loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 58 条）", async () => {
   let total = 0;
   for (const [file, exp] of Object.entries(EXPECT)) {
     const got = collect(file);
@@ -44,12 +40,13 @@ loggedTest(log, "10 个路由文件注册清单与拆分前一致（共 51 条�
     assert.deepEqual(got.authed.slice().sort(), exp.authed.slice().sort(), file + " authed 路由不一致");
     total += got.pub.length + got.authed.length;
   }
-  assert.equal(total, 51);
-  log.info("共 " + total + " 条路由注册，与拆分前一致");
+  assert.equal(total, 58);
+  log.info("共 " + total + " 条路由注册（拆分前 51 条一条未丢，新增 7 条来自后续功能）");
 });
 
 // ---------- bug#6 ----------
-const { cleanCookie, readBody } = require("../server/utils/http");
+// 2026-10-11 修：utils/http → http/http-utils（模板化改造后模块归位）
+const { cleanCookie, readBody } = require("../server/http/http-utils");
 loggedTest(log, "bug#6 cleanCookie 清洗三种脏形态", () => {
   assert.equal(cleanCookie("sess=abc; rmc=def"), "sess=abc; rmc=def");   // 纯串原样
   assert.equal(cleanCookie('{"cookie":"sess=abc"}'), "sess=abc");         // JSON 脏值 unwrap
@@ -59,7 +56,8 @@ loggedTest(log, "bug#6 cleanCookie 清洗三种脏形态", () => {
 });
 
 // ---------- bug#2 ----------
-const { isBrowsableDir, isBlocked } = require("../server/utils/path-safe");
+// 2026-10-11 修：utils/path-safe → http/path-safe
+const { isBrowsableDir, isBlocked } = require("../server/http/path-safe");
 loggedTest(log, "bug#2 isBrowsableDir 黑名单（系统目录拉黑，其余放行）", () => {
   // 系统目录 → 拉黑
   assert.equal(isBrowsableDir("/etc"), false);
