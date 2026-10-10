@@ -1137,7 +1137,7 @@ function getTaskSummary() {
     else if (r.ok === true) ok++;
     else if (r.ok === false) failed++;
   }
-  const { items: _i, resultsMap: _r, results: _res, ...rest } = task;
+  const { items: _i, resultsMap: _r, results: _res, pendingMods: _p, ...rest } = task;
   return Object.assign(rest, {
     itemsTotal: items.length,
     okCount: ok,

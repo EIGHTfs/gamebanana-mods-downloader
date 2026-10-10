@@ -1016,10 +1016,10 @@ function renderActiveArea(task) {
     let html = "";
     // 2026-08-26：准备阶段也展示（status=preparing 时同样显示准备进度 + 当前解析的 mod）
     if (preparing && preparing.name) {
-      const prepCount = `${(task.buildIndex || 0) + 1}/${(task.pendingMods || []).length}`;
+      const prepCount = `${(task.buildIndex || 0) + 1}/${(task.pendingModsCount != null ? task.pendingModsCount : (task.pendingMods || []).length)}`;
       html += `<div class="item" style="padding:4px 8px;background:var(--card2)"><span class="icon">⏳</span><span>准备 ${prepCount}: ${esc(preparing.name)}</span></div>`;
-    } else if (task.status === "preparing" && (task.pendingMods || []).length) {
-      const prepCount = `${(task.buildIndex || 0)}/${(task.pendingMods || []).length}`;
+    } else if (task.status === "preparing" && (task.pendingModsCount != null ? task.pendingModsCount : (task.pendingMods || []).length)) {
+      const prepCount = `${(task.buildIndex || 0)}/${(task.pendingModsCount != null ? task.pendingModsCount : (task.pendingMods || []).length)}`;
       html += `<div class="item" style="padding:4px 8px;background:var(--card2)"><span class="icon">⏳</span><span>准备中（${prepCount}）…</span></div>`;
     }
     if (active.length) {
