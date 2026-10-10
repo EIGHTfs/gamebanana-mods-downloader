@@ -33,7 +33,12 @@ function parseIndexObj(html) {
 function readIndexObj(modDir) {
   const p = path.join(modDir, "description.html");
   if (!fs.existsSync(p)) return null;
-  try { return parseIndexObj(fs.readFileSync(p, "utf8")); } catch (_) { return null; }
+  try {
+    const html = fs.readFileSync(p, "utf8");
+    // 2026-10-11：IO 归因——索引读取按实际字节自报（见 lib/io-monitor.js）
+    try { require("./io-monitor").count("index-read", html.length); } catch (_) {}
+    return parseIndexObj(html);
+  } catch (_) { return null; }
 }
 
 module.exports = { INDEX_TAG_ID, buildIndexBlock, parseIndexObj, readIndexObj };

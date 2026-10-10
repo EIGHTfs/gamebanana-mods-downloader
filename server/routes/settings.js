@@ -6,6 +6,8 @@
 
 const { createRoute, sendJson, readBody, cleanCookie } = require("../core/index.js");
 const cfg = require("../config");
+// 2026-10-11：IO 监测（真实读写速率 + 按来源归因），见 lib/io-monitor.js
+const ioMonitor = require("../lib/io-monitor");
 
 // 脱敏：不回传密码哈希/盐与 gbCookie 明文，用 hasGbCookie 表示是否已配置
 function publicSettings(c) {
@@ -49,6 +51,11 @@ module.exports = createRoute({
     }
     cfg.writeConfig(cfgNow);
     return sendJson(res, { ok: true, settings: publicSettings(cfg.readConfig()) });
+  },
+  // 2026-10-11 新增：IO 监测快照 —— 真实读写速率（/proc/self/io 采样）+ 按来源归因（各读写点自报）
+  //   排查「谁在大量读写」用它，不必上外部 iotop/strace（NAS 上没有）
+  "GET /api/io": (req, res) => {
+    return sendJson(res, ioMonitor.snapshot(), 200);
   },
 });
 

@@ -65,7 +65,8 @@ function fileMd5(filePath) {
     try {
       const hash = crypto.createHash("md5");
       const stream = fs.createReadStream(filePath);
-      stream.on("data", (c) => hash.update(c));
+      // 2026-10-11：IO 归因——按实际读到的分块字节自报（谁在读一目了然）
+      stream.on("data", (c) => { hash.update(c); try { ioMonitor.count("hash", c.length); } catch (_) {} });
       stream.on("end", () => resolve(hash.digest("hex")));
       stream.on("error", () => resolve(""));
     } catch (_) { resolve(""); /* 文件不存在或读取失败，返回空字符串 */ }
@@ -74,7 +75,9 @@ function fileMd5(filePath) {
 
 function fileMd5Sync(filePath) {
   try {
-    return crypto.createHash("md5").update(fs.readFileSync(filePath)).digest("hex");
+    const buf = fs.readFileSync(filePath);
+    try { ioMonitor.count("hash", buf.length); } catch (_) {}
+    return crypto.createHash("md5").update(buf).digest("hex");
   } catch (_) { return ""; /* 文件不存在或读取失败，返回空字符串 */ }
 }
 
@@ -869,6 +872,8 @@ function startStallWatcher(task, req, tmp, getReceived, isDone) {
 // 下载完成收尾：空文件/大小不匹配校验 → rename → 返回 size
 function finalizeDownload(tmp, destPath, contentLength, resumeOffset) {
   const st = fs.statSync(tmp);
+  // 2026-10-11：IO 归因——下载落盘按实际字节自报（见 lib/io-monitor.js）
+  try { ioMonitor.count("download-write", st.size); } catch (_) {}
   if (st.size === 0) throw new Error("下载后文件为空: " + destPath);
   if (contentLength > 0 && resumeOffset === 0 && st.size !== contentLength) {
     throw new Error(`文件大小不匹配（期望 ${contentLength}，实际 ${st.size}）: ${destPath}`);
@@ -1058,7 +1063,7 @@ const taskWriter = taskStore.createTaskWriter({
   filePath: TASK_FILE,
   ensureDir: () => jsonDir.ensureJsonDir(),
   getTask: () => task,
-  throttleMs: 500,
+  throttleMs: 10000,   // 2026-10-11 实测：38MB 任务文件 × 2 次/秒 ≈ 76–95MB/s 写盘，把服务器拖到接口超时（8s/60s）。放宽到 10s：状态新鲜度足够（崩溃最多回退 10s 进度），写盘降 20 倍
   log: (m) => console.log(m)
 });
 // 进程退出兜底：把节流窗口内还没落盘的状态补写（flush 是同步写，exit 阶段可用）

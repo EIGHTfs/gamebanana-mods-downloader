@@ -12,6 +12,8 @@ const path = require("path");
 const fs = require("fs");
 
 const { createServer, appLog, sendJson, createRoute, auth: gbAuth } = require("./core/index.js");
+// 2026-10-11：IO 监测（读/写速率 + 归因），见 lib/io-monitor.js
+const ioMonitor = require("./lib/io-monitor");
 const cfg = require("./config");
 const downloader = require("./lib/downloader");
 const search = require("./lib/search");
@@ -169,6 +171,11 @@ async function main() {
       search.restorePendingQuery();
       try {
         const r = hashIndex.load();
+        // 2026-10-11：启动 IO 监测采样（每 10s 一次；读或写 ≥2MB/s 时打 [io] 日志，含归因表）
+        try {
+          const st = ioMonitor.start({ intervalMs: 10000, logThresholdMBps: 2 });
+          appLog && appLog("[io] 监测已启动: " + JSON.stringify(st));
+        } catch (_) { /* 监测失败不影响启动 */ }
         console.log(`[hash-index] 已加载: GB 表 ${r.gb} 条, 本地表 ${r.local} 条`);
       } catch (e) {
         console.log("[hash-index] 加载失败: " + (e && e.message));

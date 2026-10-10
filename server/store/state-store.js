@@ -72,7 +72,11 @@ function createThrottledWriter(opts) {
     const built = typeof o.buildSnapshot === "function" ? o.buildSnapshot(raw) : { snapshot: raw, pruned: 0 };
     if (built && built.pruned) stats.prunedKeys = (stats.prunedKeys || 0) + built.pruned;
     if (typeof o.ensureDir === "function") o.ensureDir();
-    writeFileAtomic(filePath, JSON.stringify(built ? built.snapshot : raw, null, 2));
+    const text = JSON.stringify(built ? built.snapshot : raw, null, 2);
+    // 2026-10-11：可选写盘回调（bytes, filePath）——项目侧可接自己的 IO 监测做归因；
+    //   模板本身不依赖任何监测实现，回调抛错也不影响落盘。
+    if (typeof o.onWrite === "function") { try { o.onWrite(Buffer.byteLength(text), filePath); } catch (_) {} }
+    writeFileAtomic(filePath, text);
     stats.writes++;
   }
 

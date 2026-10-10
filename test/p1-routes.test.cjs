@@ -20,7 +20,7 @@ function collect(file) {
 // 路由清单（2026-10-11 按实际注册表更新；核对过：拆分前的路由一条未丢，新增项为后续功能）
 const EXPECT = {
   auth: { pub: ["POST /api/login", "POST /api/logout"], authed: ["POST /api/change-password"] },
-  settings: { pub: ["GET /api/status", "POST /api/status"], authed: ["GET /api/settings", "POST /api/settings"] },
+  settings: { pub: ["GET /api/status", "POST /api/status"], authed: ["GET /api/settings", "POST /api/settings", "GET /api/io"] },
   cred: { pub: [], authed: ["GET /api/gb-login-status", "GET /api/cred"] },
   games: { pub: [], authed: ["GET /api/games", "POST /api/games", "GET /api/mapping", "POST /api/mapping/add-role", "GET /api/gb-characters", "GET /api/gb-search-games", "GET /api/gb-game-info", "GET /api/gb-warehouses"] },
   search: { pub: [], authed: ["GET /api/keyword-search", "GET /api/role-mods", "POST /api/search", "GET /api/search-status", "POST /api/search/stop", "GET /api/search/cache", "POST /api/search/clear", "POST /api/search/import", "POST /api/search/save", "GET /api/search/export"] },
@@ -32,7 +32,7 @@ const EXPECT = {
   "auto-update": { pub: [], authed: ["GET /api/auto-update/status", "POST /api/auto-update/config", "POST /api/auto-update/check", "POST /api/auto-update/restart"] }
 };
 
-loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 58 条）", async () => {
+loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 59 条）", async () => {
   let total = 0;
   for (const [file, exp] of Object.entries(EXPECT)) {
     const got = collect(file);
@@ -40,8 +40,8 @@ loggedTest(log, "11 个路由文件注册清单与拆分前一致（共 58 条�
     assert.deepEqual(got.authed.slice().sort(), exp.authed.slice().sort(), file + " authed 路由不一致");
     total += got.pub.length + got.authed.length;
   }
-  assert.equal(total, 58);
-  log.info("共 " + total + " 条路由注册（拆分前 51 条一条未丢，新增 7 条来自后续功能）");
+  assert.equal(total, 59);
+  log.info("共 " + total + " 条路由注册（拆分前 51 条一条未丢；新增含 GET /api/io 的 IO 监测）");
 });
 
 // ---------- bug#6 ----------
