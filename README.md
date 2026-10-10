@@ -270,7 +270,8 @@ gamebanana-mods-downloader/
 > 原因：反查的主键是 GB 自带的 `gbMd5`（随 HTML 落盘）与 **GB 原名**（图片短名本身即 GB 的 hash，
 > 原名表还支持无后缀补全），内容 md5 只是第三层冗余键；而它要对每个「尚无 hash」的文件**读整份内容**算 md5
 > —— 实测批次收尾持续 ≈7–8MB/s 读盘，连 `/api/task` 都被拖到无响应。
-> 需要内容 hash 时手动「重建索引」（走索引文件，不读文件内容）。
+> 需要内容 hash 时：临时恢复 `server/lib/downloader.js`（finalizeHtmls）里注释的补算段即可 ——
+> 「重建索引」只重建索引表（读 description.html 的 JSON 块），**不会**补算内容 md5。
 
 ---
 
