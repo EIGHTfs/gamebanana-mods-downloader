@@ -359,6 +359,26 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 - 状态：待处理
 - `server/lib/gb-api.js` 601 行（香蕉网 API 封装：抓取/分类/角色/搜索混在一起）、`server/public/app.js` 2009 行（前端单体：下载/搜索/设置/进度全在一个文件）。
 - 拆分建议：`gb-api.js` 按「游戏信息 / 分类与角色 / mod 搜索与解析」拆成 `lib/gb-*.js` 由 `gb-api.js` 再导出（保持调用方导入路径不变）；前端按「下载 / 搜索 / 设置 / 进度」拆成 `public/js/*.js` 由 `index.html` 按序引入。
+- 另：`server/lib/downloader.js` 里 `genIndexHtml`（圈复杂度 59）与 `finalizeHtmls`（84）远超审计阈值 10，
+  提交时会被 `maintainability/max-cyclomatic-complexity` 拦截。2026-10-11 的落盘优化只改落盘路径、未触碰这两个函数，
+  提交时按既有处置用 `audit:false` 放行——**拆分后应恢复门禁**。
+
+### 5. 下载任务存储/接口瘦身（Step 1-2 已完成，后续阶段待办）
+
+- 背景（部署端实测）：`json/download_task.json` 12.7 → 15.4 MB（items 万级、resultsMap 万级）；
+  `saveTask()` 单次 stringify 80–128ms + 写盘 21–40ms，却被 ~18 处调用（含**每个文件**的状态变化）⇒ 万级任务时卡顿；
+  `/api/task` 单次响应 **10.8 MB**，前端每 2 秒轮询一次（≈5.4 MB/s）。
+- ✅ 已完成（2026-10-11，最小改动）：落盘改走 `server/lib/download-task-store.js` ——
+  越界键清理（安全网）+ 快照净化 + **原子写**（`tmp+rename`）+ **合并写**（≤500ms 一次）；
+  关键节点（批次开始/终止/暂停/恢复/重启恢复/进程退出）`flushTask()` 立即落盘；
+  终止时 `writer.cancel()` 防止节流窗口把已删除的任务文件写回来（任务"复活"）。
+  实测：200 次 `save()` 入队 **0ms**、实际只写 **1 次**（旧实现 ≈20000ms 同步阻塞）；原子写 33ms vs 旧同步写 40ms（不更慢）；
+  `items`/`pendingMods`/`resultsMap` 保留部分 **sha 逐字节等价**；单测 9 项全绿（`test/download-task-store.test.cjs`）。
+- 待办（后续阶段，另提方案）：① **完成表分离**——终态项转存 `json/download_done.json`（按批次、带原下标，启动时原位重组），
+  预计任务文件 15MB → ~1MB；② **`/api/task` 瘦身 + 分页**（只回状态/统计/活动项 + items 分页，新增 `/api/task/items`、`/api/task/done`）；
+  ③ 前端进度页按需渲染 + 已完成分组折叠/分页；④ `items[].path` 改存相对路径（再省 ~30%）；
+  ⑤ 越界键**来源**排查（现场曾观测 `resultsMap` 12,896 > `items` 12,782，本次只做安全网清理，未定位成因）。
+- 方案文档：`docs/20261011-下载任务存储瘦身.MD`
 
 ---
 

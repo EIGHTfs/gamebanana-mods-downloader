@@ -54,6 +54,8 @@ const HTTP_AGENT = new http.Agent({ keepAlive: true, keepAliveMsecs: KEEP_ALIVE_
 
 const jsonDir = require("../store/json-dir"); // 统一引用模板版（B2 合并：lib 版已并入模板源）
 const TASK_FILE = jsonDir.migrateRuntimeJson("download_task.json"); //userdata-manifest.json file json/download_task.json 下载任务列表
+// 2026-10-11 落盘优化：任务落盘走独立存储层（越界键清理 + 快照净化 + 原子写 + 合并写），可单测
+const taskStore = require("./download-task-store");
 const MAX_RETRY = 3;
 const RETRY_DELAY_MS = 1500;
 
@@ -1027,21 +1029,43 @@ async function executeDownloadItem(item, settings, onProgress) {
 
 // ---------- 任务状态 ----------
 let task = null;
+
+// 2026-10-11 落盘优化（实测驱动）：部署端 json/download_task.json 12.7MB、saveTask 单次 ≈100ms
+//   （stringify 80ms + 写盘 21ms），却被 ~18 处调用（含每个文件的状态变化）→ 万级任务时主线程被
+//   同步写盘占满、页面卡顿；且非原子写中断会留下半个 JSON（任务列表损坏）。
+//   现在：脏标记 + 合并写（≤500ms 一次）+ 临时文件 rename 原子替换 + 落盘前清越界键。
+const taskWriter = taskStore.createTaskWriter({
+  filePath: TASK_FILE,
+  ensureDir: () => jsonDir.ensureJsonDir(),
+  getTask: () => task,
+  throttleMs: 500,
+  log: (m) => console.log(m)
+});
+// 进程退出兜底：把节流窗口内还没落盘的状态补写（flush 是同步写，exit 阶段可用）
+process.once("exit", () => { try { taskWriter.flush(); } catch (_) {} });
 let running = false;
 let downloadIdx = 0;
 let resultsByIndex = new Map();
 let modDirByItem = new Map(); // item -> { finalDir, obj }（下载完成后更新 HTML）
 
 function saveTask() {
-  try {
-    const t = task ? {
-      ...task,
-      activeItems: (task.activeItems || []).map((a) => ({ ...a, _spT: undefined, _spLast: undefined })),
-      preparingItem: task.preparingItem ? { name: task.preparingItem.name, type: "preparing" } : null
-    } : null;
-    jsonDir.ensureJsonDir();
-    fs.writeFileSync(TASK_FILE, JSON.stringify(t, null, 2), "utf8");
-  } catch (_) {}
+  // 2026-10-11 改：委托给 download-task-store 的节流写入器（脏标记 + 合并写 ≤500ms + 原子替换 + 越界键清理）。
+  //   旧实现（每次全量同步写；万级任务实测 ≈100ms/次且被 ~18 处调用）保留备查，勿删：
+  //   try {
+  //     const t = task ? {
+  //       ...task,
+  //       activeItems: (task.activeItems || []).map((a) => ({ ...a, _spT: undefined, _spLast: undefined })),
+  //       preparingItem: task.preparingItem ? { name: task.preparingItem.name, type: "preparing" } : null
+  //     } : null;
+  //     jsonDir.ensureJsonDir();
+  //     fs.writeFileSync(TASK_FILE, JSON.stringify(t, null, 2), "utf8");
+  //   } catch (_) {}
+  taskWriter.save();
+}
+
+/** 立即落盘（关键节点用：终止/暂停/恢复/重启恢复/进程退出）——不等节流窗口 */
+function flushTask() {
+  taskWriter.flush();
 }
 
 function getTask() {
@@ -1471,6 +1495,7 @@ async function startDownloadTask({ mods }) {
     task.message = `已恢复下载（追加 ${plan.append.length} 个 mod）` + (skipped > 0 ? `（跳过 ${skipped} 个已在下载列表）` : "");
     task.updatedAt = Date.now();
     saveTask();
+    flushTask();   // 批次开始/追加：立即落盘，不等节流窗口
     runDownloadLoop();
   }
   return task;
@@ -1483,6 +1508,7 @@ function pauseTask() {
   task.message = "已暂停";
   task.updatedAt = Date.now();
   saveTask();
+  flushTask();   // 暂停：立即落盘
   console.log("[task] 暂停");
   return { ok: true };
 }
@@ -1495,6 +1521,7 @@ function resumeTask() {
   task.abort = false;
   task.updatedAt = Date.now();
   saveTask();
+  flushTask();   // 继续：立即落盘
   runDownloadLoop();
   console.log("[task] 继续");
   return { ok: true };
@@ -1515,7 +1542,11 @@ function stopTask() {
   task.buildIndex = 0;
   task.preparingItem = null;
   task.updatedAt = Date.now();
+  flushTask();   // 先把最终状态落盘（保证文件内容是完整的最新状态）
   try { fs.unlinkSync(TASK_FILE); } catch (_) {}
+  // 2026-10-11：终止 = 清空队列（删任务文件）→ 必须取消节流窗口内残留的写盘，
+  //   否则 500ms 后那次合并写会把刚删掉的任务文件又写回来（任务"复活"）
+  taskWriter.cancel();
   // 不再立即 task=null——等 doDownloadLoop 收尾（检测 abort → destroy 请求 → 清理）
   modDirByItem.clear();
   console.log("[task] 终止（清空队列）");
@@ -1705,6 +1736,7 @@ function restorePendingTask() {
     task.abort = false;
     task.message = "已暂停（重启后保留，点「继续」恢复下载）";
     saveTask();
+    flushTask();   // 重启恢复：立即落盘，避免节流窗口内进程再次退出导致状态没写
   } else {
     // preparing 且无下载项 → 残留，清理
     task.status = "stopped";
