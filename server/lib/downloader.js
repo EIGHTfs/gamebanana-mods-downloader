@@ -1351,33 +1351,37 @@ async function finalizeHtmls() {
       // 2026-08-30：整组完成时计算图片/gif md5 重新修改 HTML——对 hash 为空的
       //   图片/gif（含已存在/跳过的）补算内容 md5 写回 HTML。
       // 2026-08-30：纯本地已失去记录的旧文件不再「磁盘扫描追加记录」（不移动不删除）
-      let md5Filled = 0;
-      // 2026-10-11 性能修复：补算 hash 改**流式异步 fileMd5**——原来 fileMd5Sync 用 readFileSync 把整个文件
-      //   读进内存，大图/大包会造成内存尖峰；并每 20 个文件让出一次事件循环，避免整组补算长时间占满磁盘 IO。
-      //   实测背景：批次收尾阶段进程读速 ≈8MB/s、日志连续刷 [md5-fill]，表现为「一开始任务硬盘大量读」。
-      let md5Seen = 0;
-      for (const im of obj.images || []) {
-        if (!im || im.hash) continue;
-        const ip = path.join(finalDir, im.file || im.gbFile || "");
-        if (ip && fs.existsSync(ip)) {
-          if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
-          const h = await fileMd5(ip);
-          if (h) { im.hash = h; md5Filled++; changed = true; }
-        }
-      }
-      for (const g of obj.gifs || []) {
-        if (!g || g.hash) continue;
-        const gp = path.join(finalDir, g.localFile || g.file || "");
-        if (gp && fs.existsSync(gp)) {
-          if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
-          const h = await fileMd5(gp);
-          if (h) {
-            g.hash = h;
-            if (!g.size) { try { g.size = fs.statSync(gp).size; } catch (_) {} }
-            md5Filled++; changed = true;
-          }
-        }
-      }
+      // 2026-10-11 停用：图片/gif **内容 md5 自动回填**（原 2026-08-30 逻辑，整体注释保留备查）
+      //   停用理由：反查索引的主键是 GB 自带的 gbMd5（hash-index.js:269 putLocal(f.gbMd5, …)）
+      //   与 GB 原名（图片短名本身即 GB 的 hash，nameIndex 还支持无后缀补全），内容 md5 只是
+      //   第三层冗余键；而它要对每个「尚无 hash」的文件**读整份内容**算 md5
+      //   ⇒ 实测批次收尾持续 ≈7–8MB/s 读盘，连 /api/task 都被拖到无响应（用户侧表现为「一开任务硬盘大量读」）。
+      //   需要补内容 hash 时手动「重建索引」/ POST /api/hash-rebuild（走索引文件，不读文件内容）。
+      const md5Filled = 0;
+      // let md5Filled = 0;
+      // let md5Seen = 0;
+      // for (const im of obj.images || []) {
+      //   if (!im || im.hash) continue;
+      //   const ip = path.join(finalDir, im.file || im.gbFile || "");
+      //   if (ip && fs.existsSync(ip)) {
+      //     if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+      //     const h = await fileMd5(ip);
+      //     if (h) { im.hash = h; md5Filled++; changed = true; }
+      //   }
+      // }
+      // for (const g of obj.gifs || []) {
+      //   if (!g || g.hash) continue;
+      //   const gp = path.join(finalDir, g.localFile || g.file || "");
+      //   if (gp && fs.existsSync(gp)) {
+      //     if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+      //     const h = await fileMd5(gp);
+      //     if (h) {
+      //       g.hash = h;
+      //       if (!g.size) { try { g.size = fs.statSync(gp).size; } catch (_) {} }
+      //       md5Filled++; changed = true;
+      //     }
+      //   }
+      // }
       if (md5Filled > 0) console.log(`[md5-fill] ${(finalDir.split("/Mods/")[1] || finalDir).slice(0, 50)} ← 补算 ${md5Filled} 个 hash`);
       // 图片按 GB 原名不重命名（不再 md5 收敛）；gif 的 原名_大小MB 命名在 gifs 构建处完成
       if (changed) writeIndexHtml(finalDir, obj);
