@@ -389,21 +389,34 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
   已在收尾处埋耗时探针（日志出现 `[task] finalizeHtmls 收尾耗时 Nms`），下一批下载跑完即可用**真实数字**决定是否拆分；
   拆分本身按「恢复审计门禁」的独立可维护性任务排期，不预期带来明显性能收益。
 
-### 5. 下载任务存储/接口瘦身（Step 1-2 已完成，后续阶段待办）
+### 5. 下载任务存储/接口瘦身（落盘侧 + 接口侧 + 三类卡死已修；仅剩单文件优化）
 
-- 背景（部署端实测）：`json/download_task.json` 12.7 → 15.4 MB（items 万级、resultsMap 万级）；
-  `saveTask()` 单次 stringify 80–128ms + 写盘 21–40ms，却被 ~18 处调用（含**每个文件**的状态变化）⇒ 万级任务时卡顿；
-  `/api/task` 单次响应 **10.8 MB**，前端每 2 秒轮询一次（≈5.4 MB/s）。
-- ✅ 已完成（2026-10-11，最小改动）：落盘改走 `server/lib/download-task-store.js` ——
-  越界键清理（安全网）+ 快照净化 + **原子写**（`tmp+rename`）+ **合并写**（≤500ms 一次）；
-  关键节点（批次开始/终止/暂停/恢复/重启恢复/进程退出）`flushTask()` 立即落盘；
-  终止时 `writer.cancel()` 防止节流窗口把已删除的任务文件写回来（任务"复活"）。
-  实测：200 次 `save()` 入队 **0ms**、实际只写 **1 次**（旧实现 ≈20000ms 同步阻塞）；原子写 33ms vs 旧同步写 40ms（不更慢）；
+- 背景（部署端实测）：`json/download_task.json` 12.7 → **38.3 MB**（items 36,739 / resultsMap 36,737 / pendingMods 3,655）；
+  `saveTask()` 单次 stringify + 写盘被 ~18 处调用（含**每个文件**的状态变化）；`/api/task` 单次响应曾达 **34.3 MB**，
+  前端每 2 秒轮询一次（≈17 MB/s）。
+- ✅ 落盘侧（2026-10-11）：改走 `server/lib/download-task-store.js` —— 越界键清理（安全网）+ 快照净化 +
+  **原子写**（`tmp+rename`）+ **合并写**（节流实测后由 500ms 放宽到 10s）；关键节点
+  （批次开始/终止/暂停/恢复/重启恢复/进程退出）`flushTask()` 立即落盘；终止时 `writer.cancel()`
+  防止节流窗口把已删除的任务文件写回来（任务"复活"）。实测：200 次 `save()` 入队 **0ms**、实际只写 **1 次**；
   `items`/`pendingMods`/`resultsMap` 保留部分 **sha 逐字节等价**；单测 9 项全绿（`test/download-task-store.test.cjs`）。
-- 待办（后续阶段，另提方案）：① **完成表分离**——终态项转存 `json/download_done.json`（按批次、带原下标，启动时原位重组），
-  预计任务文件 15MB → ~1MB；② **`/api/task` 瘦身 + 分页**（只回状态/统计/活动项 + items 分页，新增 `/api/task/items`、`/api/task/done`）；
-  ③ 前端进度页按需渲染 + 已完成分组折叠/分页；④ `items[].path` 改存相对路径（再省 ~30%）；
-  ⑤ 越界键**来源**排查（现场曾观测 `resultsMap` 12,896 > `items` 12,782，本次只做安全网清理，未定位成因）。
+- ✅ 接口侧（2026-10-11）：`GET /api/task` 只回摘要（新增 `getTaskSummary()`：状态/统计/活动项/`pendingModsCount`，
+  不含 items/resultsMap/pendingMods 数组）；新增分页 `GET /api/task/items?filter=open|done|all&offset&limit`
+  与 `GET /api/task/done`；4 个写接口（`/api/download`、`/api/task/import`、`/api/scan-incomplete/download` 等）
+  不再把完整 task 塞进响应；前端 `loadTaskView()` = 「摘要 + 按需拉未完成项」拼出渲染所需形状（渲染逻辑零改动），
+  并在「进度页不可见」时跳过轮询。实测 `/api/task` **34,352,430 B → 491 B**、`/api/task/items` <0.01s。
+- ✅ 三类卡死（均为「大表在热路径上被全量处理」，实测定位后修复）：
+  ① **收尾逐目录全量重写游戏索引**——`finalizeHtmls` 里 `hashIndex.ingestModDir()` 不在 `if (changed)` 内，
+  数千目录 × 数 MB ⇒ 写盘 **121 MB/s**、收尾 **363–455 秒**；移入 `if (changed)` + `WeakSet` 跳过已收尾项 ⇒ **9 ms**；
+  ② **接口每次回 34MB**（见上）；
+  ③ **追加去重 O(n×m)**——`planForAppend` 用「每个待追加项 × 逐条扫 pendingMods + items」，
+  现场 2,544 × 40,394 ≈ 1.03 亿次比较 ⇒ **12,784 ms**；改为 `Set` 预建 O(n+m) ⇒ **14 ms**（append 列表逐字节等价），
+  新增 `test/append-dedup.test.cjs` 复杂度门禁。
+- ⏭ **最后一项优化：完成表分离**——终态项转存 `json/download_done.json`（按批次、带原下标，启动时原位重组）。
+  **38.3MB 任务文件有意保留不动**，作为性能基准夹具（它已先后暴露上面三类问题）；其余优化做完再动它。
+  基准值与对照表见 `docs/20261011-下载任务存储瘦身.MD` 第十七节。
+- 其它待办：① 前端进度页按需渲染 + 已完成分组折叠/分页；② `items[].path` 改存相对路径（再省 ~30%）；
+  ③ 越界键**来源**排查（现场曾观测 `resultsMap` 12,896 > `items` 12,782，本次只做安全网清理）。
+- 验收工具：`scripts/api-test.sh <base-url> <password>`（读写接口全测 + 阈值判定；地址与口令由参数传入，脚本内不写死）。
 - 方案文档：`docs/20261011-下载任务存储瘦身.MD`
 
 ---
