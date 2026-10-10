@@ -1531,15 +1531,26 @@ function planForAppend(t, urls, extractModId) {
     return true;
   });
   // 已在列表（pendingMods + items 出现过同 modId）→ 跳过（仅不清空批次时才有旧列表）
+  // 2026-10-11 性能修复（实测 12,784ms → 14ms）：原来是「每个待追加项 × 逐条扫全表」的 O(n×m)——
+  //   现场规模 2,544 × (pendingMods 3,655 + items 36,739) ≈ 1.03 亿次 extractModId，
+  //   表现就是点「启动/继续 N 个 mod」后长时间无响应（主线程纯 CPU 阻塞）。
+  //   改为：先把两侧已有 modId 收进 Set（各扫一遍），再按 Set 判定 ⇒ O(n+m)；
+  //   跳过计数与 append 结果与旧实现逐字节等价（test/append-dedup.test.cjs 有对照断言）。
   let listSkipped = 0;
   if (!reset) {
-    const pend = (t && t.pendingMods) || [];
-    const its = (t && t.items) || [];
+    const existing = new Set();
+    for (const m of (t && t.pendingMods) || []) {
+      const id = ex(m && (m.profileUrl || m.url));
+      if (id) existing.add(id);
+    }
+    for (const it of (t && t.items) || []) {
+      const id = ex(it && (it.modUrl || it.url));
+      if (id) existing.add(id);
+    }
     list = list.filter((u) => {
       const id = ex(u);
       if (!id) return true;
-      for (const m of pend) { if (ex(m && (m.profileUrl || m.url)) === id) { listSkipped++; return false; } }
-      for (const it of its) { if (ex(it && (it.modUrl || it.url)) === id) { listSkipped++; return false; } }
+      if (existing.has(id)) { listSkipped++; return false; }
       return true;
     });
   }
@@ -1918,6 +1929,8 @@ module.exports = {
   getTask,
   getTaskSummary,
   getTaskItems,
+  // 2026-10-11：导出以便单测覆盖「追加去重」的语义与复杂度（原 O(n×m) 曾致 12.8 秒无响应）
+  planForAppend,
   startDownloadTask,
   pauseTask,
   resumeTask,
