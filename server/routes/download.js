@@ -90,7 +90,7 @@ function downloadOrReceive(api) {
       .filter((s) => s && (s.includes("gamebanana.com") || /^\d+$/.test(s)));
     if (!links.length) return sendJson(res, { ok: false, error: "没有有效的链接" }, 400);
     const t = await downloader.startDownloadTask({ mods: links.map((l) => ({ profileUrl: l })) });
-    const out = { ok: true, started: true, task: t };
+    const out = { ok: true, started: true, task: downloader.getTaskSummary() };
     if (ctx.pathname === "/api/receive") out.received = links.length;
     return sendJson(res, out, 200);
   };
@@ -106,7 +106,7 @@ function downloadSelected(api) {
     const t = await downloader.startDownloadTask({
       mods: selected.map((it) => ({ profileUrl: it.profileUrl || String(it.modId) }))
     });
-    return sendJson(res, { ok: true, started: true, task: t }, 200);
+    return sendJson(res, { ok: true, started: true, task: downloader.getTaskSummary() }, 200);
   };
 }
 
@@ -148,7 +148,7 @@ function importTask(api) {
       const valid = links.map((s) => String(s).trim()).filter((s) => s && (s.includes("gamebanana.com") || /^\d+$/.test(s)));
       if (!valid.length) return sendJson(res, { ok: false, error: "导入的任务 json 里没有有效链接" }, 400);
       const t = await downloader.startDownloadTask({ mods: valid.map((l) => ({ profileUrl: l })) });
-      return sendJson(res, { ok: true, imported: valid.length, started: true, task: t }, 200);
+      return sendJson(res, { ok: true, imported: valid.length, started: true, task: downloader.getTaskSummary() }, 200);
     } catch (e) {
       return sendJson(res, { ok: false, error: "任务 json 解析失败: " + (e.message || String(e)) }, 400);
     }
@@ -180,7 +180,7 @@ function scanIncompleteDownload(api) {
       const valid = links.map((s) => String(s).trim()).filter((s) => s && (s.includes("gamebanana.com") || /^\d+$/.test(s)));
       if (!valid.length) return sendJson(res, { ok: false, error: "没有有效的链接" }, 400);
       const t = await downloader.startDownloadTask({ mods: valid.map((l) => ({ profileUrl: l })) });
-      return sendJson(res, { ok: true, started: true, count: valid.length, task: t }, 200);
+      return sendJson(res, { ok: true, started: true, count: valid.length, task: downloader.getTaskSummary() }, 200);
     } catch (e) {
       return sendJson(res, { ok: false, error: e.message || String(e) }, 500);
     }
