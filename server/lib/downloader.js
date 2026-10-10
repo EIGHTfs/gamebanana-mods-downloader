@@ -1004,8 +1004,11 @@ async function executeDownloadItem(item, settings, onProgress) {
   const maxAttempt = item.isGif ? 1 : (MAX_RETRY + 1);
   for (let attempt = 0; attempt < maxAttempt; attempt++) {
     if (attempt > 0) {
+      // 2026-10-11：重试间隔改**递增退避**（1.5s → 3s → 6s，总等待 ≈10.5s）。
+      //   原来是固定 RETRY_DELAY_MS=1.5s（4 次共 ≈4.5s），几十秒级的网络抖动必然扛不过——
+      //   实测「下载后文件为空」那条就是这么留下来的（重试时该文件已能正常下到 13.4MB）。
       const waited = await new Promise((resolve) => {
-        let remaining = RETRY_DELAY_MS;
+        let remaining = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
         const step = 250;
         const timer = setInterval(() => {
           remaining -= step;

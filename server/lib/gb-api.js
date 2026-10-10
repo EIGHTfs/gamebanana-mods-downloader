@@ -52,7 +52,7 @@ async function fetchJsonHeaders(url, opts = {}, retries = 3) {
       return { json: await resp.json(), setCookies };
     } catch (e) {
       if (e.name === "AbortError") throw e;
-      const netErr = e instanceof TypeError || /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EPIPE|socket hang up/i.test(String(e.message || ""));
+      const netErr = e instanceof TypeError || /Unexpected end of JSON|Unexpected token/i.test(String(e.message || "")) || /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EPIPE|socket hang up/i.test(String(e.message || ""));
       const maxAttempts = netErr ? Math.max(retries + 2, 6) : retries;
       if (attempt >= maxAttempts) throw e;
       const delay = netErr ? 1200 * Math.pow(2, attempt) : 800 * Math.pow(2, attempt);
