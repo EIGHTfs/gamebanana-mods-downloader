@@ -136,6 +136,17 @@
         </label>
         <span class="status" id="hashRebuildStatus"></span>
       </div>
+      <!-- 2026-10-12：进度列表的移除方式 —— 默认「整组完成才一起移除」：
+           该 mod 还有文件在下载时，已下完的预览图仍留在列表里可见；整组完成后才一起消失。 -->
+      <div class="row" style="margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <span>进度列表移除方式</span>
+          <select id="taskListRemoval" title="下载列表里已完成的项什么时候消失" style="max-width:320px">
+            <option value="group">整组完成才一起移除（预览图下完后仍可见）</option>
+            <option value="file">每个文件完成即移除</option>
+          </select>
+        </label>
+      </div>
       <!-- 2026-09-02：导出按钮固定放这儿，扫描出 json 数据后才可点击（无数据禁用） -->
       <div class="row" style="margin-top:6px">
         <button id="scanIncompleteDlBtn" type="button" class="ghost" disabled title="扫描出未完成任务后可一键加入下载队列">一键加入下载队列</button>

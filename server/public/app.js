@@ -631,7 +631,22 @@ async function loadTaskView() {
   const r = await api("/api/task");
   const t = r && r.task;
   if (!t) return null;
-  const page = await api("/api/task/items?filter=open&limit=2000");
+  // 2026-10-12：列表移除方式跟随设置 ——
+  //   "group"（默认）= 整组完成才一起移除：该 mod 还有未完成项时，已完成项（含预览图）仍留在列表
+  //   "file"         = 每个文件完成即移除（P0-2 之后的行为）
+  //   后端 getTaskItems 对应 filter="group" / "open"。
+  const removalSel = $("#taskListRemoval");
+  if (removalSel) {
+    if (!removalSel._gbmdBound) {
+      removalSel._gbmdBound = true;
+      removalSel.addEventListener("change", async () => {
+        try { await api("/api/settings", "POST", { taskListRemoval: removalSel.value }); } catch (_) {}
+      });
+    }
+    if (settings) removalSel.value = settings.taskListRemoval || "group";
+  }
+  const removalMode = (settings && settings.taskListRemoval) === "file" ? "file" : "group";
+  const page = await api("/api/task/items?filter=" + (removalMode === "file" ? "open" : "group") + "&limit=2000");
   const merged = Object.assign({}, t, { items: [], resultsMap: {} });
   for (const row of ((page && page.items) || [])) {
     if (!row || row.idx == null) continue;

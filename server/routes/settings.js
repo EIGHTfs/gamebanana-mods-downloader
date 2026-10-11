@@ -37,7 +37,7 @@ module.exports = createRoute({
     // 2026-09-11 bugfix：GB 会话绑定登录浏览器完整 UA（OS+版本号全部一致），
     // gbUserAgent 必须允许前端写入，否则 UA 不匹配时 /api/gb-login-status 始终返回未登录
     // 2026-09-13：sessionRememberHours=记住设备会话时长（默认720h），允许设置页调整
-    const allowed = ["gbCookie", "gbUserAgent", "downloadConcurrency", "sessionHours", "sessionRememberHours", "port", "defaultDownloadPath", "downloadToggles"];
+    const allowed = ["gbCookie", "gbUserAgent", "downloadConcurrency", "sessionHours", "sessionRememberHours", "port", "defaultDownloadPath", "downloadToggles", "taskListRemoval"];
     for (const k of allowed) {
       if (body[k] === undefined) continue;
       // 敏感字段（gbCookie）为空串时跳过不覆盖：留空 = 不改
@@ -45,6 +45,11 @@ module.exports = createRoute({
       // 下载内容开关只存 files/images 两个布尔，其它字段丢掉
       if (k === "downloadToggles") {
         cfgNow[k] = cfg.normalizeDownloadToggles(body[k]);
+        continue;
+      }
+      // 2026-10-12：进度列表移除方式只认 "group"/"file"（非法值回默认 "group"）
+      if (k === "taskListRemoval") {
+        cfgNow[k] = cfg.normalizeTaskListRemoval(body[k]);
         continue;
       }
       cfgNow[k] = body[k];

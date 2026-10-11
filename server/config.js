@@ -55,6 +55,11 @@ const DEFAULT_CONFIG = {
   // 对齐旧扩展 toggles.files / toggles.images；gif 跟图片走；description.html 始终生成（索引/归位真相）。
   // 缺字段视为 true，旧 config.json 行为不变（三项全下）。
   downloadToggles: { files: true, images: true },
+  // 2026-10-12：进度列表的移除方式 ——
+  //   "group"（默认）= 该 mod **整组**项都完成后才一起从列表移除（预览图下完后仍可见，直到压缩包也完成）
+  //   "file"        = 每个文件一完成就从列表移除
+  //   对应后端 getTaskItems 的 filter="group" / "open"（前端按本项选择）。
+  taskListRemoval: "group",
   // 2026-09-06 自动更新：开发机推送后服务端自动拉取重启，不用手动同步代码
   // enabled=false 默认关；interval=拉取模式秒数
   // mode=watch（文件监控）/ git（定时 git pull，需 .git）/ github（定时从 GitHub 拉取，无需 .git）
@@ -62,6 +67,11 @@ const DEFAULT_CONFIG = {
   //   用户可在 config.json 覆盖 githubRepo；githubBranch 默认 main、githubToken 私有仓库才需要
   autoUpdate: { enabled: false, mode: "watch", interval: 300, githubBranch: "main", githubToken: "" }
 };
+
+// 进度列表移除方式归一：只认 "group" / "file"，其它值一律回默认 "group"
+function normalizeTaskListRemoval(raw) {
+  return raw === "file" ? "file" : "group";
+}
 
 // 下载内容开关归一：只认 files / images 两个布尔；缺省或非 false = 开。
 // 「压缩包 + 预览图 两个勾选；gif 跟图片；HTML 始终生成」
@@ -80,11 +90,14 @@ function readConfig() {
       const merged = Object.assign({}, DEFAULT_CONFIG, c);
       // 嵌套对象不能靠顶层 Object.assign：旧文件缺 downloadToggles 或缺 files/images 时按默认全开
       merged.downloadToggles = normalizeDownloadToggles(c.downloadToggles);
+      // 枚举值同样要归一：旧 config.json 没有该项 / 值非法时回默认 "group"
+      merged.taskListRemoval = normalizeTaskListRemoval(c.taskListRemoval);
       return merged;
     }
   } catch (_) {}
   const fallback = Object.assign({}, DEFAULT_CONFIG);
   fallback.downloadToggles = normalizeDownloadToggles(DEFAULT_CONFIG.downloadToggles);
+  fallback.taskListRemoval = normalizeTaskListRemoval(DEFAULT_CONFIG.taskListRemoval);
   return fallback;
 }
 
@@ -275,6 +288,7 @@ module.exports = {
   readConfig,
   writeConfig,
   normalizeDownloadToggles,
+  normalizeTaskListRemoval,
   hashPassword,
   verifyPassword,
   setPassword,
