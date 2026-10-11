@@ -1234,15 +1234,33 @@ function getTaskItems(opts = {}) {
   const out = { ok: true, items: [], total: 0, offset: 0, limit: 0, filter: "open" };
   if (!task) return out;
   const all = task.items || [];
-  const filter = ["open", "done", "all"].indexOf(opts.filter) >= 0 ? opts.filter : "open";
+  const filter = ["open", "done", "all", "group"].indexOf(opts.filter) >= 0 ? opts.filter : "open";
   const offset = Math.max(0, Number(opts.offset) || 0);
   const limit = Math.min(2000, Math.max(1, Number(opts.limit) || 500));
+  // 2026-10-12：filter="group" —— 「整组移除」模式（本项目的默认行为，恢复 P0-2 之前的效果）：
+  //   按 targetDir（= 同一个 mod 的目标目录，与 finalizeHtmls 的分组口径一致）分组，
+  //   只要该组**还有未完成项**，就把这一组**全部**项（含已完成的）都返回
+  //   ⇒ 预览图下完后仍留在列表里，直到该 mod 整组完成才一起消失。
+  //   对照：filter="open" 是「每个文件完成即消失」（P0-2 之后的行为，保留为可选项）。
+  let groupKeep = null;
+  if (filter === "group") {
+    groupKeep = new Set();
+    const hasOpen = new Map();
+    for (let i = 0; i < all.length; i++) {
+      if (!all[i]) continue;
+      const k = all[i].targetDir || "";
+      if (!hasOpen.has(k)) hasOpen.set(k, false);
+      if (!isTerminal(resultAt(i))) hasOpen.set(k, true);
+    }
+    for (const [k, open] of hasOpen) if (open) groupKeep.add(k);
+  }
   const picked = [];
   for (let i = 0; i < all.length; i++) {
     if (!all[i]) continue;
     const terminal = isTerminal(resultAt(i));
     if (filter === "open" && terminal) continue;
     if (filter === "done" && !terminal) continue;
+    if (filter === "group" && !groupKeep.has(all[i].targetDir || "")) continue;
     picked.push(i);
   }
   out.total = picked.length; out.offset = offset; out.limit = limit; out.filter = filter;
