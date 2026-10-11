@@ -118,6 +118,24 @@
         </label>
         <span class="status" id="scanIncompleteStatus"></span>
       </div>
+      <!-- 2026-10-12：重建索引新增两个可选动作（**都默认不勾**）——
+           ① 重写 HTML：把「描述区 GB 图片外链本地化」等生成侧修复应用到**存量** HTML
+              （实测 ≈6.5ms/目录，16k 目录 ≈1 分 45 秒，轻活；与重建索引同一遍遍历完成，不二次走盘）
+           ② 补算 md5：⚠️ 重活——会逐个读图片内容算内容 md5 写回索引（实测读盘 ≈7–8MB/s，
+              曾把 /api/task 拖到无响应）⇒ 只在空闲、确实需要时勾 -->
+      <div class="row" style="margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="hashRebuildHtml">
+          <span>重建时顺带重写 HTML（描述区图片外链本地化；≈6.5ms/目录）</span>
+        </label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="hashRebuildMd5">
+          <span>重建时补算图片内容 md5（⚠️ 重活：持续大量读盘 ≈7–8MB/s，建议空闲时用）</span>
+        </label>
+        <span class="status" id="hashRebuildStatus"></span>
+      </div>
       <!-- 2026-09-02：导出按钮固定放这儿，扫描出 json 数据后才可点击（无数据禁用） -->
       <div class="row" style="margin-top:6px">
         <button id="scanIncompleteDlBtn" type="button" class="ghost" disabled title="扫描出未完成任务后可一键加入下载队列">一键加入下载队列</button>

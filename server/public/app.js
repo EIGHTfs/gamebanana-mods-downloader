@@ -1609,7 +1609,12 @@ function bindSettingsHashQuery() {
       ? `后台重建「${game}」索引…（可继续查询旧索引）`
       : "后台重建全部游戏索引…（可继续查询旧索引）";
     try {
-      const r = await api("/api/hash-rebuild", "POST", { game: game || "" });
+      const r = await api("/api/hash-rebuild", "POST", {
+        game: game || "",
+        // 2026-10-12：两个可选动作（面板上默认不勾）——重写存量 HTML / 补算图片内容 md5
+        html: !!($("#hashRebuildHtml") && $("#hashRebuildHtml").checked),
+        md5: !!($("#hashRebuildMd5") && $("#hashRebuildMd5").checked),
+      });
       if (!r.ok) throw new Error(r.error || "启动失败");
       const doScan = !!($("#hashRebuildScan") && $("#hashRebuildScan").checked);
       const poll = async () => {
