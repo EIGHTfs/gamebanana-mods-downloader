@@ -353,6 +353,9 @@ async function rebuild(gameFilter, opts) {
       ? [String(gameFilter).trim()]
       : Object.keys(games);
     let htmls = 0;
+    // 2026-10-12：可选动作的计数（opts.html / opts.md5 开启时才有值），累计后写进 buildState
+    //   供 GET /api/hash-index-status 显示「这次重建重写了多少 HTML / 补了多少 md5」
+    let htmlRewritten = 0, htmlFailed = 0, md5Filled = 0;
     for (const game of targets) {
       const root = cfg.gameRootOf(game);
       if (!root || !fs.existsSync(root)) continue;
@@ -361,6 +364,9 @@ async function rebuild(gameFilter, opts) {
       const counter = { htmls: 0, steps: 0 };
       await walkDir(root, root, g, counter);
       htmls += counter.htmls;
+      htmlRewritten += counter.htmlRewritten || 0;
+      htmlFailed += counter.htmlFailed || 0;
+      md5Filled += counter.md5Filled || 0;
       // 2026-08-26 用户决定：自动空壳清理已取消（曾误清 1672 个目录）——以后由用户
       //   手动触发整理，不再 rebuild 时自动清理。
 
@@ -370,7 +376,10 @@ async function rebuild(gameFilter, opts) {
     mergeAll(); // 各游戏重建完成后合并进全库查询表
     buildState.lastAt = Date.now();
     buildState.lastMs = Date.now() - t0;
-    return { ok: true, htmls, gb: gbIndex.size, local: localIndex.size, name: nameIndex.size, games: loadedGames.size, ms: buildState.lastMs };
+    buildState.htmlRewritten = htmlRewritten;
+    buildState.htmlFailed = htmlFailed;
+    buildState.md5Filled = md5Filled;
+    return { ok: true, htmls, htmlRewritten, htmlFailed, md5Filled, gb: gbIndex.size, local: localIndex.size, name: nameIndex.size, games: loadedGames.size, ms: buildState.lastMs };
   } catch (e) {
     buildState.error = e.message || String(e);
     return { ok: false, error: buildState.error };
@@ -492,7 +501,14 @@ function organizeExternalFiles(dir, gameRoot, gbMeta) {
 function status() {
   const games = {};
   for (const [g, m] of loadedGames) games[g] = { gb: m.gb.size, local: m.local.size, name: m.name.size };
-  return { ...buildState, gb: gbIndex.size, local: localIndex.size, name: nameIndex.size, games, total: gbIndex.size + localIndex.size };
+  return {
+    ...buildState,
+    // 2026-10-12：可选动作计数（opts.html / opts.md5）——未跑过时给 0，面板不必处理 undefined
+    htmlRewritten: buildState.htmlRewritten || 0,
+    htmlFailed: buildState.htmlFailed || 0,
+    md5Filled: buildState.md5Filled || 0,
+    gb: gbIndex.size, local: localIndex.size, name: nameIndex.size, games, total: gbIndex.size + localIndex.size,
+  };
 }
 
 module.exports = { load, rebuild, queryByHash, searchGb, ingestModDir, flushDirtyGames, status };
