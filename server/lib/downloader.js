@@ -200,6 +200,22 @@ function buildHtmlContent(obj, absDir) {
       if (g.url) descText = String(descText).split(g.url).join(localName);
     });
   }
+  // 2026-10-12 修复：**图片**外链同样要本地化（原来只处理了 gif）。
+  //   现象：描述里常直接嵌 GB 的 files.gamebanana.com 图片，而同一张图已下载到本目录
+  //   （网格区就是按本地名引用的）⇒ 不替换就出现「本地有图、描述里却指向外链」，
+  //   断网或 GB 清理该图后描述区的图显示不出来（实测：某 mod 描述区 2 张图仍是外链，本地有同名文件）。
+  //   两种匹配都做：① 索引里有 im.url 时精确替换；② 兜底按「URL 以本地文件名结尾」匹配替换
+  //   （GB 图片外链形如 …/img/ss/mods/<文件名>，覆盖 im.url 缺失的情况）。
+  if (obj.images && obj.images.length) {
+    obj.images.forEach((im) => {
+      const localName = String(im.file || im.gbFile || "");
+      if (!localName) return;
+      if (im.url) descText = String(descText).split(im.url).join(localName);
+      const safe = localName.replace(/[.*+?^${}()|[\]\\]/g, (ch) => "\\" + ch);
+      descText = String(descText).replace(
+        new RegExp("https?://[^\"'\\s<>]*/" + safe + "(?=[\"'\\s<>]|$)", "g"), localName);
+    });
+  }
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1436,13 +1452,17 @@ async function consumeTaskItem(settings) {
 //   收尾会对每个 item 做 existsSync + statSync，并读其所在目录的 description.html；
 //   实测 36,739 项 ⇒ ≈7 万次同步 stat + 58.5MB 索引读，是收尾耗时的主要构成之一。
 //   已收尾过且状态未变的项不必重做（重试/新下载会换 item 对象，WeakSet 自然失效）。
-const finalizedItems = new WeakSet();
+// 2026-10-12（C）：收尾跳过判据从「对象是否收尾过」改为「**收尾后结果有没有变**」。
+//   原实现用 WeakSet 记对象 ⇒ 同一 item 对象**重试成功**后仍被跳过 ⇒ 该目录的 HTML 状态停在旧值
+//   （用户侧表现为「下载完了但状态/列表没回写」）。现在记签名 `_hash:_size`：重试会更新它们 ⇒ 签名变 ⇒ 重做。
+const finalizedSig = new WeakMap();
 
 async function finalizeHtmls() {
   const dirs = new Map(); // finalDir -> { obj, items: [] }
   for (const item of task.items || []) {
     if (!item || !item.targetDir || !item.path) continue;
-    if (finalizedItems.has(item)) continue;   // 已收尾过 → 跳过（省掉重复 stat / 读索引）
+    // 已收尾且此后结果没变 → 跳过（省掉重复 stat / 读索引）；重试成功会改 _hash/_size ⇒ 签名变 ⇒ 重做
+    if (finalizedSig.get(item) === `${item._hash || ""}:${item._size || 0}`) continue;
     if (!dirs.has(item.targetDir)) {
       dirs.set(item.targetDir, { obj: readIndexObj(item.targetDir), items: [] });
     }
@@ -1551,8 +1571,8 @@ async function finalizeHtmls() {
         //   （原来每目录写一次，单份索引 15–26MB ⇒ 数十 GB 写盘）
         try { hashIndex.ingestModDir(finalDir, { deferSave: true }); } catch (_) {}
       }
-      // 本目录处理完 → 标记这些 item 已收尾（下次 finalize 直接跳过，不再重复 stat/读索引）
-      for (const it of g.items) finalizedItems.add(it);
+      // 本目录处理完 → 记录这些 item 的当前签名（下次 finalize 只有结果变了才重做）
+      for (const it of g.items) finalizedSig.set(it, `${it._hash || ""}:${it._size || 0}`);
     } catch (_) {}
   }
 }
