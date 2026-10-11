@@ -952,8 +952,12 @@ function downloadToFile(item, settings, onProgress) {
           // 2026-10-12：带 cookie 被拒 → 去掉 cookie 再试一次。
           //   实测：过期的 gbCookie 会让**公开文件**返回 403，同一 URL 不带 cookie 返回 200。
           //   仅当「本次确实带了 cookie」且「尚未试过不带 cookie」时重试一次，避免与下载重试叠加成请求风暴。
-          // 只对 403 去 cookie 重试：实测 403 是过期 cookie 拖累（不带 cookie 反而 200），
-          //   而 404 是 GB 侧文件不可用（换 UA/cookie/节点/绕缓存全 404）⇒ 对 404 重试纯属浪费请求。
+          // 只对 403 去 cookie 重试（2026-10-12 **更正**）：403 并非 cookie 失效所致——
+          //   实测同一 URL 带/不带 cookie 都是 403；真正决定登录态的是 **UA 是否与换取 cookie 的浏览器一致**：
+          //     配置 UA + cookie → apiv13/Member/UiConfig 返回 _bIsLoggedIn=true（idMemberRow 有值）
+          //     换成写死的 Chrome UA + 同一 cookie → _bIsLoggedIn=false
+          //   故保留该重试仅作「cookie 被顶掉/真过期」的兜底；404 属 GB 侧文件不可用
+          //   （换 UA/cookie/节点/绕缓存全 404），对 404 重试纯属浪费请求。
           if (code === 403 && withCookie && settings.gbCookie) {
             res.resume();
             console.log(`[dl-retry] HTTP ${code} 且带 cookie → 去掉 cookie 重试: ${u}`);
