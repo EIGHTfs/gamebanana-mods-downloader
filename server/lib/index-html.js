@@ -30,13 +30,17 @@ function parseIndexObj(html) {
 
 // 读 modDir/description.html 并解析（不存在/解析失败返回 null）
 // 注意：使用同步 IO 是因为此函数在批量扫描中调用，文件通常很小（<10KB）
+// 2026-10-12：按**调用点**计数——meter 在模块加载时创建一次（站点固定，热路径零开销）
+const indexReadIo = require("./io-monitor").meter("index-read", "index-html.js:readIndexObj");
+
 function readIndexObj(modDir) {
   const p = path.join(modDir, "description.html");
   if (!fs.existsSync(p)) return null;
   try {
     const html = fs.readFileSync(p, "utf8");
     // 2026-10-11：IO 归因——索引读取按实际字节自报（见 lib/io-monitor.js）
-    try { require("./io-monitor").count("index-read", html.length); } catch (_) {}
+    // 2026-10-12：改用按调用点的 meter（站点固定，热路径零开销）
+    try { indexReadIo(html.length); } catch (_) {}
     return parseIndexObj(html);
   } catch (_) { return null; }
 }

@@ -20,6 +20,8 @@
 const { writeFileAtomic, createThrottledWriter } = require("../store/state-store");
 // 2026-10-11：IO 归因（读/写点自报用量，见 lib/io-monitor.js）
 const ioMonitor = require("./io-monitor");
+// 2026-10-12：按**调用点**计数——meter 在模块加载时创建一次（站点固定，热路径零开销）
+const taskWriteIo = ioMonitor.meter("task-write", "download-task-store.js:createTaskWriter/onWrite");
 
 /**
  * 清掉 resultsMap 中越界（下标 <0 或 ≥ items.length）的陈旧键。
@@ -79,8 +81,8 @@ function createTaskWriter(opts) {
     log: o.log,
     getState: () => (typeof o.getTask === "function" ? o.getTask() : null),
     buildSnapshot: (t) => buildSnapshot(t),
-    // 2026-10-11：把每次落盘的字节数报给 IO 监测（实测任务文件 38MB、节流 500ms 一次 ⇒ 写盘可达数十 MB/s）
-    onWrite: (bytes) => { try { require("./io-monitor").count("task-write", bytes); } catch (_) {} }
+    // 2026-10-12：按**调用点**计数（meter 在模块加载时创建一次、站点固定；热路径零开销）
+    onWrite: (bytes) => { try { taskWriteIo(bytes); } catch (_) {} }
   });
   return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending };
 }

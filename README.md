@@ -417,6 +417,10 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 - 其它待办：① 前端进度页按需渲染 + 已完成分组折叠/分页；② `items[].path` 改存相对路径（再省 ~30%）；
   ③ 越界键**来源**排查（现场曾观测 `resultsMap` 12,896 > `items` 12,782，本次只做安全网清理）。
 - 验收工具：`bash scripts/api-test.sh <base-url> <password>`（读写接口全测 + 阈值判定；地址与口令由参数传入，脚本内不写死）。
+- IO 归因：`GET /api/io` 同时给 `byLabel`（按类型：task-write / index-read / hash / download-write）与
+  **`bySite`（按调用点 file:line，含字节数与调用次数）**——写盘飙高时能直接看出是**哪一行**在写。
+  热路径（下载分块逐块计数）用 `ioMonitor.meter(label)`：站点在创建时固定一次，之后每次只做一次累加，
+  **绝不在热路径抓栈**（`count(label, bytes, site?)` 为兼容写法）。
 - 方案文档：`docs/20261011-下载任务存储瘦身.MD`
 
 ---

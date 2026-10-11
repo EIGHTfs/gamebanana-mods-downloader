@@ -66,17 +66,25 @@ function fileMd5(filePath) {
       const hash = crypto.createHash("md5");
       const stream = fs.createReadStream(filePath);
       // 2026-10-11：IO 归因——按实际读到的分块字节自报（谁在读一目了然）
-      stream.on("data", (c) => { hash.update(c); try { ioMonitor.count("hash", c.length); } catch (_) {} });
+      stream.on("data", (c) => { hash.update(c); try { hashIo(c.length); } catch (_) {} });
       stream.on("end", () => resolve(hash.digest("hex")));
       stream.on("error", () => resolve(""));
     } catch (_) { resolve(""); /* 文件不存在或读取失败，返回空字符串 */ }
   });
 }
 
+// 2026-10-12：IO 归因从「按 label」细化到「**按调用点**」。
+//   站点在创建时固定下来（显式传入，不依赖抓栈），之后每次调用只做一次 Map 累加 —— 热路径零开销。
+//   ⚠️ 原来这里用的是 `ioMonitor.count(...)` 但**从未 require** ⇒ 三处计数全被 try/catch 静默吞掉
+//   （这就是 [io] 归因里始终看不到 hash / download-write 的原因）。此处补上 require 并改用 meter。
+const ioMonitor = require("./io-monitor");
+const hashIo = ioMonitor.meter("hash", "downloader.js:fileMd5(stream/readFileSync)");
+const downloadWriteIo = ioMonitor.meter("download-write", "downloader.js:finalizeDownload");
+
 function fileMd5Sync(filePath) {
   try {
     const buf = fs.readFileSync(filePath);
-    try { ioMonitor.count("hash", buf.length); } catch (_) {}
+    try { hashIo(buf.length); } catch (_) {}
     return crypto.createHash("md5").update(buf).digest("hex");
   } catch (_) { return ""; /* 文件不存在或读取失败，返回空字符串 */ }
 }
@@ -889,7 +897,7 @@ function startStallWatcher(task, req, tmp, getReceived, isDone) {
 function finalizeDownload(tmp, destPath, contentLength, resumeOffset) {
   const st = fs.statSync(tmp);
   // 2026-10-11：IO 归因——下载落盘按实际字节自报（见 lib/io-monitor.js）
-  try { ioMonitor.count("download-write", st.size); } catch (_) {}
+  try { downloadWriteIo(st.size); } catch (_) {}
   if (st.size === 0) throw new Error("下载后文件为空: " + destPath);
   if (contentLength > 0 && resumeOffset === 0 && st.size !== contentLength) {
     throw new Error(`文件大小不匹配（期望 ${contentLength}，实际 ${st.size}）: ${destPath}`);
