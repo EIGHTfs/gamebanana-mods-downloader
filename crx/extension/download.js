@@ -81,7 +81,8 @@ async function startNativeDownload(links, toggles, cookieHeader, downloadPath, n
     for (const file of files) {
       const downloadUrl = file._sDownloadUrl || (GB_DOWNLOAD_BASE + (file._idRow || ""));
       const dest = downloadPath.replace(/[\\/]+$/, "") + "/" + (file._sFile || ("mod-" + id));
-      const r = await nativeRequestFn("download", { url: downloadUrl, path: dest, cookie: cookieHeader });
+      // 2026-10-12：一并传登录浏览器的真实 UA——GB 的会话与 UA 绑定，native host 侧原来写死极简 UA
+      const r = await nativeRequestFn("download", { url: downloadUrl, path: dest, cookie: cookieHeader, ua: (typeof navigator !== "undefined" && navigator.userAgent) || "" });
       if (!r.ok) throw new Error(r.error || "native download failed");
       count++;
     }

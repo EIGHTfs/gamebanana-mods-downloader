@@ -74,7 +74,11 @@ function deleteMappingFile(name) {
 
 function ensureDir(dir) { fs.mkdirSync(dir, { recursive: true }); }
 
-function downloadFile(url, destPath, cookie) {
+// 兜底 UA：调用方（浏览器扩展）应传登录浏览器的 navigator.userAgent——GB 的会话与 UA 绑定，
+//   写死极简 UA 会让「带浏览器 cookie」的请求被判异常（2026-10-12 统一为「UA 来自调用方/配置」）。
+const DEFAULT_HOST_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+function downloadFile(url, destPath, cookie, ua) {
   destPath = String(destPath || "");
   ensureDir(path.dirname(destPath));
   const tmp = destPath + ".part";
@@ -82,7 +86,7 @@ function downloadFile(url, destPath, cookie) {
     function go(u, left) {
       const mod = u.startsWith("https:") ? https : http;
       const headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": String(ua || "").trim() || DEFAULT_HOST_UA,
         Accept: "*/*",
         Referer: "https://gamebanana.com/"
       };
@@ -136,7 +140,7 @@ async function main() {
         const n = deleteMappingFile(msg.name);
         sendMessage({ requestId: rid, type: "mappingDeleted", name: n });
       } else if (msg.type === "download") {
-        const r = await downloadFile(msg.url, msg.path, msg.cookie);
+        const r = await downloadFile(msg.url, msg.path, msg.cookie, msg.ua);
         sendMessage(Object.assign({ requestId: rid, type: "downloaded" }, r));
       } else if (msg.type === "selectFolder") {
         sendMessage({ requestId: rid, type: "folder", path: "", error: "headless: 无文件夹对话框" });

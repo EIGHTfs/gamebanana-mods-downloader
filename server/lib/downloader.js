@@ -898,6 +898,9 @@ function finalizeDownload(tmp, destPath, contentLength, resumeOffset) {
   return { size: st.size };
 }
 
+// 下载兜底 UA：配置 gbUserAgent 缺失时使用（与 gb-api.js 的兜底保持同一形态）
+const DEFAULT_DL_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
 function downloadToFile(item, settings, onProgress) {
   return new Promise((resolve, reject) => {
     const destPath = item.path;
@@ -909,15 +912,20 @@ function downloadToFile(item, settings, onProgress) {
       try { resumeOffset = fs.statSync(tmp).size; } catch (_) { resumeOffset = 0; }
     }
 
-    function doFetch(u, redirLeft, useRange) {
+    // withCookie：首次带配置 cookie；若服务端以 4xx 拒绝（实测 2026-10-12：**过期 cookie 会让公开文件返回 403**，
+    //   同一个 URL 不带 cookie 反而 200），则去掉 cookie 重试一次（见下方 4xx 分支）。
+    function doFetch(u, redirLeft, useRange, withCookie = true) {
       const parsed = new URL(u);
       const mod = parsed.protocol === "https:" ? https : http;
+      // 2026-10-12 修复：原来这里**写死** Chrome/120 的 UA，忽略了配置里的 gbUserAgent——
+      //   而 GB 的会话与「登录浏览器的完整 UA」绑定（见 README 常见问题：UA 不一致会被判未登录）。
+      //   改为与 gb-api.js 同源：优先用配置的 gbUserAgent，取不到才用兜底默认值。
       const headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "User-Agent": String(settings.gbUserAgent || "").trim() || DEFAULT_DL_UA,
         Accept: "*/*",
         Referer: "https://gamebanana.com/"
       };
-      if (settings.gbCookie) headers.Cookie = settings.gbCookie;
+      if (settings.gbCookie && withCookie) headers.Cookie = settings.gbCookie;
       if (useRange && resumeOffset > 0) headers.Range = `bytes=${resumeOffset}-`;
 
       let done = false;
@@ -931,7 +939,7 @@ function downloadToFile(item, settings, onProgress) {
         if (code >= 300 && code < 400 && res.headers.location) {
           res.resume();
           if (redirLeft <= 0) return reject(new Error("重定向次数过多"));
-          return doFetch(new URL(res.headers.location, u).toString(), redirLeft - 1, useRange);
+          return doFetch(new URL(res.headers.location, u).toString(), redirLeft - 1, useRange, withCookie);
         }
         if (code === 416) {
           // Range 无效（part 残留或文件已更新）→ 删 part 从头下
@@ -941,6 +949,14 @@ function downloadToFile(item, settings, onProgress) {
           return doFetch(u, redirLeft, false);
         }
         if (code >= 400) {
+          // 2026-10-12：带 cookie 被拒 → 去掉 cookie 再试一次。
+          //   实测：过期的 gbCookie 会让**公开文件**返回 403，同一 URL 不带 cookie 返回 200。
+          //   仅当「本次确实带了 cookie」且「尚未试过不带 cookie」时重试一次，避免与下载重试叠加成请求风暴。
+          if (withCookie && settings.gbCookie) {
+            res.resume();
+            console.log(`[dl-retry] HTTP ${code} 且带 cookie → 去掉 cookie 重试: ${u}`);
+            return doFetch(u, redirLeft, useRange, false);
+          }
           // 2026-10-11 诊断增强：4xx/5xx 时抓响应体前 200 字一并报出。
           //   香蕉网的 404/403 常在 body 里给原因（文件已删/需登录/链接过期），
           //   原实现只 res.resume() 丢弃响应体，导致任务被清空后无法回溯根因。
@@ -1949,6 +1965,8 @@ module.exports = {
   planForAppend,
   // 2026-10-11：导出以便单测覆盖 HTML 文件表格「状态」列的数据来源（原读不存在的 f.exists ⇒ 恒为空）
   buildHtmlContent,
+  // 2026-10-12：导出以便单测覆盖下载请求头（UA 取配置、带 cookie 被 4xx 拒绝时去 cookie 重试）
+  downloadToFile,
   startDownloadTask,
   pauseTask,
   resumeTask,
