@@ -22,8 +22,16 @@ const path = require("path");
 const crypto = require("crypto");
 
 const { readIndexObj } = require("./index-html");
-const { buildHtmlContent } = require("./downloader");
 const { writeFileAtomic } = require("../store/state-store");
+
+// ⚠️ downloader **必须懒加载**：存在 hash-index → rebuild-html → downloader → hash-index 的循环依赖，
+//   顶层 require 时 downloader 还没初始化完，会拿到未完成的导出（实测报
+//   "Accessing non-existent property 'rebuildFromObj' of module exports inside circular dependency"）。
+let _buildHtmlContent = null;
+function buildHtml(obj, dir) {
+  if (!_buildHtmlContent) _buildHtmlContent = require("./downloader").buildHtmlContent;
+  return _buildHtmlContent(obj, dir);
+}
 
 // 只排除明确不要的目录名 —— 不能「跳过所有以 . 开头的目录」：
 //   本项目 mod 目录正是 .角色 / .Mods 这类点开头目录（Xrd Rev 2 实测：跳点目录 ⇒ 处理 0 个）
@@ -62,39 +70,37 @@ function fileMd5Sync(file) {
 }
 
 /**
- * 重建单个 mod 目录的 description.html。
- * @returns {{status:"same"|"changed"|"skipped"|"failed", md5Filled:number, error?:string}}
+ * 给**已解析**的索引对象补算图片内容 md5（默认不调用；重活：逐个读图片内容）。
+ * @returns {number} 实际补算条数
  */
-function rebuildOne(dir, opts) {
+function fillImageMd5(obj, dir) {
+  let n = 0;
+  for (const im of (obj && obj.images) || []) {
+    if (!im || im.hash) continue;
+    const name = im.file || im.gbFile || "";
+    if (!name) continue;
+    const abs = path.join(dir, name);
+    if (!fs.existsSync(abs)) continue;
+    const h = fileMd5Sync(abs);
+    if (!h) continue;
+    im.hash = h;
+    n += 1;
+  }
+  return n;
+}
+
+/**
+ * 对**已解析**的索引对象做重建（供 hash-index 的遍历复用：那边已经 readIndexObj 过了，
+ * 直接用它就能省掉「二次遍历 + 二次解析」）。
+ * @returns {{status:"same"|"changed"|"failed", md5Filled:number, error?:string, dryRun?:boolean}}
+ */
+function rebuildFromObj(obj, dir, opts) {
   const o = opts || {};
   const htmlPath = path.join(dir, "description.html");
-  let obj = null;
-  try {
-    obj = readIndexObj(dir);
-  } catch (_) {
-    obj = null;
-  }
-  if (!obj) return { status: "skipped", md5Filled: 0, error: "解析不出索引对象" };
-
-  // md5 补算（默认关）：给本地已存在、且尚无 hash 的图片补内容 md5，写回索引对象
-  let md5Filled = 0;
-  if (o.md5) {
-    for (const im of obj.images || []) {
-      if (!im || im.hash) continue;
-      const name = im.file || im.gbFile || "";
-      if (!name) continue;
-      const abs = path.join(dir, name);
-      if (!fs.existsSync(abs)) continue;
-      const h = fileMd5Sync(abs);
-      if (!h) continue;
-      im.hash = h;
-      md5Filled += 1;
-    }
-  }
-
+  const md5Filled = o.md5 ? fillImageMd5(obj, dir) : 0;
   let next = "";
   try {
-    next = buildHtmlContent(obj, dir);
+    next = buildHtml(obj, dir);   // 懒加载的 downloader.buildHtmlContent
   } catch (e) {
     return { status: "failed", md5Filled, error: String((e && e.message) || e) };
   }
@@ -112,6 +118,21 @@ function rebuildOne(dir, opts) {
   } catch (e) {
     return { status: "failed", md5Filled, error: String((e && e.message) || e) };
   }
+}
+
+/**
+ * 重建单个 mod 目录的 description.html（CLI 路径：自己读索引对象）。
+ * @returns {{status:"same"|"changed"|"skipped"|"failed", md5Filled:number, error?:string}}
+ */
+function rebuildOne(dir, opts) {
+  let obj = null;
+  try {
+    obj = readIndexObj(dir);
+  } catch (_) {
+    obj = null;
+  }
+  if (!obj) return { status: "skipped", md5Filled: 0, error: "解析不出索引对象" };
+  return rebuildFromObj(obj, dir, opts);
 }
 
 /**
@@ -175,4 +196,4 @@ async function rebuildHtmls(opts) {
   return sum;
 }
 
-module.exports = { SKIP_DIRS, collectDirs, fileMd5Sync, rebuildOne, rebuildHtmls };
+module.exports = { SKIP_DIRS, collectDirs, fileMd5Sync, fillImageMd5, rebuildFromObj, rebuildOne, rebuildHtmls };

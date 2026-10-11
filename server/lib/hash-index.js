@@ -22,6 +22,8 @@ const LEGACY_FILES = [
   path.join(JSON_DIR, "html-name-index.json")
 ];
 const organize = require("./organize"); // 2026-08-26 下载时/rebuild 时自动整理
+// 2026-10-12：可选动作的实现（重写 description.html / 补算图片内容 md5），与 CLI 脚本共用同一份
+const { rebuildFromObj } = require("./rebuild-html");
 const cfg = require("../config"); // 2026-08-30 autoOrganize 开关
 const mapping = require("./mapping"); // 2026-09-02 游戏名→索引文件名复用字符替换映射文件（illegalChars.json）
 const { parseIndexObj, readIndexObj } = require("./index-html");
@@ -331,7 +333,16 @@ function ingestModDir(modDir, opts) {
 // ---------- 重建（2026-09-02 支持按游戏）----------
 // rebuild(game?)：game 指定 → 只重建该游戏；不指定 → 全部已配置游戏（含默认位置子目录）
 // 与旧表合并追加（只增不删）
-async function rebuild(gameFilter) {
+// 2026-10-12：rebuild 新增可选动作（**都由调用方显式开启，默认关**）——
+//   opts.html = true → 遍历时顺带重写 description.html（把描述区 GB 图片外链本地化等生成侧修复
+//                      应用到存量；实测 ≈6.5ms/目录，16k 目录 ≈1 分 45 秒，轻活）
+//   opts.md5  = true → 顺便补算图片内容 md5 写回索引（⚠️ 重活：逐个读图片内容，实测读盘 ≈7–8MB/s，
+//                      曾把 /api/task 拖到无响应 ⇒ 默认关，勾了才跑）
+// 用模块级变量传递：rebuild 本身是单飞（buildState.running 把关），不存在并发串味。
+let rebuildOpts = {};
+
+async function rebuild(gameFilter, opts) {
+  rebuildOpts = opts || {};
   if (buildState.running) return { running: true, error: "正在重建中" };
   buildState.running = true;
   buildState.error = "";
@@ -383,6 +394,14 @@ async function walkDir(dir, gameRoot, g, counter) {
       const obj = readIndexObj(dir);
       if (obj) {
         counter.htmls++;
+        // 2026-10-12：可选动作放在 indexModFiles 之前 —— md5 补算写回的是 obj.images[].hash，
+        //   先补算再建索引，索引里才会带上新 hash（同一遍遍历完成，不再二次走盘）
+        if (rebuildOpts.html || rebuildOpts.md5) {
+          const r = rebuildFromObj(obj, dir, { md5: !!rebuildOpts.md5 });
+          if (r.status === "changed") counter.htmlRewritten = (counter.htmlRewritten || 0) + 1;
+          else if (r.status === "failed") counter.htmlFailed = (counter.htmlFailed || 0) + 1;
+          counter.md5Filled = (counter.md5Filled || 0) + (r.md5Filled || 0);
+        }
         rewriteHtmlRelPath(dir, gameRoot);
         const gbMeta = buildGbMeta(obj);
         indexModFiles(obj, dir, g, gbMeta);

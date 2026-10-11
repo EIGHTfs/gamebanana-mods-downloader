@@ -31,10 +31,17 @@ module.exports = createRoute({
   },
 
   // POST /api/hash-rebuild → 后台重建索引（body.game 指定只重建该游戏，不传或空 = 全部）
+  //   2026-10-12 新增两个可选动作（**都默认关**，由设置面板的两个勾选控制）：
+  //     body.html = true → 遍历时顺带重写存量 description.html（描述区 GB 图片外链本地化等生成侧修复）
+  //     body.md5  = true → 顺带补算图片内容 md5 写回索引（⚠️ 重活：逐个读图片内容，见 lib/rebuild-html.js）
+  //   两者都在 rebuild 的同一遍遍历里完成（不二次走盘），且 rebuild 本身单飞。
   "POST /api/hash-rebuild": async (req, res) => {
     const body = await readBody(req);
-    hashIndex.rebuild(String((body && body.game) || "").trim() || undefined).then(() => {}).catch(() => {});
-    return sendJson(res, { ok: true, running: true, game: String((body && body.game) || "").trim() || "all" }, 200);
+    const game = String((body && body.game) || "").trim();
+    const wantHtml = !!(body && body.html);
+    const wantMd5 = !!(body && body.md5);
+    hashIndex.rebuild(game || undefined, { html: wantHtml, md5: wantMd5 }).then(() => {}).catch(() => {});
+    return sendJson(res, { ok: true, running: true, game: game || "all", html: wantHtml, md5: wantMd5 }, 200);
   },
 
   // GET /api/hash-index-search?q=<关键词>&game=<游戏名可选> → GB 表模糊搜索
