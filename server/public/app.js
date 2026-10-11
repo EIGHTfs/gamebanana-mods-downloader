@@ -980,7 +980,8 @@ function taskStats(task, doneMap) {
   const stuckOrFailed = (task.items || []).some((it, i) => {
     if (!it || !it.path) return false;
     const rr = doneMap[i];
-    return (rr && !rr.ok && !rr.skipped) || (!rr && isTaskEnded(task));
+    // GB 侧不可用（CDN 404）不计入可重试：批量重试会跳过它，按钮状态要如实反映
+    return (rr && !rr.ok && !rr.skipped && !rr.gbUnavailable) || (!rr && isTaskEnded(task));
   });
   $("#retryBtn").disabled = !stuckOrFailed;
   const itemsLen = (task.items || []).length;
@@ -995,10 +996,17 @@ function taskStats(task, doneMap) {
   //   统计优先用后端摘要给的计数（okCount/skippedCount/failCount），回退到本地结果表。
   const okCount = task.okCount != null ? task.okCount : doneValues.filter((r) => r && r.ok && !r.skipped).length;
   const skipCount = task.skippedCount != null ? task.skippedCount : doneValues.filter((r) => r && r.skipped).length;
-  const failCount = task.failCount != null ? task.failCount : doneValues.filter((r) => r && !r.ok).length;
+  // 2026-10-12：GB 侧不可用（CDN 404）单列——后端已把它从 failCount 剔除，此处独立展示并单列计数
+  const gbGoneCount = task.gbUnavailableCount != null
+    ? task.gbUnavailableCount
+    : doneValues.filter((r) => r && !r.ok && r.gbUnavailable).length;
+  const failCount = task.failCount != null
+    ? task.failCount
+    : doneValues.filter((r) => r && !r.ok && !r.gbUnavailable).length;
   let metaText = `${done}/${total} 项 | 成功 ${okCount} | 失败 ${failCount}`;
   if (skipCount) metaText += ` | 跳过 ${skipCount}`;
-  return { total, done, pct, metaText, okCount, skipCount, failCount };
+  if (gbGoneCount) metaText += ` | 🌐 GB 侧不可用 ${gbGoneCount}`;
+  return { total, done, pct, metaText, okCount, skipCount, failCount, gbGoneCount };
 }
 
 // 进度条 + 任务 meta 文本
@@ -1078,6 +1086,8 @@ function rowHtml(item, idx, task, doneMap) {
   if (r) {
     if (r.skipped) { cls = "ok"; icon = "⏭"; statusText = r.exists ? "已存在（跳过）" : "已忽略"; }
     else if (r.ok) { cls = "ok"; icon = "✓"; statusText = "成功"; }
+    // 2026-10-12：GB 侧文件不可用（CDN 404）单独标注——不是本侧故障，批量重试会跳过
+    else if (r.gbUnavailable) { cls = "fail"; icon = "🌐"; statusText = "GB 侧不可用（源站已取不到，重试无效）"; }
     else { cls = "fail"; icon = "✗"; statusText = r.error || "失败"; }
   }
   // 2026-09-02：忽略/跳过原因（如「游戏未配置下载路径」）显示在 UI 上

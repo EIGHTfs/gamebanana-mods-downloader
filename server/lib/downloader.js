@@ -901,6 +901,18 @@ function finalizeDownload(tmp, destPath, contentLength, resumeOffset) {
 // 下载兜底 UA：配置 gbUserAgent 缺失时使用（与 gb-api.js 的兜底保持同一形态）
 const DEFAULT_DL_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
+/**
+ * 构造下载 HTTP 错误；404 额外打上 `gbUnavailable` 标记。
+ * 依据（2026-10-12 实测）：我们用的 URL 就是 GB 自己档案 API 给的 `_sDownloadUrl`，逐跳重定向到
+ *   `filecacheNN` 后返回 404；换 UA / cookie / 缓存节点 / 加缓存参数一律 404，而档案 API 仍显示文件在
+ *   （id、md5、大小齐全）⇒ 属 **GB 侧文件不可用**，与「我们这边出错」区分开：界面单列、批量重试时跳过。
+ */
+function makeHttpError(code, url, tail) {
+  const e = new Error(`下载失败 HTTP ${code}: ${url}${tail || ""}`);
+  if (code === 404) e.gbUnavailable = true;
+  return e;
+}
+
 function downloadToFile(item, settings, onProgress) {
   return new Promise((resolve, reject) => {
     const destPath = item.path;
@@ -971,9 +983,9 @@ function downloadToFile(item, settings, onProgress) {
           res.on("data", (c) => { if (snippet.length < 200) snippet += c; });
           res.on("end", () => {
             const tail = snippet ? ` | 响应体: ${snippet.replace(/\s+/g, " ").slice(0, 200)}` : "";
-            reject(new Error(`下载失败 HTTP ${code}: ${u}${tail}`));
+            reject(makeHttpError(code, u, tail));
           });
-          res.on("error", () => reject(new Error(`下载失败 HTTP ${code}: ${u}`)));
+          res.on("error", () => reject(makeHttpError(code, u)));
           return;
         }
         if (useRange && resumeOffset > 0 && code === 200) {
@@ -1078,16 +1090,18 @@ async function executeDownloadItem(item, settings, onProgress) {
     }
   }
   const errMsg = (lastErr && (lastErr.message || String(lastErr))) || "下载失败";
+  // 2026-10-12：GB 侧文件不可用（CDN 404）单独标记——界面单列、批量重试跳过
+  const gbGone = !!(lastErr && lastErr.gbUnavailable);
   // 2026-10-11 失败诊断日志（可 grep）：把失败原因落进服务端日志，而不只写进 resultsMap。
   //   原因：resultsMap 会被「清除失败」「终止任务」清掉，清完就再也查不到根因（实测踩过：
   //   某个 mod 的压缩包全部 404，用户清掉失败项后无从定位）。日志保留 URL + HTTP 状态码 + 目标路径 + 原因。
   if (!item.isGif) {
     const httpHit = (String(errMsg).match(/HTTP \d+/) || ["HTTP -"])[0];
-    console.log(`[dl-fail] ${item.type || "file"} | ${httpHit} | url=${item.url || "-"} | path=${item.path || "-"} | ${String(errMsg).slice(0, 300)}`);
+    console.log(`[dl-fail${gbGone ? "-gb" : ""}] ${item.type || "file"} | ${httpHit} | url=${item.url || "-"} | path=${item.path || "-"} | ${String(errMsg).slice(0, 300)}`);
   }
   // gif 失败 → 自动跳过（不显示失败）；其他文件失败 → 正常显示失败（可重试/跳过）
   if (item.isGif) return { path: item.path, ok: true, skipped: true, skipReason: "gif 下载失败，已跳过（不强求）: " + errMsg };
-  return { path: item.path, ok: false, error: errMsg };
+  return { path: item.path, ok: false, error: errMsg, gbUnavailable: gbGone || undefined };
 }
 
 // ---------- 任务状态 ----------
@@ -1167,20 +1181,21 @@ function getTaskSummary() {
   getTask(); // 刷新 totalSpeed
   const items = task.items || [];
   const rm = task.resultsMap || {};
-  let ok = 0, skipped = 0, failed = 0;
+  let ok = 0, skipped = 0, failed = 0, gbGone = 0;
   for (const k of Object.keys(rm)) {
     const r = rm[k];
     if (!r || typeof r !== "object") continue;
     if (r.skipped) skipped++;
     else if (r.ok === true) ok++;
-    else if (r.ok === false) failed++;
+    else if (r.ok === false) { if (r.gbUnavailable) gbGone++; else failed++; }   // GB 侧不可用单列，不计入失败
   }
   const { items: _i, resultsMap: _r, results: _res, pendingMods: _p, ...rest } = task;
   return Object.assign(rest, {
     itemsTotal: items.length,
     okCount: ok,
     skippedCount: skipped,
-    failCount: failed,
+    failCount: failed,            // 不含 GB 侧不可用
+    gbUnavailableCount: gbGone,   // GB 侧文件不可用（CDN 404）：单列，批量重试会跳过
     pendingModsCount: (task.pendingMods || []).length,
     itemsIncluded: false // 明确告知前端：本次未带 items（列表请用 /api/task/items）
   });
@@ -1877,6 +1892,9 @@ function retryFailed(q = {}) {
     if (r && r.ok && !r.skipped) continue; // 已成功
     if (r && r.skipped) continue;          // 已跳过
     if (!r && !ended) continue;            // 未结束（含暂停）：无结果 = 还没轮到，不是失败/卡住 → 不重试
+    // 2026-10-12：GB 侧不可用（CDN 404）批量重试跳过——实测换 UA/cookie/节点/绕缓存全 404，重试无效；
+    //   单项手动重试仍允许（源站可能恢复，交给用户自己决定）。
+    if (r && r.gbUnavailable && !single) continue;
     failedIdx.push(i); // 确实失败 或 卡住（任务已结束的无结果残留）→ 重新入队
   }
   // 2026-10-11 新增：type=error 的项（mod 解析/构建失败，无 path）也支持重试——
