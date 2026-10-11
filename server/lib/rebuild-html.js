@@ -135,6 +135,30 @@ function rebuildOne(dir, opts) {
   return rebuildFromObj(obj, dir, opts);
 }
 
+/** 读进度文件（断续用）；不存在/损坏 → 空集合 */
+function loadDone(stateFile) {
+  if (!stateFile || !fs.existsSync(stateFile)) return new Set();
+  try {
+    return new Set(JSON.parse(fs.readFileSync(stateFile, "utf8")).done || []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+/** 写进度文件（原子写；失败不影响主流程） */
+function saveDone(stateFile, done, extra) {
+  if (!stateFile) return;
+  try {
+    writeFileAtomic(stateFile, JSON.stringify({
+      ...(extra || {}),
+      updatedAt: new Date().toISOString(),
+      done: [...done],
+    }, null, 2));
+  } catch (_) {
+    /* 进度写不进去不影响主流程 */
+  }
+}
+
 /**
  * 批量重建。
  * @param {object} opts
@@ -196,4 +220,4 @@ async function rebuildHtmls(opts) {
   return sum;
 }
 
-module.exports = { SKIP_DIRS, collectDirs, fileMd5Sync, fillImageMd5, rebuildFromObj, rebuildOne, rebuildHtmls };
+module.exports = { SKIP_DIRS, collectDirs, fileMd5Sync, fillImageMd5, rebuildFromObj, rebuildOne, rebuildHtmls, loadDone, saveDone };

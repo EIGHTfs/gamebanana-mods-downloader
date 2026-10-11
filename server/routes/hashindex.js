@@ -40,7 +40,12 @@ module.exports = createRoute({
     const game = String((body && body.game) || "").trim();
     const wantHtml = !!(body && body.html);
     const wantMd5 = !!(body && body.md5);
-    hashIndex.rebuild(game || undefined, { html: wantHtml, md5: wantMd5 }).then(() => {}).catch(() => {});
+    hashIndex.rebuild(game || undefined, {
+      html: wantHtml,
+      md5: wantMd5,
+      // ⑤ 断续：复用进度文件（只影响「重写 HTML」这一步；索引构建照常走完）
+      resume: !!(body && body.resume),
+    }).then(() => {}).catch(() => {});
     return sendJson(res, { ok: true, running: true, game: game || "all", html: wantHtml, md5: wantMd5 }, 200);
   },
 

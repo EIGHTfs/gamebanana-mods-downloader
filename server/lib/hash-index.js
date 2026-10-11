@@ -23,7 +23,7 @@ const LEGACY_FILES = [
 ];
 const organize = require("./organize"); // 2026-08-26 下载时/rebuild 时自动整理
 // 2026-10-12：可选动作的实现（重写 description.html / 补算图片内容 md5），与 CLI 脚本共用同一份
-const { rebuildFromObj } = require("./rebuild-html");
+const { rebuildFromObj, loadDone, saveDone } = require("./rebuild-html");
 const cfg = require("../config"); // 2026-08-30 autoOrganize 开关
 const mapping = require("./mapping"); // 2026-09-02 游戏名→索引文件名复用字符替换映射文件（illegalChars.json）
 const { parseIndexObj, readIndexObj } = require("./index-html");
@@ -343,6 +343,12 @@ let rebuildOpts = {};
 
 async function rebuild(gameFilter, opts) {
   rebuildOpts = opts || {};
+  // ⑤ 断续：进度文件只影响「重写 HTML」这一步 —— 索引构建必须照常走完（跳过目录会让索引缺项）
+  if (rebuildOpts.resume && !rebuildOpts.stateFile) {
+    // 与 CLI 脚本同一个默认位置（项目根/.rebuild-html-state.json），两处进度可互相续跑
+    rebuildOpts.stateFile = path.join(__dirname, "..", "..", ".rebuild-html-state.json");
+  }
+  if (rebuildOpts.stateFile && rebuildOpts.resume) rebuildOpts.done = loadDone(rebuildOpts.stateFile);
   if (buildState.running) return { running: true, error: "正在重建中" };
   buildState.running = true;
   buildState.error = "";
@@ -372,6 +378,8 @@ async function rebuild(gameFilter, opts) {
 
       loadedGames.set(game, g);
       saveGameFile(game, g);
+      // 每处理完一个游戏存一次进度 —— 中断后带 resume 再跑可跳过已重写的目录
+      if (rebuildOpts.stateFile && rebuildOpts.done) saveDone(rebuildOpts.stateFile, rebuildOpts.done);
     }
     mergeAll(); // 各游戏重建完成后合并进全库查询表
     buildState.lastAt = Date.now();
@@ -406,10 +414,17 @@ async function walkDir(dir, gameRoot, g, counter) {
         // 2026-10-12：可选动作放在 indexModFiles 之前 —— md5 补算写回的是 obj.images[].hash，
         //   先补算再建索引，索引里才会带上新 hash（同一遍遍历完成，不再二次走盘）
         if (rebuildOpts.html || rebuildOpts.md5) {
-          const r = rebuildFromObj(obj, dir, { md5: !!rebuildOpts.md5 });
-          if (r.status === "changed") counter.htmlRewritten = (counter.htmlRewritten || 0) + 1;
-          else if (r.status === "failed") counter.htmlFailed = (counter.htmlFailed || 0) + 1;
-          counter.md5Filled = (counter.md5Filled || 0) + (r.md5Filled || 0);
+          // ⑤ 断续：resume 时跳过**已重写过的目录** —— 只跳这一步，索引构建照常（跳过整个目录会让索引缺项）
+          const alreadyDone = !!(rebuildOpts.resume && rebuildOpts.done && rebuildOpts.done.has(dir));
+          if (alreadyDone) {
+            counter.htmlSkipped = (counter.htmlSkipped || 0) + 1;
+          } else {
+            const r = rebuildFromObj(obj, dir, { md5: !!rebuildOpts.md5 });
+            if (r.status === "changed") counter.htmlRewritten = (counter.htmlRewritten || 0) + 1;
+            else if (r.status === "failed") counter.htmlFailed = (counter.htmlFailed || 0) + 1;
+            counter.md5Filled = (counter.md5Filled || 0) + (r.md5Filled || 0);
+            if (rebuildOpts.done) rebuildOpts.done.add(dir);
+          }
         }
         rewriteHtmlRelPath(dir, gameRoot);
         const gbMeta = buildGbMeta(obj);
