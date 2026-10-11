@@ -60,13 +60,16 @@ function saveState() {
 }
 
 // ---------- 遍历（收集 description.html，遇到 limit 即停） ----------
+// ⚠️ 只跳过明确要排除的目录名 —— 不能「跳过所有以 . 开头的目录」：
+//   本项目的 mod 目录正是 .角色 / .Mods 这类点开头目录（Xrd Rev 2 实测：跳点目录 ⇒ 处理 0 个）。
+const SKIP_DIRS = new Set(["@eaDir", "#recycle", ".trash", ".git", "node_modules", "__MACOSX"]);
 function collect(dir, out) {
   if (out.length >= LIMIT) return;
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
   for (const ent of entries) {
     if (out.length >= LIMIT) return;
-    if (ent.name === "@eaDir" || ent.name === "#recycle" || ent.name.startsWith(".")) continue;
+    if (SKIP_DIRS.has(ent.name)) continue;
     const full = path.join(dir, ent.name);
     if (ent.isDirectory()) collect(full, out);
     else if (ent.name === "description.html") out.push(dir);
