@@ -1434,7 +1434,13 @@ async function finalizeHtmls() {
     }
     dirs.get(item.targetDir).items.push(item);
   }
+  // 2026-10-12 性能修复（实测定位，与任务文件大小无关）：
+  //   批次收尾把 /api/* 连续堵死 **74 秒**（期间写盘 90–128MB/s、读 4,598 个目录的 description.html 共 73.6MB，
+  //   与 4,598×16KB 完全吻合）。收尾是**同步全树处理**，长任务占满事件循环 ⇒ 接口全部超时。
+  //   每处理 5 个目录让出一次事件循环：总耗时不变，但期间服务可正常响应。
+  let finalizedDirs = 0;
   for (const [finalDir, g] of dirs) {
+    if (++finalizedDirs % 5 === 0) await new Promise((r) => setImmediate(r));
     try {
       let obj = g.obj || readIndexObj(finalDir);
       if (!obj) continue;
