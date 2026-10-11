@@ -36,7 +36,12 @@ module.exports = createRoute({
     }
     try {
       // 2026-09-01 用带响应头的 fetch：解析 Set-Cookie 里 rmc 的 Expires 算剩余天数
-      const { json: uicfg, setCookies } = await gbApi.fetchJsonHeaders("https://gamebanana.com/apiv13/Member/UiConfig?_sUrl=%2F", {}, 1);
+      // 2026-10-12：不再直接解构（fetchJsonHeaders 出错会抛；万一返回空值也要给出可读原因，
+      //   而不是面板上那句 "Cannot destructure property 'json' …"）
+      const r = await gbApi.fetchJsonHeaders("https://gamebanana.com/apiv13/Member/UiConfig?_sUrl=%2F", {}, 1);
+      if (!r || !r.json) throw new Error("登录检测接口无有效响应（可能超时或被限流，请稍后重试）");
+      const uicfg = r.json;
+      const setCookies = r.setCookies || [];
       const loggedIn = !!(uicfg && uicfg._bIsLoggedIn);
       // rmc = remember-me cookie，服务端每次请求会刷新并带 Expires；sess 是会话 cookie 无固定到期
       let expiresAt = 0;

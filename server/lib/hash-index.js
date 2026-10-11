@@ -239,7 +239,31 @@ function searchGb(keyword, gameFilter) {
 
 // ---------- 下载时增量追加（2026-08-26：每次新下载顺手更新）----------
 // 从单个 mod 目录的 description.html 提取，更新该游戏（obj.game）的索引文件（只增不删）
-function ingestModDir(modDir) {
+// 2026-10-12：延迟落盘标记——批量收尾时每个 mod 目录都写一次游戏索引，而单份索引 15–26MB
+//   （Impact.json 26.4MB / Waves.json 21.4MB / Rail.json 16.8MB / Zero.json 15.7MB），
+//   数千目录 ⇒ 几十 GB 写盘、收尾 634 秒、/api/* 被堵死。改为：批量期间只更新内存，结束后各写一次。
+const dirtyGames = new Set();
+
+/**
+ * 批量结束后统一落盘：把 deferSave 期间标记为脏的游戏索引各写一次。
+ * @returns {number} 实际写入的游戏数
+ */
+function flushDirtyGames() {
+  let saved = 0;
+  for (const game of dirtyGames) {
+    const g = loadedGames.get(game);
+    if (g && saveGameFile(game, g)) saved++;
+  }
+  dirtyGames.clear();
+  return saved;
+}
+
+/**
+ * 把某个 mod 目录的文件/图片名与 hash 并入反查索引。
+ * @param {string} modDir
+ * @param {{deferSave?: boolean}} [opts] deferSave=true 时只更新内存，由调用方在批量结束后 flushDirtyGames()
+ */
+function ingestModDir(modDir, opts) {
   if (!modDir || !fs.existsSync(path.join(modDir, "description.html"))) return { gbAdded: 0, localAdded: 0 };
   const obj = readIndexObj(modDir);
   if (!obj) return { gbAdded: 0, localAdded: 0 };
@@ -296,7 +320,8 @@ function ingestModDir(modDir) {
     putName(im.file || im.gbFile || "", "image");
   }
 
-  saveGameFile(game, g);
+  if (opts && opts.deferSave) dirtyGames.add(game);
+  else saveGameFile(game, g);
   return { gbAdded, localAdded, saved: 1 };
 }
 
@@ -451,4 +476,4 @@ function status() {
   return { ...buildState, gb: gbIndex.size, local: localIndex.size, name: nameIndex.size, games, total: gbIndex.size + localIndex.size };
 }
 
-module.exports = { load, rebuild, queryByHash, searchGb, ingestModDir, status };
+module.exports = { load, rebuild, queryByHash, searchGb, ingestModDir, flushDirtyGames, status };

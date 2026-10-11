@@ -12,10 +12,13 @@ const indexHtml = require("../server/lib/index-html");
 const hashIndex = require("../server/lib/hash-index");
 const DOWNLOADER_SRC = fs.readFileSync(path.join(__dirname, "..", "server", "lib", "downloader.js"), "utf8");
 
-loggedTest(log, "bug#1 接线：downloader require hash-index + finalizeHtmls 调 ingestModDir", () => {
+loggedTest(log, "bug#1 接线：downloader require hash-index + finalizeHtmls 调 ingestModDir（批量延迟落盘）", () => {
   assert.match(DOWNLOADER_SRC, /require\("\.\/hash-index"\)/, "downloader 应 require hash-index");
-  assert.match(DOWNLOADER_SRC, /hashIndex\.ingestModDir\(finalDir\)/, "finalizeHtmls 应调 ingestModDir");
+  // 2026-10-12：收尾改为「批量期间只更新内存 + 结束后统一落盘」——每目录写一次索引会写几十 GB
+  assert.match(DOWNLOADER_SRC, /hashIndex\.ingestModDir\(finalDir,\s*\{\s*deferSave:\s*true\s*\}\)/, "finalizeHtmls 应以 deferSave 调 ingestModDir");
+  assert.match(DOWNLOADER_SRC, /hashIndex\.flushDirtyGames\(\)/, "收尾结束应统一 flushDirtyGames 落盘");
   assert.equal(typeof hashIndex.ingestModDir, "function", "ingestModDir 是函数");
+  assert.equal(typeof hashIndex.flushDirtyGames, "function", "flushDirtyGames 是函数");
 });
 
 loggedTest(log, "bug#1 行为：ingestModDir 读 description.html 入索引（saved:1）", () => {

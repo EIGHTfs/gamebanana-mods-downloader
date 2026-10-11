@@ -36,6 +36,11 @@ async function fetchJsonHeaders(url, opts = {}, retries = 3) {
   const cookie = opts.cookie !== undefined ? opts.cookie : configCookie();
   if (cookie) headers.Cookie = cookie;
   let setCookies = [];
+  // 2026-10-12 修复：网络错误时 maxAttempts 会被抬到 6，而循环上界是 retries（调用方常传 1）⇒
+  //   循环可能**走完却不抛错**，函数返回 undefined，调用方解构 `{ json }` 直接崩
+  //   （面板报 Cannot destructure property 'json' of '(intermediate value)' as it is undefined）。
+  //   这里记录最后一次错误，循环结束后兜底抛出。
+  let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs || 30000);
@@ -51,6 +56,7 @@ async function fetchJsonHeaders(url, opts = {}, retries = 3) {
       try { setCookies = resp.headers.getSetCookie ? resp.headers.getSetCookie() : []; } catch (_) { /* 旧 Node 版本无 getSetCookie，忽略 */ }
       return { json: await resp.json(), setCookies };
     } catch (e) {
+      lastErr = e;
       if (e.name === "AbortError") throw e;
       const netErr = e instanceof TypeError || /Unexpected end of JSON|Unexpected token/i.test(String(e.message || "")) || /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EPIPE|socket hang up/i.test(String(e.message || ""));
       const maxAttempts = netErr ? Math.max(retries + 2, 6) : retries;
@@ -63,6 +69,8 @@ async function fetchJsonHeaders(url, opts = {}, retries = 3) {
       if (extSignal) extSignal.removeEventListener("abort", onAbort);
     }
   }
+  // 走到这里 = 重试窗口内始终没成功 ⇒ 必须抛出，绝不返回 undefined（否则调用方解构崩溃且原因不明）
+  throw lastErr || new Error(`请求失败（重试 ${retries} 次未成功）：${url}`);
 }
 
 // 支持完整链接（https://gamebanana.com/mods/704164）或纯数字（704164）

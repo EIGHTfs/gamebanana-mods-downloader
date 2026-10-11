@@ -1290,6 +1290,12 @@ async function doDownloadLoop() {
   //   先量出真实耗时再决定是否拆分/优化（避免凭直觉拆函数换来 1% 收益）。
   const __finT0 = Date.now();
   try { await finalizeHtmls(); } catch (_) {}
+  // 2026-10-12：收尾期间索引只更新内存（ingestModDir 传 deferSave），这里统一落盘——
+  //   每个游戏索引只写一次，而不是每个 mod 目录写一次（后者实测写了几十 GB、收尾 634 秒、接口被堵死）
+  try {
+    const savedGames = hashIndex.flushDirtyGames();
+    if (savedGames) console.log(`[hash-index] 收尾统一落盘：${savedGames} 个游戏索引`);
+  } catch (_) {}
   console.log("[task] finalizeHtmls 收尾耗时 " + (Date.now() - __finT0) + "ms");
 }
 
@@ -1533,7 +1539,9 @@ async function finalizeHtmls() {
         // 2026-10-11 性能修复（实测 363–455 秒收尾的真凶）：ingestModDir 会**重写整个游戏索引文件**，
         //   原来它无条件对**每个** mod 目录调用（数千次 × 数 MB ⇒ [io] 归因实测写盘 121MB/s）。
         //   只有该目录的内容真的变了才需要并入索引。
-        try { hashIndex.ingestModDir(finalDir); } catch (_) {}
+        // deferSave：批量收尾期间只更新内存索引，结束后由 flushDirtyGames() 每游戏写一次
+        //   （原来每目录写一次，单份索引 15–26MB ⇒ 数十 GB 写盘）
+        try { hashIndex.ingestModDir(finalDir, { deferSave: true }); } catch (_) {}
       }
       // 本目录处理完 → 标记这些 item 已收尾（下次 finalize 直接跳过，不再重复 stat/读索引）
       for (const it of g.items) finalizedItems.add(it);
