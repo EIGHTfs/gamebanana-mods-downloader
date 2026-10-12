@@ -1232,8 +1232,12 @@ function getTaskSummary() {
  */
 function getTaskItems(opts = {}) {
   const out = { ok: true, items: [], total: 0, offset: 0, limit: 0, filter: "open" };
-  if (!task) return out;
-  const all = task.items || [];
+  // 2026-10-12：支持注入任务/结果（供单测用；不传时用模块级当前任务）——
+  //   便于在**不动真实任务文件**的前提下验证 filter="group" 的分组语义（open/done/all 同理）。
+  const srcTask = opts.task || task;
+  if (!srcTask) return out;
+  const all = srcTask.items || [];
+  const resultAtFn = typeof opts.resultAt === "function" ? opts.resultAt : (i) => resultAt(i);
   const filter = ["open", "done", "all", "group"].indexOf(opts.filter) >= 0 ? opts.filter : "open";
   const offset = Math.max(0, Number(opts.offset) || 0);
   const limit = Math.min(2000, Math.max(1, Number(opts.limit) || 500));
@@ -1250,14 +1254,14 @@ function getTaskItems(opts = {}) {
       if (!all[i]) continue;
       const k = all[i].targetDir || "";
       if (!hasOpen.has(k)) hasOpen.set(k, false);
-      if (!isTerminal(resultAt(i))) hasOpen.set(k, true);
+      if (!isTerminal(resultAtFn(i))) hasOpen.set(k, true);
     }
     for (const [k, open] of hasOpen) if (open) groupKeep.add(k);
   }
   const picked = [];
   for (let i = 0; i < all.length; i++) {
     if (!all[i]) continue;
-    const terminal = isTerminal(resultAt(i));
+    const terminal = isTerminal(resultAtFn(i));
     if (filter === "open" && terminal) continue;
     if (filter === "done" && !terminal) continue;
     if (filter === "group" && !groupKeep.has(all[i].targetDir || "")) continue;
@@ -1265,7 +1269,7 @@ function getTaskItems(opts = {}) {
   }
   out.total = picked.length; out.offset = offset; out.limit = limit; out.filter = filter;
   for (const i of picked.slice(offset, offset + limit)) {
-    out.items.push({ idx: i, item: all[i], result: resultAt(i) || null });
+    out.items.push({ idx: i, item: all[i], result: resultAtFn(i) || null });
   }
   return out;
 }
