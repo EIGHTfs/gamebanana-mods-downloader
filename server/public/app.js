@@ -16,13 +16,34 @@ let renderedIds = new Set();
 let searchPollTimer = null;
 let taskPollTimer = null;
 
+// 会话 cookie 兜底（2026-10-14 实测故障）：
+//   Cookie 按 host 隔离、**不看端口** —— 同一台机器有多个地址（多网卡 IP / 主机名 / zerotier），
+//   换个地址打开就带不上 cookie，前端一遇 401 就跳登录页，表现为「刚登录又要登录」。
+//   实测：gbmd 今天 3 次登录全部签了 30 天、服务端当天未重启，说明丢的不是服务端会话而是 cookie。
+//   服务端 extractToken() 本就支持 Authorization: Bearer（server/auth/auth.js），
+//   因此登录时把服务端返回的 token 存本地、请求时一并带上：cookie 丢失也能免登录。
+const AUTH_TOKEN_KEY = "auth-token";
+function readAuthToken() {
+  try { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; } catch (_) { return ""; }
+}
+function saveAuthToken(t) {
+  try { t ? localStorage.setItem(AUTH_TOKEN_KEY, t) : localStorage.removeItem(AUTH_TOKEN_KEY); } catch (_) {}
+}
+/** 给请求配置补上 Bearer 头；没有 token 时原样返回（不影响原有 cookie 鉴权） */
+function withAuth(opts) {
+  const o = Object.assign({}, opts || {});
+  const t = readAuthToken();
+  if (t) o.headers = Object.assign({}, o.headers || {}, { Authorization: "Bearer " + t });
+  return o;
+}
+
 async function api(path, method = "GET", body) {
   const opts = { method, headers: {} };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
   }
-  const r = await fetch(path, opts);
+  const r = await fetch(path, withAuth(opts));
   if (r.status === 401) {
     location.href = "/login.html";
     throw new Error("未登录");
@@ -302,7 +323,7 @@ function bindSearchStopClear() {
 function bindSearchExport() {
   $("#exportSearchBtn").addEventListener("click", async () => {
     try {
-      const r = await fetch("/api/search/export");
+      const r = await fetch("/api/search/export", withAuth({}));
       if (r.status === 401) { location.href = "/login.html"; return; }
       const blob = await r.blob();
       const a = document.createElement("a");
@@ -1513,7 +1534,7 @@ function bindSettingsSecurity() {
     st.textContent = "正在导出…";
     st.className = "status";
     try {
-      const r = await fetch("/api/data/export");
+      const r = await fetch("/api/data/export", withAuth({}));
       if (r.status === 401) { location.href = "/login.html"; return; }
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "导出失败"); }
       const blob = await r.blob();
@@ -2067,6 +2088,8 @@ function renderCombo(filter) {
 function bindLogout() {
   $("#logoutBtn").addEventListener("click", async () => {
     await api("/api/logout", "POST", {});
+    // 2026-10-14：登出时一并清掉本地 token，否则 Bearer 兜底会把刚登出的会话又「自动登录」回来
+    saveAuthToken("");
     location.href = "/login.html";
   });
 }
