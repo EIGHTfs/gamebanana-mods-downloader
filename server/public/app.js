@@ -328,10 +328,10 @@ function bindSearchExport() {
       const blob = await r.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "gbmd-search-records-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.download = "gbmd-search-records-" + new Date().toISOString().slice(0, 10) + ".jsonl";
       a.click();
       URL.revokeObjectURL(a.href);
-      $("#searchStatus").textContent = "已导出搜索记录 JSON";
+      $("#searchStatus").textContent = "已导出搜索记录 JSONL";
     } catch (e) {
       $("#searchStatus").textContent = "导出失败: " + e.message;
       $("#searchStatus").className = "status err";
@@ -339,7 +339,7 @@ function bindSearchExport() {
   });
 }
 
-// 导入搜索记录（JSON 数组或 {results:[...]}/{records:[...]}）
+// 导入搜索记录（JSONL 导出文件，或旧 JSON：数组 / {results:[...]} / {records:[...]}）
 function bindSearchImport() {
   $("#importSearchBtn").addEventListener("click", () => { $("#importSearchFile").click(); });
   $("#importSearchFile").addEventListener("change", async (ev) => {
@@ -348,14 +348,10 @@ function bindSearchImport() {
     $("#searchStatus").textContent = "正在导入 " + file.name + " …";
     try {
       const text = await file.text();
-      let json = null;
-      try { json = JSON.parse(text); } catch (_) {}
-      let records = null;
-      if (Array.isArray(json)) records = json;
-      else if (json && Array.isArray(json.results)) records = json.results;
-      else if (json && Array.isArray(json.records)) records = json.records;
-      if (!records) { $("#searchStatus").textContent = "导入失败: 文件里找不到记录数组（需为 JSON 数组或 {results:[...]}）"; $("#searchStatus").className = "status err"; ev.target.value = ""; return; }
-      const r = await api("/api/search/import", "POST", { records });
+      if (!text.trim()) { $("#searchStatus").textContent = "导入失败: 文件是空的"; $("#searchStatus").className = "status err"; ev.target.value = ""; return; }
+      // 搜索记录导出就是 JSONL：原文交给服务端解析（不在浏览器 JSON.parse —— JSONL 整体不是合法 JSON）。
+      //   服务端同时兼容旧的 JSON 文件（数组 / {results:[…]} / {records:[…]}）。
+      const r = await api("/api/search/import", "POST", { json: text });
       if (!r.ok) throw new Error(r.error || "导入失败");
       // 刷新显示：重新拉取合并后的 cache
       const c = await api("/api/search/cache");
