@@ -106,14 +106,23 @@ function sameFlat(a, b) {
 }
 
 /**
- * 读取整份任务（双读：db 优先，无 db 或 db 为空时回落旧 json）。
- * 为什么双读：升级到 SQLite 模式后，旧部署的 download_task.json 里还有队列，
- *   首次启动必须能读到它，否则等于把下载队列丢掉。
+ * 读取整份任务。
+ * 读优先级（2026-10-15 定）：**旧 download_task.json 优先** ——
+ *   存在 json 说明还有一批按旧格式记录的下载没跑完，此时以它为准；
+ *   等那批跑完、列表被销毁（json 随之消失）之后，才轮到 SQLite 库。
+ *   这样升级不需要迁移脚本，也不会丢正在跑的那批。
  * @param {string} dbPath
  * @param {string} jsonPath
  * @returns {object|null}
  */
 function loadTask(dbPath, jsonPath) {
+  if (jsonPath && fs.existsSync(jsonPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+    } catch (_) {
+      // json 损坏 ⇒ 继续尝试库
+    }
+  }
   if (dbPath && fs.existsSync(dbPath)) {
     try {
       const db = open(dbPath);
@@ -144,11 +153,8 @@ function loadTask(dbPath, jsonPath) {
         try { db.close(); } catch (_) {}
       }
     } catch (_) {
-      // db 损坏/打不开 ⇒ 继续尝试旧 json
+      // 库损坏/打不开 ⇒ 当作没有数据
     }
-  }
-  if (jsonPath && fs.existsSync(jsonPath)) {
-    return JSON.parse(fs.readFileSync(jsonPath, "utf8"));
   }
   return null;
 }

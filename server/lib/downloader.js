@@ -1146,7 +1146,7 @@ const taskWriter = taskStore.createTaskWriter({
 //   为什么打这行：SQLite 后端依赖内置 node:sqlite（Node ≥22.5 才有，实测 v20/v14 都没有），
 //   现场排障需要一眼看出「这台机器走的是哪条路」，而不是靠猜。
 try {
-  const sm = taskStore.storageMode();
+  const sm = taskStore.storageMode(TASK_FILE);
   console.log("[task-store] 存储后端: " + (sm.mode === "sqlite" ? "SQLite（行级增量写）" : "JSON（回落）")
     + "  |  Node " + process.version
     + (sm.reason ? "  |  回落原因: " + sm.reason : "")

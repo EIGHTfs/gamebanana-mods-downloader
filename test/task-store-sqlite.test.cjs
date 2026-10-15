@@ -117,23 +117,34 @@ loggedTest(log, "行级增量：只改一个 item，第二次落盘只写 1 行�
   }
 });
 
-loggedTest(log, "双读：无 .db 时读到旧 json；有 .db 后以 .db 为准", () => {
+loggedTest(log, "读/写优先级：存在旧 json 时按 json（读写都是）；json 销毁后才用 .db", () => {
   const dir = tmpDir();
   try {
     const jsonPath = path.join(dir, "download_task.json");
     const legacy = makeTask(3);
     fs.writeFileSync(jsonPath, JSON.stringify(legacy, null, 2), "utf8");
-    // 还没有 .db ⇒ 必须读到旧 json（升级不丢队列）
-    const viaJson = store.loadTask(jsonPath);
-    assert.ok(viaJson && viaJson.items.length === 3, "无 .db 时应回落读旧 json");
-    assert.equal(fs.existsSync(store.dbPathOf(jsonPath)), false, "此时不应凭空建库");
 
-    // 用 SQLite 落盘一份不同的内容 ⇒ 之后以 .db 为准
-    const newer = makeTask(5);
-    writeOnce(jsonPath, newer);
-    assert.equal(fs.existsSync(store.dbPathOf(jsonPath)), true, "落盘后应生成 .db");
-    const viaDb = store.loadTask(jsonPath);
-    assert.equal(viaDb.items.length, 5, "有 .db 时应以 .db 为准（旧 json 被忽略）");
+    // 只有 json：按 json 加载；auto 写入器也选 JSON（继续按旧格式落盘）
+    const onlyJson = store.loadTask(jsonPath);
+    assert.ok(onlyJson && onlyJson.items.length === 3, "只有 json 时按 json 加载");
+    assert.equal(fs.existsSync(store.dbPathOf(jsonPath)), false, "此时不应凭空建库");
+    const wAuto = store.createTaskWriter({
+      filePath: jsonPath, ensureDir: () => {}, getTask: () => legacy, throttleMs: 1, log: () => {}
+    });
+    assert.equal(wAuto.mode, "json", "存在旧 json 时 auto 应选 JSON 后端");
+
+    // 两者都在（例如之前切过库）：仍按 json —— 旧批没跑完之前以它为准
+    writeOnce(jsonPath, makeTask(5), { backend: "sqlite" });
+    assert.equal(fs.existsSync(store.dbPathOf(jsonPath)), true, "应已生成 .db");
+    const both = store.loadTask(jsonPath);
+    assert.equal(both.items.length, 3, "两者都在时按 json 加载（json 优先）");
+    assert.equal(store.storageMode(jsonPath).mode, "json", "storageMode 也应如实报 json");
+
+    // 模拟「那批跑完、列表销毁」：json 没了 ⇒ 读 .db
+    fs.unlinkSync(jsonPath);
+    const onlyDb = store.loadTask(jsonPath);
+    assert.equal(onlyDb.items.length, 5, "json 销毁后应读 .db");
+    assert.equal(store.storageMode(jsonPath).mode, "sqlite", "无 json 时应报 sqlite");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -160,7 +171,7 @@ loggedTest(log, "清空：dropStore 连 -wal/-shm 侧车与旧 json 一起清掉
   try {
     const jsonPath = path.join(dir, "download_task.json");
     fs.writeFileSync(jsonPath, JSON.stringify(makeTask(2)), "utf8");
-    writeOnce(jsonPath, makeTask(2));
+    writeOnce(jsonPath, makeTask(2), { backend: "sqlite" });
     const dbPath = store.dbPathOf(jsonPath);
     assert.equal(fs.existsSync(dbPath), true);
 

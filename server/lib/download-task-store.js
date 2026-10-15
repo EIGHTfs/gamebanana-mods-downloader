@@ -21,6 +21,7 @@
 // ============================================================
 "use strict";
 
+const fs = require("fs");
 const { writeFileAtomic, createThrottledWriter } = require("../store/state-store");
 // 2026-10-15：SQLite 后端（Node 内置 node:sqlite；不可用时本模块自动回落 JSON 路径）
 const taskSqlite = require("./task-sqlite-store");
@@ -88,10 +89,13 @@ function createTaskWriter(opts) {
   const o = opts || {};
   const jsonPath = o.filePath;
   const dbPath = dbPathOf(jsonPath);
-  // backend：auto（默认，按内置 node:sqlite 可用性自动选择）| json（强制旧 JSON 路径）| sqlite（强制 SQLite）
-  //   显式开关的用处：① 单测要分别覆盖两条路径 ② 现场排障时可以先切回 json 验证
+  // backend：auto（默认）| json（强制旧 JSON 路径）| sqlite（强制 SQLite）
+  //   auto 的规则（2026-10-15 定）：**存在旧 download_task.json 就走 JSON 路径** ——
+  //   那说明还有一批按旧格式记录的下载没跑完，继续按原样读写它；等那批跑完、列表被销毁
+  //   （json 消失）之后，新批次才自动切到 SQLite。好处：升级不丢正在跑的那批，也不需要迁移脚本。
   const want = String(o.backend || "auto");
-  const useSqlite = want === "sqlite" || (want === "auto" && taskSqlite.isAvailable());
+  const jsonExists = !!(jsonPath && fs.existsSync(jsonPath));
+  const useSqlite = want === "sqlite" || (want === "auto" && !jsonExists && taskSqlite.isAvailable());
   const common = {
     ensureDir: o.ensureDir,
     getState: () => (typeof o.getTask === "function" ? o.getTask() : null),
@@ -135,8 +139,11 @@ function dropStore(jsonPath) {
 }
 
 /** 存储后端探测结果（启动日志用）：{ mode: "sqlite"|"json", reason } */
-function storageMode() {
+function storageMode(jsonPath) {
   const p = taskSqlite.probe();
+  if (jsonPath && fs.existsSync(jsonPath)) {
+    return { mode: "json", reason: "存在旧 download_task.json（按约定优先用它，那批跑完后自动切库）" };
+  }
   return p.ok ? { mode: "sqlite", reason: "" } : { mode: "json", reason: p.reason || "" };
 }
 
