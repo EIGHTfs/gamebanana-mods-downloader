@@ -175,6 +175,37 @@ loggedTest(log, "清空：dropStore 连 -wal/-shm 侧车与旧 json 一起清掉
   }
 });
 
+loggedTest(log, "批量中只增不删：追加新项后已完成项全部保留（与旧 JSON 同行为）", () => {
+  const dir = tmpDir();
+  try {
+    const jsonPath = path.join(dir, "download_task.json");
+    const task = makeTask(1000);
+    const w = writeOnce(jsonPath, task, { backend: "sqlite" });
+    const before = w.stats.rowsWritten;
+
+    // 真实用法：一批还在跑时用户继续追加新 mod；**已完成的不从列表移除**
+    for (let i = 1000; i < 1100; i++) {
+      task.items.push({
+        type: "file", url: "https://gamebanana.com/dl/" + i, path: "/x/" + i + ".zip",
+        displayName: i + ".zip", gbMd5: "b".repeat(32), size: i, targetDir: "/x",
+        modId: String(i), modName: "add" + i, modUrl: "https://gamebanana.com/mods/" + i,
+        author: "b", game: "g", exists: false
+      });
+      task.resultsMap[i] = { status: "pending", percent: 0, size: i };
+    }
+    w.save(); w.flush();
+
+    const back = store.loadTask(jsonPath);
+    assert.equal(back.items.length, 1100, "追加后应是 1100 条");
+    assert.equal(back.items[0].modName, "mod0", "已完成项必须仍在列表里（只增不删）");
+    assert.equal(back.resultsMap[999].status, "done", "已完成的结果必须仍在");
+    const delta = w.stats.rowsWritten - before;
+    assert.ok(delta <= 220, "追加 100 条只应写约 200 行（100 item + 100 result），实际 " + delta);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 loggedTest(log, "空态：任务为 null 时落盘不抛错，读回为 null", () => {
   const dir = tmpDir();
   try {
