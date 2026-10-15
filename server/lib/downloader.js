@@ -272,79 +272,121 @@ function writeIndexHtml(modDir, obj) {
 }
 
 // ---------- 第一步：解析 + 算路径 + 生成 HTML ----------
+/** 字符串字段的空值兜底（HTML 索引里统一记空串，不写 undefined） */
+function strOf(v) {
+  return v || "";
+}
+
+/** 旧 HTML 文件记录 → 新记录（标 legacy，保留可寻回信息） */
+function toLegacyHtmlFile(oldF) {
+  return {
+    file: oldF.file, url: oldF.url || "", size: oldF.size || 0, gbMd5: oldF.gbMd5 || "",
+    description: oldF.description || "", hash: oldF.hash || "", legacy: true
+  };
+}
+
+/**
+ * 旧 HTML 的文件记录 → 只保留「有下载地址」的（url 非空）。
+ *   2026-08-30：纯本地、已失去记录的旧文件不再写进新 HTML（文件本身不移动不删除）。
+ */
+function legacyHtmlFiles(existing) {
+  const out = [];
+  const seen = new Set();
+  for (const oldF of (existing && existing.files) || []) {
+    if (!oldF || !oldF.file || !oldF.url) continue;
+    const key = String(oldF.file).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(toLegacyHtmlFile(oldF));
+  }
+  return out;
+}
+
+/** 网上新文件记录并入：同名更新（保留旧 hash）、新名追加 */
+function mergeNewHtmlFiles(merged, mod) {
+  for (const f of mod.files || []) {
+    const name = mapping.sanitizeName(f.file);
+    const key = String(name).toLowerCase();
+    const idx = merged.findIndex((x) => String(x.file).toLowerCase() === key);
+    const next = {
+      file: name, url: f.url || "", size: f.size || 0,
+      gbMd5: String(f.md5 || "").toLowerCase(), description: f.description || "",
+      hash: idx >= 0 ? (merged[idx].hash || "") : ""
+    };
+    if (idx >= 0) merged[idx] = next; else merged.push(next);
+  }
+  return merged;
+}
+
+/**
+ * 合并 HTML 文件记录：旧记录（保留可寻回）+ 网上新记录（追加/更新，不直接覆盖）。
+ *   为什么要合并：作者删掉的文件若直接从 HTML 抹掉，本地那份就再也对不上号了。
+ */
+function mergeHtmlFiles(existing, mod) {
+  return mergeNewHtmlFiles(legacyHtmlFiles(existing), mod);
+}
+
+/** 图片在 HTML 里的文件名：优先 img.file，否则取 URL 的 basename（去掉 query） */
+function htmlImageName(img) {
+  if (img && img.file) return mapping.sanitizeName(img.file);
+  const fromUrl = (img && img.url) ? path.basename(String(img.url).split("?")[0]) : "";
+  return mapping.sanitizeName(fromUrl);
+}
+
+/**
+ * 合并 HTML 图片记录：gbFile 保留 GB 原始名（供旧记录匹配，file 可能被整理改名成 md5）；
+ *   hash 从旧记录继承（重下时据此判断「内容已在库」跳过/垃圾桶找回）。
+ */
+function mergeHtmlImages(existing, mod) {
+  return (mod.images || []).map((img) => {
+    const name = htmlImageName(img);
+    const old = (existing && existing.images || []).find((x) => x && (x.file === name || x.gbFile === name));
+    return { file: name, gbFile: name, url: img.url || "", hash: (old && old.hash) || "" };
+  });
+}
+
+/**
+ * 构建 gif 记录：HEAD 取大小 ⇒ localFile = 原名_大小MB（同 mod 内唯一，同名不同 URL 不覆盖）；
+ *   HEAD 失败回退 localGifName 前缀。file 保留 GB 原名（如 dlni606-ad685320.gif）供按原名跳过/找回，
+ *   原名缺失或非法时才回退序列名 gif_N.gif（通用名会破坏反查，仅兜底）。
+ */
+async function buildHtmlGifs(mod) {
+  const out = [];
+  for (const g of (mod.gifs || [])) {
+    const raw = String((g && g.file) || "").trim();
+    const safe = raw && !/[/\\:*?"<>|]/.test(raw) ? raw : `gif_${out.length + 1}` + ".gif";
+    const url = (g && g.url) || "";
+    const size = await httpHeadContentLength(url);
+    out.push({ file: safe, localFile: gifLocalName(safe, size, url), url, size });
+  }
+  return out;
+}
+
 async function genIndexHtml(url) {
   const mod = await gbApi.resolveMod(url);
   const target = mapping.buildTargetDir(mod); // 算下载路径（含映射）
   const existing = readIndexObj(target.dir) || null; // 旧 HTML 索引（合并图片 hash 用）
   const obj = {
     schema: 1,
-    modId: mod.modId || "",
-    name: mod.name || "",
-    url: mod.profileUrl || "",
-    author: mod.author || "",
-    game: mod.game || "",
-    category: mod.category || "",
-    superCategory: mod.superCategory || "",
-    warehouse: target.warehouse || "",
-    item: target.item || "",
+    modId: strOf(mod.modId),
+    name: strOf(mod.name),
+    url: strOf(mod.profileUrl),
+    author: strOf(mod.author),
+    game: strOf(mod.game),
+    category: strOf(mod.category),
+    superCategory: strOf(mod.superCategory),
+    warehouse: strOf(target.warehouse),
+    item: strOf(target.item),
     // 2026-08-31：HTML 只记录相对路径（相对游戏根），完整路径由
     //   重建索引时按 HTML 所在相对位置实时计算替换——手动移动文件夹后重建可纠正
-    dir: target.root ? (path.relative(target.root, target.dir) || "") : (target.dir || ""),
-    version: mod.version || "",
+    dir: target.root ? (path.relative(target.root, target.dir) || "") : strOf(target.dir),
+    version: strOf(mod.version),
     dateAdded: mod.dateAdded,
     dateModified: mod.dateModified,
-    text: mod.text || "",
-    // 2026-08-26：HTML 追加合并——本地旧 HTML 的文件记录保留（含作者删掉/历史遗留的），
-    //   网上获取的新文件记录追加/更新（不直接覆盖）。这样作者删掉的文件仍有记录可寻回。
-    files: (() => {
-      const merged = [];
-      const seen = new Set();
-      // ① 旧 HTML 记录——2026-08-30：只保留「有下载地址记录」的旧文件（url 非空），
-      //   追加进新 HTML；纯本地已失去记录的旧文件不记录（文件不移动不删除）
-      for (const oldF of (existing && existing.files) || []) {
-        if (!oldF || !oldF.file || !oldF.url) continue;
-        const key = String(oldF.file).toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push({ file: oldF.file, url: oldF.url || "", size: oldF.size || 0, gbMd5: oldF.gbMd5 || "", description: oldF.description || "", hash: oldF.hash || "", legacy: true });
-      }
-      // ② 网上新文件记录——追加（同名则更新为最新）
-      for (const f of mod.files || []) {
-        const name = mapping.sanitizeName(f.file);
-        const key = String(name).toLowerCase();
-        const idx = merged.findIndex((x) => String(x.file).toLowerCase() === key);
-        if (idx >= 0) {
-          merged[idx] = { file: name, url: f.url || "", size: f.size || 0, gbMd5: String(f.md5 || "").toLowerCase(), description: f.description || "", hash: merged[idx].hash || "" };
-        } else {
-          merged.push({ file: name, url: f.url || "", size: f.size || 0, gbMd5: String(f.md5 || "").toLowerCase(), description: f.description || "", hash: "" });
-        }
-      }
-      return merged;
-    })(),
-    images: (mod.images || []).map((img) => {
-      const name = mapping.sanitizeName((img && img.file) || (img.url ? path.basename(String(img.url).split("?")[0]) : ""));
-      // 2026-08-26 优化：合并旧 HTML 已记录的图片内容 hash（重下时据此判断「内容已在库」跳过/垃圾桶找回）
-      // gbFile = GB 原始文件名（保留不变，供旧记录匹配；file 可能被整理改名成 md5）
-      const old = (existing && existing.images || []).find((x) => x && (x.file === name || x.gbFile === name));
-      return { file: name, gbFile: name, url: img.url || "", hash: (old && old.hash) || "" };
-    }),
-    // g.file = GB 原始 URL 文件名（如 dlni606-ad685320.gif），供按原名跳过/找回；
-    //   GB 原名缺失/非法时才回退序列名 gif_N.gif（通用名，破坏反查，仅兜底）。
-    //   保存名 localFile = 原名_大小MB（见下 gifs 构建）；gif 不参与 step2 反查。
-    gifs: await (async () => {
-      // gif 都 HEAD 获取大小，localFile = 原名_大小MB(≥2位小数)，同 mod 内唯一（同名不同 URL 不覆盖）；
-      //   HEAD 失败则回退 localGifName 前缀。HTML 记录 localFile；obj.gifs 保留 file（GB 原名）与 url 供反查/找回。
-      const out = [];
-      for (const g of (mod.gifs || [])) {
-        const raw = String((g && g.file) || "").trim();
-        const safe = raw && !/[/\\:*?"<>|]/.test(raw) ? raw : `gif_${out.length + 1}` + ".gif";
-        const url = (g && g.url) || "";
-        const size = await httpHeadContentLength(url);
-        const localFile = gifLocalName(safe, size, url);
-        out.push({ file: safe, localFile, url, size });
-      }
-      return out;
-    })(),
+    text: strOf(mod.text),
+    files: mergeHtmlFiles(existing, mod),
+    images: mergeHtmlImages(existing, mod),
+    gifs: await buildHtmlGifs(mod),
     history: []
   };
   return { mod, target, obj };
@@ -1489,7 +1531,139 @@ async function consumeTaskItem(settings) {
 //   （用户侧表现为「下载完了但状态/列表没回写」）。现在记签名 `_hash:_size`：重试会更新它们 ⇒ 签名变 ⇒ 重做。
 const finalizedSig = new WeakMap();
 
-async function finalizeHtmls() {
+/** 该 item 是否算「已完成」（要写进 HTML）：跳过项，或内容 hash 有值且文件仍在盘上 */
+function itemIsDone(item) {
+  if (item._skip) return true;
+  return item._hash !== undefined && item._hash !== "" && fs.existsSync(item.path);
+}
+
+/** 文件项并入 obj.files：命中则按 hash/size 更新，未命中则追加一条；返回是否有改动 */
+function mergeFileItem(obj, item, name) {
+  const f = (obj.files || []).find((x) => x && x.file === name);
+  if (f) {
+    if (f.hash && f.hash === item._hash) return false;
+    f.hash = item._hash || f.hash;
+    f.size = item._size || f.size;
+    return true;
+  }
+  obj.files = obj.files || [];
+  obj.files.push({ file: name, url: item.url || "", size: item._size || 0, gbMd5: item.gbMd5 || "", hash: item._hash || "", description: "" });
+  return true;
+}
+
+/**
+ * 图片项并入 obj.images：命中则补 gbFile / 更新 hash（补 gbFile 本身不算改动，与拆分前一致）；
+ *   未命中且文件确实在盘上才追加（避免把没下下来的图记进 HTML）。
+ */
+function mergeImageItem(obj, item, name, onDisk) {
+  const im = (obj.images || []).find((x) => x && (x.file === name || x.gbFile === name));
+  if (im) {
+    if (!im.gbFile && item.displayName) im.gbFile = item.displayName;
+    if (!im.hash || im.hash !== item._hash) { im.hash = item._hash || im.hash; return true; }
+    return false;
+  }
+  if (!onDisk) return false;
+  obj.images = obj.images || [];
+  obj.images.push({ file: name, gbFile: item.displayName || name, url: item.url || "", hash: item._hash || "" });
+  return true;
+}
+
+/** 把单个已完成 item 并入 HTML 索引对象（文件表 / 图片表）；返回是否有改动 */
+function mergeItemIntoObj(obj, item) {
+  const name = path.basename(item.path);
+  const onDisk = fs.existsSync(item.path) && fs.statSync(item.path).size > 0;
+  if (item.type === "file") return mergeFileItem(obj, item, name);
+  if (item.type === "image" && !item.isGif) return mergeImageItem(obj, item, name, onDisk);
+  return false;
+}
+
+/**
+ * 下载时顺便还原历史 md5 名图片：HTML 记录 hash(=内容md5) + file(=GB原名)，
+ *   若目录里存在 hash.jpg（旧逻辑遗留的 md5 名）→ 重命名为 GB 原名。
+ * @returns {{reverted:number, changed:boolean}}
+ */
+function revertMd5NamedImages(finalDir, obj) {
+  let reverted = 0;
+  let changed = false;
+  try {
+    for (const im of obj.images || []) {
+      const md5 = String(im.hash || "").toLowerCase().trim();
+      const gbName = im.file || im.gbFile || "";
+      if (!/^[0-9a-f]{32}$/.test(md5) || !gbName) continue;
+      const md5Path = path.join(finalDir, md5 + path.extname(gbName));
+      const gbPath = path.join(finalDir, gbName);
+      if (fs.existsSync(md5Path) && !fs.existsSync(gbPath) && path.resolve(md5Path) !== path.resolve(gbPath)) {
+        try { fs.renameSync(md5Path, gbPath); reverted++; changed = true; } catch (_) {}
+      }
+    }
+  } catch (_) {}
+  return { reverted, changed };
+}
+
+/** 收尾一个目录：并入已完成项、还原 md5 名图片、有改动才写 HTML 并并入反查索引 */
+function finalizeOneDir(finalDir, g) {
+  const obj = g.obj || readIndexObj(finalDir);
+  if (!obj) return;
+  let changed = false;
+  // 2026-08-26：HTML 只显示「下载完成的」+「追加旧文件」
+  //   · 只把本次实际成功下载的文件写进 HTML（失败项不记录，UI 也不显示失败）
+  //   · 追加旧文件：GB 页面上没有、但目录里实际存在的旧 mod 压缩包/图片也写进 HTML
+  //     （用目标目录磁盘扫描补齐——避免「已下载但不认识」的文件被漏记）
+  for (const item of g.items) {
+    if (!item || !item.path) continue;
+    if (!itemIsDone(item)) continue; // 失败/未完成 → 不进 HTML
+    if (mergeItemIntoObj(obj, item)) changed = true;
+  }
+  const rev = revertMd5NamedImages(finalDir, obj);
+  if (rev.changed) changed = true;
+  if (rev.reverted > 0) console.log(`[md5-revert] ${finalDir.split("/Mods/")[1] || finalDir} ← 还原 ${rev.reverted} 张 md5 名图片为 GB 原名`);
+  // 2026-08-30：整组完成时对 hash 为空的图片/gif 补算内容 md5 写回 HTML。
+  // 2026-08-30：纯本地已失去记录的旧文件不再「磁盘扫描追加记录」（不移动不删除）
+  // 2026-10-11 停用：图片/gif **内容 md5 自动回填**（原 2026-08-30 逻辑，整体注释保留备查）
+  //   停用理由：反查索引的主键是 GB 自带的 gbMd5（hash-index.js putLocal(f.gbMd5, …)）
+  //   与 GB 原名（图片短名本身即 GB 的 hash，nameIndex 还支持无后缀补全），内容 md5 只是
+  //   第三层冗余键；而它要对每个「尚无 hash」的文件读整份内容算 md5
+  //   ⇒ 实测批次收尾持续 ≈7–8MB/s 读盘，连 /api/task 都被拖到无响应（表现为「一开任务硬盘大量读」）。
+  //   需要补内容 hash 时手动「重建索引」/ POST /api/hash-rebuild（走索引文件，不读文件内容）。
+  // const md5Filled = 0;
+  // let md5Seen = 0;
+  // for (const im of obj.images || []) {
+  //   if (!im || im.hash) continue;
+  //   const ip = path.join(finalDir, im.file || im.gbFile || "");
+  //   if (ip && fs.existsSync(ip)) {
+  //     if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+  //     const h = await fileMd5(ip);
+  //     if (h) { im.hash = h; md5Filled++; changed = true; }
+  //   }
+  // }
+  // for (const g of obj.gifs || []) {
+  //   if (!g || g.hash) continue;
+  //   const gp = path.join(finalDir, g.localFile || g.file || "");
+  //   if (gp && fs.existsSync(gp)) {
+  //     if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
+  //     const h = await fileMd5(gp);
+  //     if (h) {
+  //       g.hash = h;
+  //       if (!g.size) { try { g.size = fs.statSync(gp).size; } catch (_) {} }
+  //       md5Filled++; changed = true;
+  //     }
+  //   }
+  // }
+  // 图片按 GB 原名不重命名（不再 md5 收敛）；gif 的 原名_大小MB 命名在 gifs 构建处完成
+  if (changed) {
+    writeIndexHtml(finalDir, obj);
+    // 2026-10-11 性能修复（实测 363–455 秒收尾的真凶）：ingestModDir 会重写整个游戏索引文件，
+    //   原来无条件对每个 mod 目录调用（数千次 × 数 MB ⇒ [io] 归因实测写盘 121MB/s）。
+    //   只有该目录内容真的变了才需要并入；deferSave 让批量收尾期间只更新内存索引，
+    //   结束后由 flushDirtyGames() 每游戏写一次（原来每目录写一次，单份 15–26MB ⇒ 数十 GB 写盘）
+    try { hashIndex.ingestModDir(finalDir, { deferSave: true }); } catch (_) {}
+  }
+  // 本目录处理完 → 记录这些 item 的当前签名（下次 finalize 只有结果变了才重做）
+  for (const it of g.items) finalizedSig.set(it, `${it._hash || ""}:${it._size || 0}`);
+}
+
+/** 收集本次要收尾的目录：按 targetDir 分组，已收尾且签名未变的跳过 */
+function collectFinalizeDirs() {
   const dirs = new Map(); // finalDir -> { obj, items: [] }
   for (const item of task.items || []) {
     if (!item || !item.targetDir || !item.path) continue;
@@ -1500,6 +1674,11 @@ async function finalizeHtmls() {
     }
     dirs.get(item.targetDir).items.push(item);
   }
+  return dirs;
+}
+
+async function finalizeHtmls() {
+  const dirs = collectFinalizeDirs();
   // 2026-10-12 性能修复（实测定位，与任务文件大小无关）：
   //   批次收尾把 /api/* 连续堵死 **74 秒**（期间写盘 90–128MB/s、读 4,598 个目录的 description.html 共 73.6MB，
   //   与 4,598×16KB 完全吻合）。收尾是**同步全树处理**，长任务占满事件循环 ⇒ 接口全部超时。
@@ -1507,105 +1686,7 @@ async function finalizeHtmls() {
   let finalizedDirs = 0;
   for (const [finalDir, g] of dirs) {
     if (++finalizedDirs % 5 === 0) await new Promise((r) => setImmediate(r));
-    try {
-      let obj = g.obj || readIndexObj(finalDir);
-      if (!obj) continue;
-      let changed = false;
-      // 2026-08-26：HTML 只显示「下载完成的」+「追加旧文件」
-      //   · 只把本次实际成功下载的文件写进 HTML（失败项不记录，UI 也不显示失败）
-      //   · 追加旧文件：GB 页面上没有、但目录里实际存在的旧 mod 压缩包/图片也写进 HTML
-      //     （用目标目录磁盘扫描补齐——避免「已下载但不认识」的文件被漏记）
-      for (const item of g.items) {
-        if (!item || !item.path) continue;
-        const name = path.basename(item.path);
-        const ok = item._skip || (item._hash !== undefined && item._hash !== "" && fs.existsSync(item.path));
-        if (!ok) continue; // 失败/未完成 → 不进 HTML
-        const onDisk = fs.existsSync(item.path) && fs.statSync(item.path).size > 0;
-        if (item.type === "file") {
-          const f = (obj.files || []).find((x) => x && x.file === name);
-          if (f) {
-            if (!f.hash || f.hash !== item._hash) { f.hash = item._hash || f.hash; f.size = item._size || f.size; changed = true; }
-          } else {
-            obj.files = obj.files || [];
-            obj.files.push({ file: name, url: item.url || "", size: item._size || 0, gbMd5: item.gbMd5 || "", hash: item._hash || "", description: "" });
-            changed = true;
-          }
-        } else if (item.type === "image" && !item.isGif) {
-          const im = (obj.images || []).find((x) => x && (x.file === name || x.gbFile === name));
-          if (im) {
-            if (!im.gbFile && item.displayName) im.gbFile = item.displayName;
-            if (!im.hash || im.hash !== item._hash) { im.hash = item._hash || im.hash; changed = true; }
-          } else if (onDisk) {
-            obj.images = obj.images || [];
-            obj.images.push({ file: name, gbFile: item.displayName || name, url: item.url || "", hash: item._hash || "" });
-            changed = true;
-          }
-        }
-      }
-      // 2026-08-26 下载时顺便还原历史 md5 名图片：HTML 记录 hash(=内容md5) + file(=GB原名)，
-      //   若目录里存在 hash.jpg（旧逻辑遗留的 md5 名）→ 重命名为 GB 原名
-      let md5Reverted = 0;
-      try {
-        for (const im of obj.images || []) {
-          const md5 = String(im.hash || "").toLowerCase().trim();
-          const gbName = im.file || im.gbFile || "";
-          if (!/^[0-9a-f]{32}$/.test(md5) || !gbName) continue;
-          const md5Path = path.join(finalDir, md5 + path.extname(gbName));
-          const gbPath = path.join(finalDir, gbName);
-          if (fs.existsSync(md5Path) && !fs.existsSync(gbPath) && path.resolve(md5Path) !== path.resolve(gbPath)) {
-            try { fs.renameSync(md5Path, gbPath); md5Reverted++; changed = true; } catch (_) {}
-          }
-        }
-      } catch (_) {}
-      if (md5Reverted > 0) console.log(`[md5-revert] ${finalDir.split("/Mods/")[1] || finalDir} ← 还原 ${md5Reverted} 张 md5 名图片为 GB 原名`);
-      // 2026-08-30：整组完成时计算图片/gif md5 重新修改 HTML——对 hash 为空的
-      //   图片/gif（含已存在/跳过的）补算内容 md5 写回 HTML。
-      // 2026-08-30：纯本地已失去记录的旧文件不再「磁盘扫描追加记录」（不移动不删除）
-      // 2026-10-11 停用：图片/gif **内容 md5 自动回填**（原 2026-08-30 逻辑，整体注释保留备查）
-      //   停用理由：反查索引的主键是 GB 自带的 gbMd5（hash-index.js:269 putLocal(f.gbMd5, …)）
-      //   与 GB 原名（图片短名本身即 GB 的 hash，nameIndex 还支持无后缀补全），内容 md5 只是
-      //   第三层冗余键；而它要对每个「尚无 hash」的文件**读整份内容**算 md5
-      //   ⇒ 实测批次收尾持续 ≈7–8MB/s 读盘，连 /api/task 都被拖到无响应（用户侧表现为「一开任务硬盘大量读」）。
-      //   需要补内容 hash 时手动「重建索引」/ POST /api/hash-rebuild（走索引文件，不读文件内容）。
-      const md5Filled = 0;
-      // let md5Filled = 0;
-      // let md5Seen = 0;
-      // for (const im of obj.images || []) {
-      //   if (!im || im.hash) continue;
-      //   const ip = path.join(finalDir, im.file || im.gbFile || "");
-      //   if (ip && fs.existsSync(ip)) {
-      //     if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
-      //     const h = await fileMd5(ip);
-      //     if (h) { im.hash = h; md5Filled++; changed = true; }
-      //   }
-      // }
-      // for (const g of obj.gifs || []) {
-      //   if (!g || g.hash) continue;
-      //   const gp = path.join(finalDir, g.localFile || g.file || "");
-      //   if (gp && fs.existsSync(gp)) {
-      //     if (++md5Seen % 20 === 0) await new Promise((r) => setTimeout(r, 0));
-      //     const h = await fileMd5(gp);
-      //     if (h) {
-      //       g.hash = h;
-      //       if (!g.size) { try { g.size = fs.statSync(gp).size; } catch (_) {} }
-      //       md5Filled++; changed = true;
-      //     }
-      //   }
-      // }
-      if (md5Filled > 0) console.log(`[md5-fill] ${(finalDir.split("/Mods/")[1] || finalDir).slice(0, 50)} ← 补算 ${md5Filled} 个 hash`);
-      // 图片按 GB 原名不重命名（不再 md5 收敛）；gif 的 原名_大小MB 命名在 gifs 构建处完成
-      if (changed) {
-        writeIndexHtml(finalDir, obj);
-        // 2026-10-11 性能修复（实测 363–455 秒收尾的真凶）：ingestModDir 会**重写整个游戏索引文件**，
-        //   原来它无条件对**每个** mod 目录调用（数千次 × 数 MB ⇒ [io] 归因实测写盘 121MB/s）。
-        //   只有该目录的内容真的变了才需要并入索引。
-        // deferSave：批量收尾期间只更新内存索引，结束后由 flushDirtyGames() 每游戏写一次
-        //   （原来每目录写一次，单份索引 15–26MB ⇒ 数十 GB 写盘）
-        try { hashIndex.ingestModDir(finalDir, { deferSave: true }); } catch (_) {}
-      }
-      // 本目录处理完 → 记录这些 item 的当前签名（下次 finalize 只有结果变了才重做）
-      for (const it of g.items) finalizedSig.set(it, `${it._hash || ""}:${it._size || 0}`);
-    } catch (_) {}
+    try { finalizeOneDir(finalDir, g); } catch (_) {}
   }
 }
 
@@ -2063,6 +2144,9 @@ module.exports = {
   planForAppend,
   // 2026-10-11：导出以便单测覆盖 HTML 文件表格「状态」列的数据来源（原读不存在的 f.exists ⇒ 恒为空）
   buildHtmlContent,
+  // 2026-10-15：导出以便单测覆盖 HTML 索引对象构建（genIndexHtml 拆分出的纯合并逻辑）
+  mergeHtmlFiles,
+  mergeHtmlImages,
   // 2026-10-12：导出以便单测覆盖下载请求头（UA 取配置、带 cookie 被 4xx 拒绝时去 cookie 重试）
   downloadToFile,
   startDownloadTask,
