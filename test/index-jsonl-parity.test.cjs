@@ -22,7 +22,13 @@ function freshIndex(jsonDir) {
   const oldEnv = process.env.GBMD_JSON_DIR;
   process.env.GBMD_JSON_DIR = jsonDir;
   try {
-    return { idx: require(modPath), store: require(storePath) };
+    const idx = require(modPath);
+    const store = require(storePath);
+    // 2026-10-15 起**不再自动迁移**（读层两种格式都吃，写入只产 jsonl）。
+    //   这里显式跑一次一次性迁移，等价于人工执行：
+    //     node scripts/migrate-json-index-to-jsonl.cjs --dir <json/index> --profile gbmd --apply
+    idx.migrateIndexToJsonl();
+    return { idx, store };
   } finally {
     if (oldEnv === undefined) delete process.env.GBMD_JSON_DIR;
     else process.env.GBMD_JSON_DIR = oldEnv;

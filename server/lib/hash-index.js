@@ -227,14 +227,10 @@ function migrateIndexToJsonl(opts) {
 
 function load() {
   try { migrateLegacy(); } catch (_) {}
-  // 启动时同步完成 JSON→JSONL 迁移，必须跑在下面读取之前：
-  //   若异步执行，迁移期间新落的 mod 会先建出「只含新记录」的 .jsonl，迁移脚本见目标已存在即跳过
-  //   ⇒ 下次加载以 .jsonl 为准 ⇒ 旧索引丢失。同步执行没有这个竞态窗口。
-  try {
-    const m = migrateIndexToJsonl();
-    if (m && m.converted) console.log(`[hash-index] 索引已迁移为 JSONL：转换 ${m.converted} 个文件（旧文件在 json/index/.trash/）`);
-    if (m && m.errors && m.errors.length) console.log(`[hash-index] 索引迁移有 ${m.errors.length} 项未成功：` + m.errors.slice(0, 3).join(" | "));
-  } catch (_) {}
+  // 2026-10-15：**不再在启动时自动迁移**。读层两种格式都吃（.jsonl 优先、回落旧 .json），
+  //   写入只产 .jsonl ⇒ 没迁移过的老部署照样能跑；旧 JSON → JSONL 的一次性转换改为人工执行：
+  //     node scripts/migrate-json-index-to-jsonl.cjs --dir json/index --profile gbmd --apply
+  //   （本文件的 migrateIndexToJsonl() 就是这次转换的程序入口，保留供手动/脚本调用。）
   loadedGames = new Map();
   let files = [];
   // 双读：新格式 .jsonl 与旧格式 .json 都能启动加载（迁移失败也照常可跑）

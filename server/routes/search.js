@@ -215,18 +215,18 @@ function searchByDate(api) {
   };
 }
 
-// 手动导入搜索记录：上传 JSON 数组，按 modId 合并，导入覆盖原有
+// 手动导入搜索记录：接受 JSONL（导出即此格式）与旧 JSON，按 modId 合并，导入覆盖原有
 function importSearchCache(api) {
   const { sendJson, readBody, search } = api;
   return async (req, res) => {
+    // 与索引导入同一套解析：JSON 或 JSONL 都吃（导出端产 JSONL，导入端必须能原样吃回）
+    const jsonlStore = require("../lib/jsonl-store.js");
     const body = await readBody(req);
-    let records = body && body.records;
-    if (typeof records === "string") {
-      try { records = JSON.parse(records); } catch (_) { return sendJson(res, { ok: false, error: "JSON 解析失败，请上传正确的搜索记录数组" }, 400); }
-    }
-    if (body && body.json && !records) {
-      try { records = JSON.parse(body.json); } catch (_) { return sendJson(res, { ok: false, error: "JSON 解析失败，请上传正确的搜索记录数组" }, 400); }
-    }
+    let raw = body && (body.records !== undefined ? body.records : body.json);
+    if (raw === undefined && typeof body === "string") raw = body;
+    const parsed = typeof raw === "string" ? jsonlStore.parseAnyJson(raw) : raw;
+    const records = jsonlStore.pickRecordArray(parsed);
+    if (!records) return sendJson(res, { ok: false, error: "找不到记录数组（支持 JSONL 导出文件、JSON 数组、{results:[…]}）" }, 400);
     return sendJson(res, search.importCache(records), 200);
   };
 }
@@ -241,13 +241,23 @@ function saveSearchResults(api) {
   };
 }
 
-// 导出搜索记录：当前 cache 完整 JSON，前端下载为文件
+// 导出搜索记录：JSONL（一行 meta + 一行一条），与索引导出同口径 —— 产出与消费同一格式
 function exportSearchCache(api) {
   const { search } = api;
   return (req, res) => {
     const cache = search.exportCache();
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename="gbmd-search-records-${new Date().toISOString().slice(0, 10)}.json"`);
-    return res.end(JSON.stringify(cache, null, 2));
+    const results = (cache && Array.isArray(cache.results)) ? cache.results : (Array.isArray(cache) ? cache : null);
+    const head = { _: "meta", schema: 2, kind: "search-records" };
+    if (cache && !Array.isArray(cache)) {
+      for (const k of ["startDate", "endDate", "contentFilter", "queryTime", "count", "updatedAt"]) {
+        if (cache[k] !== undefined) head[k] = cache[k];
+      }
+    }
+    const lines = [JSON.stringify(head)];
+    if (results) for (const rec of results) lines.push(JSON.stringify(rec));
+    else lines.push(JSON.stringify(cache));   // 形状未知时整份放进一行，绝不丢数据
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="gbmd-search-records-${new Date().toISOString().slice(0, 10)}.jsonl"`);
+    return res.end(lines.join("\n") + "\n");
   };
 }
