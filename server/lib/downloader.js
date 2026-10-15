@@ -1142,6 +1142,16 @@ const taskWriter = taskStore.createTaskWriter({
   throttleMs: 10000,   // 2026-10-11 实测：38MB 任务文件 × 2 次/秒 ≈ 76–95MB/s 写盘，把服务器拖到接口超时（8s/60s）。放宽到 10s：状态新鲜度足够（崩溃最多回退 10s 进度），写盘降 20 倍
   log: (m) => console.log(m)
 });
+// 2026-10-15：启动时说明实际生效的存储后端。
+//   为什么打这行：SQLite 后端依赖内置 node:sqlite（Node ≥22.5 才有，实测 v20/v14 都没有），
+//   现场排障需要一眼看出「这台机器走的是哪条路」，而不是靠猜。
+try {
+  const sm = taskStore.storageMode();
+  console.log("[task-store] 存储后端: " + (sm.mode === "sqlite" ? "SQLite（行级增量写）" : "JSON（回落）")
+    + "  |  Node " + process.version
+    + (sm.reason ? "  |  回落原因: " + sm.reason : "")
+    + "  |  库文件: " + taskStore.dbPathOf(TASK_FILE));
+} catch (_) {}
 // 进程退出兜底：把节流窗口内还没落盘的状态补写（flush 是同步写，exit 阶段可用）
 process.once("exit", () => { try { taskWriter.flush(); } catch (_) {} });
 let running = false;
@@ -1799,7 +1809,7 @@ function stopTask() {
   task.preparingItem = null;
   task.updatedAt = Date.now();
   flushTask();   // 先把最终状态落盘（保证文件内容是完整的最新状态）
-  try { fs.unlinkSync(TASK_FILE); } catch (_) {}
+  try { taskStore.dropStore(TASK_FILE); } catch (_) {}
   // 2026-10-11：终止 = 清空队列（删任务文件）→ 必须取消节流窗口内残留的写盘，
   //   否则 500ms 后那次合并写会把刚删掉的任务文件又写回来（任务"复活"）
   taskWriter.cancel();
@@ -2016,9 +2026,9 @@ function retryFailed(q = {}) {
 //   · preparing（无任何下载项）→ 清理残留
 function restorePendingTask() {
   try {
-    if (fs.existsSync(TASK_FILE)) {
-      task = JSON.parse(fs.readFileSync(TASK_FILE, "utf8"));
-    }
+    // 2026-10-15：改走存储层双读 —— SQLite 库优先；库不存在或为空时回落旧 download_task.json。
+    //   为什么必须双读：切到 SQLite 之后，旧部署的下载队列还在 json 里，读不到就等于把列表丢掉。
+    task = taskStore.loadTask(TASK_FILE) || null;
   } catch (_) { task = null; }
   if (!task) return;
   const hasItems = Array.isArray(task.items) && task.items.length > 0;
@@ -2040,7 +2050,7 @@ function restorePendingTask() {
     // preparing 且无下载项 → 残留，清理
     task.status = "stopped";
     task.message = "已终止（启动时清理残留任务）";
-    try { fs.unlinkSync(TASK_FILE); } catch (_) {}
+    try { taskStore.dropStore(TASK_FILE); } catch (_) {}
     task = null;
   }
 }

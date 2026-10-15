@@ -1,5 +1,5 @@
 // ============================================================
-// 下载任务落盘存储层（**任务专属**：快照净化 + 越界键清理）
+// 下载任务落盘存储层（**任务专属**：快照净化 + 越界键清理 + 后端选择）
 //
 // 通用底座（原子替换 + 合并写）已上提到模板：server/store/state-store.js
 //   模板源 templates/js/store/state-store.js（assemble.json 下发），下游项目通用；
@@ -8,16 +8,22 @@
 //   1. pruneStaleResults —— 清掉 resultsMap 里越界（下标 ≥ items.length）的陈旧键
 //   2. buildSnapshot    —— 生成落盘快照（剥离运行时字段），与旧 saveTask 输出逐字段一致
 //   3. createTaskWriter —— 在通用写入器外面包一层，注入上面的净化逻辑（对外 API 不变）
+//   4. 后端选择（2026-10-15）—— 内置 node:sqlite 可用时走 SQLite 行级增量写，否则回落 JSON
 //
 // 背景（2026-10-11 实测）：部署端 json/download_task.json 12.7→15.4 MB、saveTask 单次 ≈100–170ms，
 //   却被 ~18 处调用（含每个文件的状态变化）⇒ 万级任务时主线程被同步写盘占满、页面卡顿；
 //   且 writeFileSync 非原子，写一半崩溃会留下半个 JSON（任务列表损坏）。
+// 补充（2026-10-15 实测）：峰值规模到过 3.6 万项 / 34.3MB；SQLite 侧单条 UPDATE 0.377ms、
+//   DELETE 0.991ms，但**全量载入并不更快** ⇒ 收益来自「只写变化的行」，
+//   见 server/lib/task-sqlite-store.js 的实现说明。
 //
-// 不改数据结构、不改接口、不改文件格式：落盘内容与旧实现逐字段一致（仅少掉越界键）。
+// 不改数据结构、不改接口、不改对外契约：两条后端产出的落盘内容与旧实现逐字段一致（仅少掉越界键）。
 // ============================================================
 "use strict";
 
 const { writeFileAtomic, createThrottledWriter } = require("../store/state-store");
+// 2026-10-15：SQLite 后端（Node 内置 node:sqlite；不可用时本模块自动回落 JSON 路径）
+const taskSqlite = require("./task-sqlite-store");
 // 2026-10-11：IO 归因（读/写点自报用量，见 lib/io-monitor.js）
 const ioMonitor = require("./io-monitor");
 // 2026-10-12：按**调用点**计数——meter 在模块加载时创建一次（站点固定，热路径零开销）
@@ -66,28 +72,84 @@ function buildSnapshot(task) {
   return { snapshot, pruned };
 }
 
+/** 由任务 JSON 路径推出 SQLite 库路径（同一目录、同名前缀） */
+function dbPathOf(jsonPath) {
+  return String(jsonPath || "").replace(/\.json$/, "") + ".db";
+}
+
 /**
- * 任务写入器 = 通用写入器（模板 server/store/state-store.js）+ 任务净化。
+ * 任务写入器 = 后端（SQLite 优先 / JSON 回落）+ 任务净化。
  * 对外 API 与旧实现完全一致：save() / flush() / cancel() / stats / _hasPending()
- *   · getState() 取当前 task；buildSnapshot 注入上面的净化（通用写入器会把 pruned 累加进 stats.prunedKeys）
+ *   · getState() 取当前 task；buildSnapshot 注入上面的净化
+ *   · 额外暴露 mode（sqlite / json）供启动日志说明实际生效的后端
  * @param {object} opts { filePath, ensureDir, getTask, throttleMs, log }
  */
 function createTaskWriter(opts) {
   const o = opts || {};
-  const w = createThrottledWriter({
-    filePath: o.filePath,
+  const jsonPath = o.filePath;
+  const dbPath = dbPathOf(jsonPath);
+  // backend：auto（默认，按内置 node:sqlite 可用性自动选择）| json（强制旧 JSON 路径）| sqlite（强制 SQLite）
+  //   显式开关的用处：① 单测要分别覆盖两条路径 ② 现场排障时可以先切回 json 验证
+  const want = String(o.backend || "auto");
+  const useSqlite = want === "sqlite" || (want === "auto" && taskSqlite.isAvailable());
+  const common = {
     ensureDir: o.ensureDir,
-    throttleMs: Number(o.throttleMs) > 0 ? Number(o.throttleMs) : 500,
-    log: o.log,
     getState: () => (typeof o.getTask === "function" ? o.getTask() : null),
     buildSnapshot: (t) => buildSnapshot(t),
-    // 2026-10-12：按**调用点**计数（meter 在模块加载时创建一次、站点固定；热路径零开销）
+    throttleMs: o.throttleMs,
+    log: o.log
+  };
+
+  if (useSqlite) {
+    // 行级增量写：只序列化并 UPSERT 变化的行（详见 task-sqlite-store.js）
+    const w = taskSqlite.createSqliteTaskWriter(Object.assign({}, common, {
+      filePath: dbPath,
+      jsonPath: jsonPath,
+      onWrite: (rows) => { try { taskWriteIo(rows); } catch (_) {} }
+    }));
+    return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending, mode: "sqlite", close: w.close };
+  }
+
+  // 回落：环境没有内置 node:sqlite（低版本 Node）时完全走原有 JSON 路径。
+  //   ⚠ filePath 必须是旧 JSON 路径 —— 曾误传 dbPath，导致回退时把 JSON 写进了 .db 文件。
+  const w = createThrottledWriter(Object.assign({}, common, {
+    filePath: jsonPath,
     onWrite: (bytes) => { try { taskWriteIo(bytes); } catch (_) {} }
-  });
-  return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending };
+  }));
+  return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending, mode: "json" };
 }
 
-module.exports = { pruneStaleResults, buildSnapshot, writeFileAtomic, createTaskWriter };
+/**
+ * 读取任务（双读：SQLite 库优先；库不存在/为空时回落旧 download_task.json）。
+ * 为什么必须双读：切到 SQLite 后，旧部署的队列还在 json 里，读不到就等于丢队列。
+ * @param {string} jsonPath 旧任务 JSON 路径
+ * @returns {object|null}
+ */
+function loadTask(jsonPath) {
+  return taskSqlite.loadTask(dbPathOf(jsonPath), jsonPath);
+}
+
+/** 清空任务存储：SQLite 库（含 -wal/-shm 侧车）+ 旧 JSON */
+function dropStore(jsonPath) {
+  return taskSqlite.dropStore(dbPathOf(jsonPath), jsonPath);
+}
+
+/** 存储后端探测结果（启动日志用）：{ mode: "sqlite"|"json", reason } */
+function storageMode() {
+  const p = taskSqlite.probe();
+  return p.ok ? { mode: "sqlite", reason: "" } : { mode: "json", reason: p.reason || "" };
+}
+
+module.exports = {
+  pruneStaleResults,
+  buildSnapshot,
+  writeFileAtomic,
+  createTaskWriter,
+  loadTask,
+  dropStore,
+  storageMode,
+  dbPathOf
+};
 
 // ── 旧实现（2026-10-11 之前本文件自带的原子写与写入器，已上提到模板 server/store/state-store.js）──
 //   保留备查，勿删：

@@ -81,7 +81,7 @@ loggedTest(log, "createTaskWriter：窗口内多次 save 只落一次盘（合�
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dl-store-test-"));
   const file = path.join(dir, "task.json");
   let task = { status: "running", items: [{ url: "u" }], resultsMap: { 0: { ok: true } } };
-  const w = store.createTaskWriter({ filePath: file, getTask: () => task, throttleMs: 50 });
+  const w = store.createTaskWriter({ filePath: file, getTask: () => task, throttleMs: 50, backend: "json" });
   for (let i = 0; i < 10; i++) w.save();
   assert.equal(fs.existsSync(file), false, "节流窗口内不应立刻写盘");
   await sleep(150);
@@ -98,7 +98,7 @@ loggedTest(log, "createTaskWriter：flush 立即落盘；无脏数据不写；ca
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dl-store-test-"));
   const file = path.join(dir, "task.json");
   const task = { status: "paused", items: [], resultsMap: {} };
-  const w = store.createTaskWriter({ filePath: file, getTask: () => task, throttleMs: 5000 });
+  const w = store.createTaskWriter({ filePath: file, getTask: () => task, throttleMs: 5000, backend: "json" });
   assert.equal(w.flush(), false, "无脏数据 → 不写");
   assert.equal(fs.existsSync(file), false);
   w.save();
@@ -118,7 +118,7 @@ loggedTest(log, "createTaskWriter：落盘时累计越界键清理数（stats.pr
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dl-store-test-"));
   const file = path.join(dir, "task.json");
   const task = { status: "running", items: [{}], resultsMap: { 0: { ok: true }, 7: { ok: true }, 8: { ok: true } } };
-  const w = store.createTaskWriter({ filePath: file, getTask: () => task, throttleMs: 10 });
+  const w = store.createTaskWriter({ filePath: file, getTask: () => task, throttleMs: 10, backend: "json" });
   w.save();
   await sleep(60);
   assert.equal(w.stats.prunedKeys, 2, "越界键 7、8 应被清理并计数");
