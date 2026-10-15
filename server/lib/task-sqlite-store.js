@@ -164,6 +164,99 @@ function dropStore(dbPath, jsonPath) {
   if (jsonPath) { try { fs.unlinkSync(jsonPath); } catch (_) {} }
 }
 
+/** 把快照拆成三部分：顶层字段（除 items/resultsMap）、items、resultsMap */
+function splitSnapshot(snapshot) {
+  const meta = {};
+  for (const k of Object.keys(snapshot)) {
+    if (k === "items" || k === "resultsMap") continue;
+    meta[k] = snapshot[k];
+  }
+  return {
+    meta,
+    items: Array.isArray(snapshot.items) ? snapshot.items : [],
+    resultsMap: (snapshot.resultsMap && typeof snapshot.resultsMap === "object") ? snapshot.resultsMap : {}
+  };
+}
+
+/** 预编译全部语句（热路径零解析开销） */
+function prepareStatements(db) {
+  return {
+    upMeta: db.prepare("INSERT INTO task_meta(k, v) VALUES(?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v"),
+    upItem: db.prepare("INSERT INTO task_items(idx, v) VALUES(?, ?) ON CONFLICT(idx) DO UPDATE SET v=excluded.v"),
+    upRes: db.prepare("INSERT INTO task_results(idx, v) VALUES(?, ?) ON CONFLICT(idx) DO UPDATE SET v=excluded.v"),
+    delMeta: db.prepare("DELETE FROM task_meta WHERE k = ?"),
+    delItem: db.prepare("DELETE FROM task_items WHERE idx = ?"),
+    delRes: db.prepare("DELETE FROM task_results WHERE idx = ?")
+  };
+}
+
+/** 顶层字段：逐键比较，只写变化的键（缓存存值的深拷贝 —— 顶层字段都是小体积） */
+function diffMeta(st, meta, cache) {
+  let rows = 0;
+  for (const k of Object.keys(meta)) {
+    if (!(k in cache) || !sameFlat(meta[k], cache[k])) {
+      st.upMeta.run(k, JSON.stringify(meta[k]));
+      rows++;
+      cache[k] = JSON.parse(JSON.stringify(meta[k] === undefined ? null : meta[k]));
+    }
+  }
+  for (const k of Object.keys(cache)) if (!(k in meta)) { st.delMeta.run(k); rows++; delete cache[k]; }
+  return rows;
+}
+
+/**
+ * 按下标集合的行级差异：只 UPSERT 变化的行、DELETE 消失的行。
+ * ⚠ 缓存必须是**值的浅拷贝**，不能存引用：调用方会就地改 `items[i].exists` 这类扁平字段，
+ *   存引用时「上一份」与「当前」指向同一对象 ⇒ 比较永远相等 ⇒ 变化检测静默失效（改了不写）。
+ * @param {object} st 语句集
+ * @param {object} upStmt 变化行的 UPSERT 语句
+ * @param {object} delStmt 消失行的 DELETE 语句
+ * @param {object|Array} values 当前值（数组 = items；下标键对象 = resultsMap）
+ * @param {object} cache 上一份缓存（下标键对象，存的是值拷贝）
+ * @param {boolean} isArray values 是否为数组
+ * @returns {number} 写入（含删除）的行数
+ */
+function diffByIndex(st, upStmt, delStmt, values, cache, isArray) {
+  let rows = 0;
+  const keys = isArray ? Array.from({ length: values.length }, (_, i) => String(i)) : Object.keys(values);
+  for (const k of keys) {
+    const cur = values[k];
+    const old = cache[k];
+    if (old === undefined || !sameFlat(cur, old)) {
+      upStmt.run(Number(k), JSON.stringify(cur));
+      rows++;
+      cache[k] = (cur && typeof cur === "object") ? Object.assign({}, cur) : cur;
+    }
+  }
+  for (const k of Object.keys(cache)) {
+    const gone = isArray ? Number(k) >= values.length : values[k] === undefined;
+    if (gone) { delStmt.run(Number(k)); rows++; delete cache[k]; }
+  }
+  return rows;
+}
+
+/** 清空三张表（任务被清掉时用；保留库文件，下次写入仍可用） */
+function clearTables(db) {
+  db.exec("BEGIN IMMEDIATE; DELETE FROM task_meta; DELETE FROM task_items; DELETE FROM task_results; COMMIT;");
+}
+
+/** 在一个事务里把快照按行级差异落库，返回写入行数（缓存对象就地更新） */
+function applySnapshot(db, parts, caches) {
+  const st = prepareStatements(db);
+  let rows = 0;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    rows += diffMeta(st, parts.meta, caches.meta);
+    rows += diffByIndex(st, st.upItem, st.delItem, parts.items, caches.items, true);
+    rows += diffByIndex(st, st.upRes, st.delRes, parts.resultsMap, caches.results, false);
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch (_) {}
+    throw e;
+  }
+  return rows;
+}
+
 /**
  * 创建 SQLite 任务写入器（接口与 createThrottledWriter 一致）。
  * @param {{filePath:string, jsonPath?:string, ensureDir?:function, getState:function,
@@ -181,9 +274,9 @@ function createSqliteTaskWriter(opts) {
   let db = null;
   let timer = null;
   let dirty = false;
-  // 上一份状态缓存（用于行级差异比较）：meta 的每个键、items 按下标、results 按下标
+  // 上一份状态缓存（用于行级差异比较）：meta 的每个键、items 与 results 都按**下标键**存值拷贝
   let prevMeta = {};
-  let prevItems = [];
+  let prevItems = {};
   let prevResults = {};
 
   function ensureDb() {
@@ -209,19 +302,16 @@ function createSqliteTaskWriter(opts) {
   }
 
   function doWrite() {
-    const getState = typeof o.getState === "function" ? o.getState : () => null;
-    const raw = getState();
-    const built = typeof o.buildSnapshot === "function"
-      ? o.buildSnapshot(raw)
-      : { snapshot: raw, pruned: 0 };
-    const snapshot = built.snapshot;
+    const raw = typeof o.getState === "function" ? o.getState() : null;
+    const built = typeof o.buildSnapshot === "function" ? o.buildSnapshot(raw) : { snapshot: raw, pruned: 0 };
     if (built.pruned) stats.prunedKeys += built.pruned;
+    const snapshot = built.snapshot;
+
     if (!snapshot) {
-      // 任务被清空：清表（保留文件，下次写入仍可用）
+      // 任务被清空：清表并重置差异缓存
       try {
-        const d = ensureDb();
-        d.exec("BEGIN IMMEDIATE; DELETE FROM task_meta; DELETE FROM task_items; DELETE FROM task_results; COMMIT;");
-        prevMeta = {}; prevItems = []; prevResults = {};
+        clearTables(ensureDb());
+        prevMeta = {}; prevItems = {}; prevResults = {};
         stats.writes++;
       } catch (e) {
         stats.errors++;
@@ -230,69 +320,9 @@ function createSqliteTaskWriter(opts) {
       return;
     }
 
-    const items = Array.isArray(snapshot.items) ? snapshot.items : [];
-    const resultsMap = (snapshot.resultsMap && typeof snapshot.resultsMap === "object") ? snapshot.resultsMap : {};
-    const meta = {};
-    for (const k of Object.keys(snapshot)) {
-      if (k === "items" || k === "resultsMap") continue;
-      meta[k] = snapshot[k];
-    }
-
     try {
-      const d = ensureDb();
-      const upMeta = d.prepare("INSERT INTO task_meta(k, v) VALUES(?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v");
-      const upItem = d.prepare("INSERT INTO task_items(idx, v) VALUES(?, ?) ON CONFLICT(idx) DO UPDATE SET v=excluded.v");
-      const upRes = d.prepare("INSERT INTO task_results(idx, v) VALUES(?, ?) ON CONFLICT(idx) DO UPDATE SET v=excluded.v");
-      const delMeta = d.prepare("DELETE FROM task_meta WHERE k = ?");
-      const delItem = d.prepare("DELETE FROM task_items WHERE idx = ?");
-      const delRes = d.prepare("DELETE FROM task_results WHERE idx = ?");
-
-      let rows = 0;
-      d.exec("BEGIN IMMEDIATE");
-      try {
-        // 顶层字段：逐键比较，只写变化的键。
-        //   缓存存**值的深拷贝**（顶层字段都是小体积，如 status / pendingMods / activeItems）。
-        for (const k of Object.keys(meta)) {
-          if (!(k in prevMeta) || !sameFlat(meta[k], prevMeta[k])) {
-            upMeta.run(k, JSON.stringify(meta[k]));
-            rows++;
-            prevMeta[k] = JSON.parse(JSON.stringify(meta[k] === undefined ? null : meta[k]));
-          }
-        }
-        for (const k of Object.keys(prevMeta)) if (!(k in meta)) { delMeta.run(k); rows++; delete prevMeta[k]; }
-
-        // items：按下标比较，只写变化的行、删掉消失的下标。
-        //   ⚠ 缓存必须是**值的浅拷贝**，不能存引用：下载器会就地改 items[i].exists 这类扁平字段，
-        //   存引用时「上一份」与「当前」指向同一对象 ⇒ 比较永远相等 ⇒ 变化检测静默失效（改了不写）。
-        for (let i = 0; i < items.length; i++) {
-          const cur = items[i];
-          const old = prevItems[i];
-          if (old === undefined || !sameFlat(cur, old)) {
-            upItem.run(i, JSON.stringify(cur));
-            rows++;
-            prevItems[i] = (cur && typeof cur === "object") ? Object.assign({}, cur) : cur;
-          }
-        }
-        for (let i = items.length; i < prevItems.length; i++) if (prevItems[i] !== undefined) { delItem.run(i); rows++; delete prevItems[i]; }
-        prevItems.length = items.length;
-
-        // resultsMap：同上（键是下标字符串）
-        for (const k of Object.keys(resultsMap)) {
-          const cur = resultsMap[k];
-          if (prevResults[k] === undefined || !sameFlat(cur, prevResults[k])) {
-            upRes.run(Number(k), JSON.stringify(cur));
-            rows++;
-            prevResults[k] = (cur && typeof cur === "object") ? Object.assign({}, cur) : cur;
-          }
-        }
-        for (const k of Object.keys(prevResults)) if (!(k in resultsMap)) { delRes.run(Number(k)); rows++; delete prevResults[k]; }
-
-        d.exec("COMMIT");
-      } catch (e) {
-        try { d.exec("ROLLBACK"); } catch (_) {}
-        throw e;
-      }
-
+      const caches = { meta: prevMeta, items: prevItems, results: prevResults };
+      const rows = applySnapshot(ensureDb(), splitSnapshot(snapshot), caches);
       stats.writes++;
       stats.rowsWritten += rows;
       if (typeof o.onWrite === "function") { try { o.onWrite(rows); } catch (_) {} }

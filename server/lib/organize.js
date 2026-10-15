@@ -6,10 +6,10 @@
 //   所以误杀率很低（仅很久以前无 HTML 记录的老 mod 文件可能误移，且垃圾桶可找回）。
 //   触发时机：
 //     1) 手动建立 HTML 反查索引时：hash-index.rebuild 全库扫描 description.html 顺带清理
-//        （2026-08-26 用户决定：下载时 prepareMod 不加清理逻辑，避免事多混乱）
+//        （2026-08-26 定：下载时 prepareMod 不加清理逻辑，避免事多混乱）
 //   找回闭环：移入垃圾桶时保留 GB 原名 → 将来下载该文件真正所属的 mod 时，
 //     downloader 的 trash-restore 按原名从垃圾桶找回并归位到正确目录。
-//   2026-08-26 修复（用户指出严重问题：作者更新只保留新版本，旧版本 zip 被误清）：
+//   2026-08-26 修复（严重问题：作者更新只保留新版本，旧版本 zip 被误清）：
 //     · 不在列表的文件先按 name-index 反查——命中且 modId 与当前 mod 相同 → 旧版本，
 //       保留（下载方追加进 HTML legacy）
 //     · 压缩包（zip/rar/7z 等）反查不到也保留——体积大、大概率是本 mod 旧版本（命名
@@ -156,7 +156,7 @@ function organizeDir(modDir, trashDir, modId, relDir) {
     // part 文件按主文件名判断（断点续传）：主文件在列表 → 保留 part
     const base = name.endsWith(".gbmd.part") ? name.slice(0, -(".gbmd.part".length)) : name;
     if (known.has(String(base).toLowerCase())) continue; // 本 mod 文件（含历史记录）→ 保留
-    // 2026-08-26 修复（用户指出）：作者更新只保留新版本，旧版本 zip 从 GB 页面消失。
+    // 2026-08-26 修复：作者更新只保留新版本，旧版本 zip 从 GB 页面消失。
     //   ① 反查 name-index：命中且 modId == 当前 mod → 旧版本，保留（下载方追加进 HTML）
     const ownerModId = lookupModId(base);
     if (curModId && ownerModId && ownerModId === curModId) {
