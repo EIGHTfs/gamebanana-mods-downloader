@@ -19,11 +19,18 @@ const log = makeLog("perf-antipatterns");
 const REPO = path.join(__dirname, "..");
 const CHECKER = path.join(REPO, "scripts", "check-perf-antipatterns.mjs");
 
-/** 语料：sha 为修复提交；file 为被修文件；rule 为预期规则；tier 为预期等级（可选） */
+/** 语料：sha 为修复提交；file 为被修文件；rule 为预期规则；tier 为预期等级（可选）
+ *  extra 为「必须一起回放」的关联文件：修复若是成对的（调用方 + 被调方），只换调用方会造出
+ *  历史上从不存在的混合态，测的就不是「这个坑重演时抓不抓得住」了。 */
 const CORPUS = [
   { sha: "655030a", file: "server/lib/downloader.js", rule: "R1", tier: "warning",
     desc: "planForAppend 嵌套线性扫描（2,544×40,394 ≈ 1.03 亿次 = 12,784ms）" },
   { sha: "5bee6dc", file: "server/lib/downloader.js", rule: "R2", tier: "warning",
+    // 该坑成对：downloader 逐目录调 ingestModDir，而 ingestModDir 内（同文件闭包）整份重写索引。
+    //   2026-10-15 索引改 JSONL：真正的 writeFileSync + stringify 移入共享模块 server/lib/jsonl-store.js，
+    //   而 R2 按设计只在同一文件内做传递闭包（见 check-perf-antipatterns.mjs 的说明）⇒ 只回放调用方时
+    //   无从看见写入。成对回放才是正确口径。
+    extra: ["server/lib/hash-index.js"],
     desc: "finalizeHtmls 逐目录调 ingestModDir（写盘 121MB/s、收尾 363–455 秒）；修复后移入 if (changed) ⇒ 规则放过" },
   { sha: "4b56497", file: "server/lib/gb-api.js", rule: "R6", tier: "blocker",
     desc: "fetchJsonHeaders 循环后缺兜底 return ⇒ 返回 undefined ⇒ 调用方解构崩溃" },
@@ -72,12 +79,14 @@ loggedTest(log, "反模式检查：历史修复点语料——修复前必须扫
   const results = [];
   try {
     for (const c of CORPUS) {
+      // 成对语料：调用方与被调方一起换成历史版本，避免造出从未存在过的混合态
+      const files = [c.file].concat(c.extra || []);
       // 修复前：写到沙箱 → 应命中
-      fs.writeFileSync(path.join(sandbox, c.file), showFile(c.sha + "^", c.file));
+      for (const f of files) fs.writeFileSync(path.join(sandbox, f), showFile(c.sha + "^", f));
       const before = runChecker(sandbox);
       const beforeHit = hits(before, c.rule, c.file, c.tier);
       // 修复后：写到沙箱 → 不应再命中
-      fs.writeFileSync(path.join(sandbox, c.file), showFile(c.sha, c.file));
+      for (const f of files) fs.writeFileSync(path.join(sandbox, f), showFile(c.sha, f));
       const after = runChecker(sandbox);
       const afterHit = hits(after, c.rule, c.file, c.tier);
       results.push({ c, beforeN: beforeHit.length, afterN: afterHit.length });

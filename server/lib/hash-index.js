@@ -27,6 +27,16 @@ const { rebuildFromObj, loadDone, saveDone } = require("./rebuild-html");
 const cfg = require("../config"); // 2026-08-30 autoOrganize 开关
 const mapping = require("./mapping"); // 2026-09-02 游戏名→索引文件名复用字符替换映射文件（illegalChars.json）
 const { parseIndexObj, readIndexObj } = require("./index-html");
+// 2026-10-15：索引文件格式由「整文件 JSON」改为 JSONL（追加 O(1)、体积约 -13%、坏行不致命）。
+//   通用读写/迁移在 server/lib/jsonl-store.js（模板下发件），本文件只负责 gbmd 的业务语义：
+//   三段 Map（gb/local/name）↔ 记录 {t:"gb"|"local"|"name", k, v}，以及按游戏分文件的路径换算。
+//   读：双读（.jsonl 优先，回落旧 .json）；写：只产 .jsonl。
+const jsonlStore = require("./jsonl-store");
+const SECTION_NAMES = ["gb", "local", "name"];
+/** 某游戏的索引「基路径」（不含后缀）：json/index/<sanitize 后的游戏名> */
+function gameIndexBase(game) {
+  return path.join(INDEX_DIR, sanitizeGameName(game));
+}
 
 // ---------- 内存表（跨游戏全库合并，查询用）----------
 let gbIndex = new Map();      // hash -> {modId, modName, author, game, url, fileName, gbMd5}
@@ -65,34 +75,70 @@ function sanitizeGameName(g) {
   return mapping.sanitizeName(g) || "unknown";
 }
 
+// 旧格式（.json）路径：只用于「还有没有遗留旧文件」的判断与迁移
 function gameIndexFile(game) {
-  return path.join(INDEX_DIR, sanitizeGameName(game) + ".json");
+  return gameIndexBase(game) + ".json";
 }
 
-// 读单游戏索引文件（无 → null）
-function loadGameFile(game) {
-  try {
-    const obj = JSON.parse(fs.readFileSync(gameIndexFile(game), "utf8"));
+/** 内存三段 Map 摊平成 JSONL 记录（全量写 / 压缩用） */
+function mapToRecords(g) {
+  const recs = [];
+  for (const sec of SECTION_NAMES) {
+    const m = (g && g[sec]) || new Map();
+    for (const [k, v] of m) recs.push({ t: sec, k, v });
+  }
+  return recs;
+}
+
+/**
+ * 按「基路径」读一个游戏的索引（无 → null）。
+ * 双读：.jsonl 优先，回落旧 .json；两种格式都还原成同样的三段 Map ⇒ 查询/搜索/合并逻辑零改动。
+ * @param {string} base 索引基路径（不含后缀）
+ * @param {string} [fallbackGame] 文件里没写 game 时用的游戏名
+ */
+function loadGameIndexByBase(base, fallbackGame) {
+  const r = jsonlStore.readIndex(base);
+  if (r.format === "jsonl") {
+    const g = {
+      game: r.meta.game || fallbackGame,
+      gb: jsonlStore.mapOf(r.records, "gb"),
+      local: jsonlStore.mapOf(r.records, "local"),
+      name: jsonlStore.mapOf(r.records, "name")
+    };
+    // 追加久了会有同键重复行（重下/更新同一 mod 会再追加一次）：重复行超过实时键数 1.5 倍就压缩一次
+    //   —— 用手上的 Map 全量重写，结果与旧实现逐键一致。压缩失败不影响本次读取（忽略即可）。
+    const live = g.gb.size + g.local.size + g.name.size;
+    if (live && r.records.length > live * 1.5) {
+      try {
+        jsonlStore.writeIndexAtomic(base, { game: g.game, schema: 2 }, mapToRecords(g));
+        if (buildState) buildState.compacted = (buildState.compacted || 0) + 1;
+      } catch (_) {}
+    }
+    return g;
+  }
+  if (r.format === "json") {
+    const obj = r.json || {};
     return {
-      game: obj.game || game,
+      game: obj.game || fallbackGame,
       gb: new Map(Object.entries(obj.gb || {})),
       local: new Map(Object.entries(obj.local || {})),
       name: new Map(Object.entries(obj.name || {}))
     };
-  } catch (_) { return null; }
+  }
+  return null;
 }
 
-// 写单游戏索引文件
+/** 读单游戏索引文件（无 → null） */
+function loadGameFile(game) {
+  return loadGameIndexByBase(gameIndexBase(game), game);
+}
+
+/** 写单游戏索引文件（全量、原子）—— 落盘格式为 JSONL */
 function saveGameFile(game, g) {
   try {
     fs.mkdirSync(INDEX_DIR, { recursive: true });
-    fs.writeFileSync(gameIndexFile(game), JSON.stringify({
-      game: g.game || game,
-      gb: Object.fromEntries(g.gb),
-      local: Object.fromEntries(g.local),
-      name: Object.fromEntries(g.name)
-    }, null, 2));
-    return true;
+    const w = jsonlStore.writeIndexAtomic(gameIndexBase(game), { game: (g && g.game) || game, schema: 2 }, mapToRecords(g));
+    return w.ok;
   } catch (_) { return false; }
 }
 
@@ -123,7 +169,8 @@ function mergeAll() {
 function migrateLegacy() {
   try { fs.mkdirSync(INDEX_DIR, { recursive: true }); } catch (_) {}
   const hasNew = (() => {
-    try { return fs.readdirSync(INDEX_DIR).some((f) => f.endsWith(".json")); } catch (_) { return false; }
+    // .jsonl 也算「已有新格式索引」——否则已经迁成 JSONL 的部署会被旧全局文件再迁一次（数据错乱）
+    try { return fs.readdirSync(INDEX_DIR).some((f) => f.endsWith(".json") || f.endsWith(".jsonl")); } catch (_) { return false; }
   })();
   if (hasNew) return;
   const gb = loadMap(LEGACY_FILES[0]);
@@ -154,21 +201,50 @@ function migrateLegacy() {
 // ---------- HTML 索引块解析（抽到 lib/index-html.js，P2 去重）----------
 
 // ---------- 启动加载 ----------
+
+/**
+ * 启动时把遗留的 json/index/*.json 一次性迁成 .jsonl（独立脚本 scripts/migrate-json-index-to-jsonl.cjs）。
+ *   幂等：已有 .jsonl 就跳过；可回滚：旧文件移入 json/index/.trash/。
+ *   缺省直接迁移（dryRun=false）—— 这是启动流程的一步，不是人工动作。
+ * @param {{dryRun?:boolean, verify?:string}} [opts] verify="full" 时做对象级等价比对（大索引较吃内存）
+ * @returns {{ok:boolean, converted?:number, skipped?:number, failed?:number, errors?:Array, error?:string}}
+ */
+function migrateIndexToJsonl(opts) {
+  const o = opts || {};
+  try {
+    const mig = require(path.join(__dirname, "..", "..", "scripts", "migrate-json-index-to-jsonl.cjs"));
+    return mig.run({
+      dir: INDEX_DIR,
+      profile: "gbmd",
+      dryRun: o.dryRun === true,
+      verify: o.verify === "full" ? "full" : "count"
+    });
+  } catch (e) {
+    // 脚本缺失/异常都不能拦住启动：读层本身兼容旧格式，没迁移也能正常跑
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 function load() {
   try { migrateLegacy(); } catch (_) {}
+  // 启动时同步完成 JSON→JSONL 迁移，必须跑在下面读取之前：
+  //   若异步执行，迁移期间新落的 mod 会先建出「只含新记录」的 .jsonl，迁移脚本见目标已存在即跳过
+  //   ⇒ 下次加载以 .jsonl 为准 ⇒ 旧索引丢失。同步执行没有这个竞态窗口。
+  try {
+    const m = migrateIndexToJsonl();
+    if (m && m.converted) console.log(`[hash-index] 索引已迁移为 JSONL：转换 ${m.converted} 个文件（旧文件在 json/index/.trash/）`);
+    if (m && m.errors && m.errors.length) console.log(`[hash-index] 索引迁移有 ${m.errors.length} 项未成功：` + m.errors.slice(0, 3).join(" | "));
+  } catch (_) {}
   loadedGames = new Map();
   let files = [];
-  try { files = fs.readdirSync(INDEX_DIR).filter((f) => f.endsWith(".json")); } catch (_) {}
+  // 双读：新格式 .jsonl 与旧格式 .json 都能启动加载（迁移失败也照常可跑）
+  try { files = fs.readdirSync(INDEX_DIR).filter((f) => f.endsWith(".jsonl") || f.endsWith(".json")); } catch (_) {}
   for (const f of files) {
     try {
-      const obj = JSON.parse(fs.readFileSync(path.join(INDEX_DIR, f), "utf8"));
-      const g = {
-        game: obj.game || f.replace(/\.json$/, ""),
-        gb: new Map(Object.entries(obj.gb || {})),
-        local: new Map(Object.entries(obj.local || {})),
-        name: new Map(Object.entries(obj.name || {}))
-      };
-      loadedGames.set(g.game, g);
+      // 用「基路径」读取（不带后缀），由存储层决定 .jsonl / .json，避免把已 sanitize 的名字再 sanitize 一次
+      const stem = f.replace(/\.jsonl?$/, "");
+      const g = loadGameIndexByBase(path.join(INDEX_DIR, stem), stem);
+      if (g) loadedGames.set(g.game, g);
     } catch (_) {}
   }
   mergeAll();
@@ -373,8 +449,8 @@ async function rebuild(gameFilter, opts) {
       htmlRewritten += counter.htmlRewritten || 0;
       htmlFailed += counter.htmlFailed || 0;
       md5Filled += counter.md5Filled || 0;
-      // 2026-08-26 用户决定：自动空壳清理已取消（曾误清 1672 个目录）——以后由用户
-      //   手动触发整理，不再 rebuild 时自动清理。
+      // 2026-08-26 决定：自动空壳清理已取消（曾误清 1672 个目录）——整理改为只在手动触发时执行，
+      //   rebuild 不再自动清理。
 
       loadedGames.set(game, g);
       saveGameFile(game, g);
@@ -526,4 +602,4 @@ function status() {
   };
 }
 
-module.exports = { load, rebuild, queryByHash, searchGb, ingestModDir, flushDirtyGames, status };
+module.exports = { load, rebuild, queryByHash, searchGb, ingestModDir, flushDirtyGames, status, migrateIndexToJsonl, gameIndexBase, loadGameIndexByBase };
