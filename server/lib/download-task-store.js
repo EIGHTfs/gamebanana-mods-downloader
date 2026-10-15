@@ -8,7 +8,9 @@
 //   1. pruneStaleResults —— 清掉 resultsMap 里越界（下标 ≥ items.length）的陈旧键
 //   2. buildSnapshot    —— 生成落盘快照（剥离运行时字段），与旧 saveTask 输出逐字段一致
 //   3. createTaskWriter —— 在通用写入器外面包一层，注入上面的净化逻辑（对外 API 不变）
-//   4. 后端选择（2026-10-15）—— 内置 node:sqlite 可用时走 SQLite 行级增量写，否则回落 JSON
+//   4. 后端选择（2026-10-15）—— 内置 node:sqlite 可用时走 SQLite 行级增量写，否则回落 JSON；
+//      auto 模式下**自动切库**：旧 download_task.json 那批只要还有未完成项就继续用它，
+//      一旦全部下完（且状态已安全落进库）就把它退休进 json/.trash 并切到 SQLite（见 createTaskWriter）
 //
 // 背景（2026-10-11 实测）：部署端 json/download_task.json 12.7→15.4 MB、saveTask 单次 ≈100–170ms，
 //   却被 ~18 处调用（含每个文件的状态变化）⇒ 万级任务时主线程被同步写盘占满、页面卡顿；
@@ -22,6 +24,7 @@
 "use strict";
 
 const fs = require("fs");
+const path = require("path");
 const { writeFileAtomic, createThrottledWriter } = require("../store/state-store");
 // 2026-10-15：SQLite 后端（Node 内置 node:sqlite；不可用时本模块自动回落 JSON 路径）
 const taskSqlite = require("./task-sqlite-store");
@@ -85,17 +88,52 @@ function dbPathOf(jsonPath) {
  *   · 额外暴露 mode（sqlite / json）供启动日志说明实际生效的后端
  * @param {object} opts { filePath, ensureDir, getTask, throttleMs, log }
  */
+/** 旧 JSON 那批是否还有没下完的：running/preparing，或仍有 item 没拿到结果 */
+function jsonHasUnfinishedWork(d) {
+  if (!d || typeof d !== "object") return false;
+  if (d.status === "running" || d.status === "preparing") return true;
+  const items = Array.isArray(d.items) ? d.items : [];
+  const rm = (d.resultsMap && typeof d.resultsMap === "object") ? d.resultsMap : {};
+  for (let i = 0; i < items.length; i++) if (rm[i] === undefined) return true;
+  return false;
+}
+
+/**
+ * 旧 JSON 退休：移入同目录 .trash（可恢复）。
+ *   ⚠ 只在「当前状态已经完整落进 SQLite 库」之后才调用 —— 否则退休等于丢队列。
+ */
+function retireJson(jsonPath, log) {
+  try {
+    const trash = path.join(path.dirname(jsonPath), ".trash");
+    fs.mkdirSync(trash, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const dest = path.join(trash, stamp + "-" + path.basename(jsonPath));
+    fs.renameSync(jsonPath, dest);
+    if (typeof log === "function") log("[task-store] 旧 JSON 已退休（可恢复）：" + dest);
+    return dest;
+  } catch (e) {
+    if (typeof log === "function") log("[task-store] 旧 JSON 退休失败：" + ((e && e.message) || e));
+    return null;
+  }
+}
+
+/**
+ * 创建任务写入器（对外 API 不变：save / flush / cancel / stats / _hasPending / mode）。
+ *
+ * 后端选择（auto 模式）：
+ *   · 内置 node:sqlite 不可用（低版本 Node）⇒ 一律走原有 JSON 路径
+ *   · 没有旧 download_task.json ⇒ 直接走 SQLite
+ *   · 有旧 json 且那批**还有未完成项** ⇒ 继续用 JSON（不打断正在跑的批次）
+ *   · 有旧 json 但那批**已全部下完** ⇒ **自动切库**：先把当前状态完整写进 SQLite，
+ *     确认无错后才把旧 json 退休进 .trash，然后改用 SQLite
+ *   切换在每次 save/flush 时**惰性判定** ⇒ 不需要重启，也不需要迁移脚本。
+ */
 function createTaskWriter(opts) {
   const o = opts || {};
   const jsonPath = o.filePath;
   const dbPath = dbPathOf(jsonPath);
-  // backend：auto（默认）| json（强制旧 JSON 路径）| sqlite（强制 SQLite）
-  //   auto 的规则（2026-10-15 定）：**存在旧 download_task.json 就走 JSON 路径** ——
-  //   那说明还有一批按旧格式记录的下载没跑完，继续按原样读写它；等那批跑完、列表被销毁
-  //   （json 消失）之后，新批次才自动切到 SQLite。好处：升级不丢正在跑的那批，也不需要迁移脚本。
   const want = String(o.backend || "auto");
-  const jsonExists = !!(jsonPath && fs.existsSync(jsonPath));
-  const useSqlite = want === "sqlite" || (want === "auto" && !jsonExists && taskSqlite.isAvailable());
+  const log = typeof o.log === "function" ? o.log : () => {};
   const common = {
     ensureDir: o.ensureDir,
     getState: () => (typeof o.getTask === "function" ? o.getTask() : null),
@@ -104,7 +142,17 @@ function createTaskWriter(opts) {
     log: o.log
   };
 
-  if (useSqlite) {
+  function makeJsonWriter() {
+    // 回落：环境没有内置 node:sqlite 时完全走原有 JSON 路径。
+    //   ⚠ filePath 必须是旧 JSON 路径 —— 曾误传 dbPath，导致回退时把 JSON 写进了 .db 文件。
+    const w = createThrottledWriter(Object.assign({}, common, {
+      filePath: jsonPath,
+      onWrite: (bytes) => { try { taskWriteIo(bytes); } catch (_) {} }
+    }));
+    return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending, mode: "json" };
+  }
+
+  function makeSqliteWriter() {
     // 行级增量写：只序列化并 UPSERT 变化的行（详见 task-sqlite-store.js）
     const w = taskSqlite.createSqliteTaskWriter(Object.assign({}, common, {
       filePath: dbPath,
@@ -114,18 +162,48 @@ function createTaskWriter(opts) {
     return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending, mode: "sqlite", close: w.close };
   }
 
-  // 回落：环境没有内置 node:sqlite（低版本 Node）时完全走原有 JSON 路径。
-  //   ⚠ filePath 必须是旧 JSON 路径 —— 曾误传 dbPath，导致回退时把 JSON 写进了 .db 文件。
-  const w = createThrottledWriter(Object.assign({}, common, {
-    filePath: jsonPath,
-    onWrite: (bytes) => { try { taskWriteIo(bytes); } catch (_) {} }
-  }));
-  return { save: w.save, flush: w.flush, cancel: w.cancel, stats: w.stats, _hasPending: w._hasPending, mode: "json" };
+  const jsonExists = !!(jsonPath && fs.existsSync(jsonPath));
+  const useSqlite = want === "sqlite" || (want === "auto" && !jsonExists && taskSqlite.isAvailable());
+  let active = useSqlite ? makeSqliteWriter() : makeJsonWriter();
+  let switched = false;
+
+  /** 惰性判定是否该自动切库（每次 save/flush 调一次；条件不满足时几乎零成本） */
+  function maybeAutoSwitch() {
+    if (switched || want !== "auto" || active.mode !== "json") return;
+    if (!taskSqlite.isAvailable()) return;
+    if (!jsonPath || !fs.existsSync(jsonPath)) return;
+    // 状态还没恢复出来时不能切：此刻落库会把空状态写进去（等于清空队列）
+    if (!common.getState()) return;
+    let legacy = null;
+    try { legacy = JSON.parse(fs.readFileSync(jsonPath, "utf8")); } catch (_) { return; }
+    if (jsonHasUnfinishedWork(legacy)) return;   // 那批还没下完 ⇒ 继续用 JSON
+    const next = makeSqliteWriter();
+    next.save(); next.flush();                   // 先把当前状态完整写进库
+    if (next.stats.errors > 0) {                 // 落库失败（写入器会自己回落 JSON）⇒ 不退休旧文件
+      log("[task-store] 自动切库未成功（旧 JSON 保留）：见上一条日志");
+      return;
+    }
+    retireJson(jsonPath, log);
+    active = next;
+    switched = true;
+    log("[task-store] 旧 JSON 那批已下完 ⇒ 已自动切到 SQLite");
+  }
+
+  return {
+    save: () => { maybeAutoSwitch(); active.save(); },
+    flush: () => { maybeAutoSwitch(); return active.flush(); },
+    cancel: () => active.cancel(),
+    _hasPending: () => active._hasPending(),
+    get stats() { return active.stats; },
+    get mode() { return active.mode; },
+    close: () => { try { if (active.close) active.close(); } catch (_) {} }
+  };
 }
 
 /**
- * 读取任务（双读：SQLite 库优先；库不存在/为空时回落旧 download_task.json）。
- * 为什么必须双读：切到 SQLite 后，旧部署的队列还在 json 里，读不到就等于丢队列。
+ * 读取任务（旧 JSON 优先；json 不在时读 SQLite 库）。
+ *   为什么 json 优先：json 一旦退休（自动切库时进 .trash）就只剩库了，所以「json 还在」意味着
+ *   它才是最权威的一份；若先读库，会在自动切库完成之前读到旧快照。
  * @param {string} jsonPath 旧任务 JSON 路径
  * @returns {object|null}
  */
@@ -142,7 +220,12 @@ function dropStore(jsonPath) {
 function storageMode(jsonPath) {
   const p = taskSqlite.probe();
   if (jsonPath && fs.existsSync(jsonPath)) {
-    return { mode: "json", reason: "存在旧 download_task.json（按约定优先用它，那批跑完后自动切库）" };
+    let legacy = null;
+    try { legacy = JSON.parse(fs.readFileSync(jsonPath, "utf8")); } catch (_) { legacy = null; }
+    if (legacy && p.ok && !jsonHasUnfinishedWork(legacy)) {
+      return { mode: "sqlite", reason: "旧 JSON 那批已下完 ⇒ 本次落盘会自动切库并把旧 JSON 退休进 .trash" };
+    }
+    return { mode: "json", reason: "旧 download_task.json 那批还有未完成项（下完后自动切库）" };
   }
   return p.ok ? { mode: "sqlite", reason: "" } : { mode: "json", reason: p.reason || "" };
 }
