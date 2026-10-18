@@ -9,15 +9,22 @@
 //   且 fixture 不传 absDir、文件状态显式给 exists ⇒ 输出与磁盘/时钟无关。
 //
 // 基准更新（仅在**故意**改 HTML 时）：BUILD_HTML_SHOW=1 node --test test/build-html-baseline.test.cjs
+// 确定性（2026-10-18 修）：buildHtmlContent 用 toLocaleDateString("zh-CN") 渲染日期
+//   （见 server/lib/downloader.js 的 fmtDate），结果**随宿主时区变化** ⇒
+//   实测同一份夹具：TZ=UTC 得 d5b7bff8…、TZ=Asia/Shanghai 得 d77a827a…，
+//   原基线常量是在别的时区采集的，换台机器就必红。
+//   产品侧按本地时区显示是正确行为，所以在这里**钉死测试时区**，而不是去改产品。
+//   必须在任何 Date 使用之前设置（模块加载期就生效）。
+process.env.TZ = "Asia/Shanghai";
 const { makeLog, loggedTest } = require("./helpers/test-log.cjs");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 
 const log = makeLog("build-html-baseline");
 
-// 拆分前的基准值（2026-10-15 采集，14 个夹具；连跑两遍哈希一致，确认无时钟/磁盘依赖）。
+// 基准值（14 个夹具，时区已钉死在 Asia/Shanghai ⇒ 与宿主无关、可跨机复跑）。
 // 拆 genIndexHtml / finalizeHtmls 后必须保持一致。
-const EXPECTED_SHA = "c8fcc7d1a220f64a7292940f2bc5024f7a3d3496c01125657821351adb302e08";
+const EXPECTED_SHA = "d77a827a995154e6b19b55f7deea83a9d6f7643c21f5916b4aa07960c7578452";
 
 /** 覆盖 buildHtmlContent 各分支的 fixture（都不传 absDir，文件状态显式给，避免依赖磁盘） */
 function fixtures() {

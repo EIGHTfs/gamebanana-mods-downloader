@@ -1,0 +1,987 @@
+{
+ "capturedAt": "2026-10-18T01:32:50.104Z",
+ "sha256": "df32619f8b5f1113cc723c485ac63b1925a0e3303cedb255eafad302fdf112a0",
+ "status": {
+  "running": false,
+  "lastAt": 0,
+  "lastMs": 0,
+  "error": "",
+  "htmlRewritten": 0,
+  "htmlFailed": 0,
+  "md5Filled": 0,
+  "gb": 29050,
+  "local": 80378,
+  "name": 137469,
+  "games": {
+   "Arknights: Endfield": {
+    "gb": 1209,
+    "local": 4673,
+    "name": 4710
+   },
+   "DNF Duel": {
+    "gb": 48,
+    "local": 304,
+    "name": 304
+   },
+   "GUILTY GEAR -STRIVE-": {
+    "gb": 849,
+    "local": 4970,
+    "name": 4980
+   },
+   "Genshin Impact": {
+    "gb": 9023,
+    "local": 21172,
+    "name": 41647
+   },
+   "Granblue Fantasy Versus: Rising": {
+    "gb": 329,
+    "local": 0,
+    "name": 0
+   },
+   "Guilty Gear Xrd Rev 2": {
+    "gb": 15,
+    "local": 225,
+    "name": 225
+   },
+   "Honkai Impact 3rd": {
+    "gb": 173,
+    "local": 666,
+    "name": 691
+   },
+   "Honkai Star Rail": {
+    "gb": 4665,
+    "local": 14645,
+    "name": 25138
+   },
+   "Neverness To Everness": {
+    "gb": 327,
+    "local": 1392,
+    "name": 1449
+   },
+   "Tower of Fantasy": {
+    "gb": 9,
+    "local": 22,
+    "name": 23
+   },
+   "Wuthering Waves": {
+    "gb": 6483,
+    "local": 19306,
+    "name": 29920
+   },
+   "Zenless Zone Zero": {
+    "gb": 5940,
+    "local": 13035,
+    "name": 28424
+   }
+  },
+  "total": 109428
+ },
+ "perFile": [
+  {
+   "file": "Arknights：Endfield.jsonl",
+   "records": 10592
+  },
+  {
+   "file": "DNF Duel.jsonl",
+   "records": 656
+  },
+  {
+   "file": "GUILTY GEAR -STRIVE-.jsonl",
+   "records": 10799
+  },
+  {
+   "file": "Genshin Impact.jsonl",
+   "records": 71842
+  },
+  {
+   "file": "Granblue Fantasy Versus：Rising.jsonl",
+   "records": 329
+  },
+  {
+   "file": "Guilty Gear Xrd Rev 2.jsonl",
+   "records": 465
+  },
+  {
+   "file": "Honkai Impact 3rd.jsonl",
+   "records": 1530
+  },
+  {
+   "file": "Honkai Star Rail.jsonl",
+   "records": 44448
+  },
+  {
+   "file": "Neverness To Everness.jsonl",
+   "records": 3168
+  },
+  {
+   "file": "Tower of Fantasy.jsonl",
+   "records": 54
+  },
+  {
+   "file": "Wuthering Waves.jsonl",
+   "records": 55709
+  },
+  {
+   "file": "Zenless Zone Zero.jsonl",
+   "records": 47399
+  }
+ ],
+ "queryCount": 22,
+ "queries": [
+  {
+   "kind": "hash",
+   "t": "gb",
+   "input": "4da5953254b88244570ffc5059bc7c9c",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Claret Flint/[UntitledWolff] Claret swimsuit",
+    "file": "claret_swinsuit.zip",
+    "hash": "4da5953254b88244570ffc5059bc7c9c",
+    "gbMd5": "4da5953254b88244570ffc5059bc7c9c",
+    "kind": "file",
+    "modId": "727694",
+    "modName": "Claret swimsuit",
+    "author": "UntitledWolff",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727694"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "gb",
+   "input": "7d638c79fbab65376d00db26cd675400",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Claret Flint/[UntitledWolff] Claret swimsuit",
+    "file": "swimsuit_claretfixed.zip",
+    "hash": "7d638c79fbab65376d00db26cd675400",
+    "gbMd5": "7d638c79fbab65376d00db26cd675400",
+    "kind": "file",
+    "modId": "727694",
+    "modName": "Claret swimsuit",
+    "author": "UntitledWolff",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727694"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "gb",
+   "input": "8b88180014ae8294119ae4608bd90af4",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "hash": "8b88180014ae8294119ae4608bd90af4",
+    "gbMd5": "8b88180014ae8294119ae4608bd90af4",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "gb",
+   "input": "ba178b0c68eaff3f639c86794c0555bd",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "hash": "ba178b0c68eaff3f639c86794c0555bd",
+    "gbMd5": "ba178b0c68eaff3f639c86794c0555bd",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "gb",
+   "input": "beaa139b84e804e13e80dcb9bb7a55d6",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "more_busty_alice_thymefield_v2_035fc.rar",
+    "hash": "beaa139b84e804e13e80dcb9bb7a55d6",
+    "gbMd5": "beaa139b84e804e13e80dcb9bb7a55d6",
+    "kind": "file",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "gb",
+   "input": "e94b648c73b554dc2751316fe8c521c8",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/其他/[Fengyun111] 管理员座位改造 Seat Modification Endministrator",
+    "file": "power_dcbc8.zip",
+    "hash": "e94b648c73b554dc2751316fe8c521c8",
+    "gbMd5": "e94b648c73b554dc2751316fe8c521c8",
+    "kind": "file",
+    "modId": "656899",
+    "modName": "管理员座位改造/Seat Modification Endministrator",
+    "author": "Fengyun111",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/656899"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "local",
+   "input": "8b88180014ae8294119ae4608bd90af4",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "hash": "8b88180014ae8294119ae4608bd90af4",
+    "gbMd5": "8b88180014ae8294119ae4608bd90af4",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "local",
+   "input": "950379c78bf726b71a6ff133a622de8c",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+    "hash": "950379c78bf726b71a6ff133a622de8c",
+    "gbMd5": "950379c78bf726b71a6ff133a622de8c",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "local",
+   "input": "ba178b0c68eaff3f639c86794c0555bd",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "hash": "ba178b0c68eaff3f639c86794c0555bd",
+    "gbMd5": "ba178b0c68eaff3f639c86794c0555bd",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "local",
+   "input": "cc1330870c8cdf35795f989289244c29",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "6ad3363cb569a.jpg",
+    "hash": "cc1330870c8cdf35795f989289244c29",
+    "gbMd5": "cc1330870c8cdf35795f989289244c29",
+    "kind": "image",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "local",
+   "input": "d6a033c5fea978232abeb7085494a262",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "6ad336547e3b6.jpg",
+    "hash": "d6a033c5fea978232abeb7085494a262",
+    "gbMd5": "d6a033c5fea978232abeb7085494a262",
+    "kind": "image",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "local",
+   "input": "f3478d17a5c2bfee0b9193f16bfeabcb",
+   "expect": {
+    "source": "local",
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "6ad3364b4bb38.jpg",
+    "hash": "f3478d17a5c2bfee0b9193f16bfeabcb",
+    "gbMd5": "f3478d17a5c2bfee0b9193f16bfeabcb",
+    "kind": "image",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "name",
+   "input": "6ad3363cb569a.jpg",
+   "expect": {
+    "source": "html",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad3363cb569a.jpg",
+    "kind": "image",
+    "file": "6ad3363cb569a.jpg",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "name",
+   "input": "6ad3364b4bb38.jpg",
+   "expect": {
+    "source": "html",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad3364b4bb38.jpg",
+    "kind": "image",
+    "file": "6ad3364b4bb38.jpg",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "name",
+   "input": "6ad336547e3b6.jpg",
+   "expect": {
+    "source": "html",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad336547e3b6.jpg",
+    "kind": "image",
+    "file": "6ad336547e3b6.jpg",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "name",
+   "input": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+   "expect": {
+    "source": "html",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+    "kind": "file",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "name",
+   "input": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+   "expect": {
+    "source": "html",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "kind": "file",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "name",
+   "input": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+   "expect": {
+    "source": "html",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "kind": "file",
+    "file": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "edge",
+   "input": "00000000000000000000000000000000",
+   "expect": null
+  },
+  {
+   "kind": "hash",
+   "t": "edge",
+   "input": "deadbeef",
+   "expect": null
+  },
+  {
+   "kind": "hash",
+   "t": "edge",
+   "input": "6ad3363cb569a",
+   "expect": {
+    "source": "html",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad3363cb569a.jpg",
+    "kind": "image",
+    "matchedName": "6ad3363cb569a.jpg",
+    "file": "6ad3363cb569a.jpg",
+    "modDir": ""
+   }
+  },
+  {
+   "kind": "hash",
+   "t": "edge",
+   "input": "6ad3363cb569a.jpg.png",
+   "expect": null
+  }
+ ],
+ "searches": [
+  {
+   "q": "管理员座位改造/Seat Modification Endministrator",
+   "game": "",
+   "count": 1,
+   "modIds": [
+    "656899"
+   ]
+  },
+  {
+   "q": "管理员座位改",
+   "game": "",
+   "count": 1,
+   "modIds": [
+    "656899"
+   ]
+  },
+  {
+   "q": "Zhuang Fangyi - Noctilucent Maid",
+   "game": "",
+   "count": 2,
+   "modIds": [
+    "672402",
+    "725093"
+   ]
+  },
+  {
+   "q": "Zhuang",
+   "game": "",
+   "count": 30,
+   "modIds": [
+    "670170",
+    "670230",
+    "670377",
+    "670435",
+    "670519",
+    "670951",
+    "671314",
+    "671350",
+    "671357",
+    "671713",
+    "671747",
+    "671939",
+    "672211",
+    "672402",
+    "672513",
+    "672536",
+    "674225",
+    "674418",
+    "674977",
+    "675282",
+    "675445",
+    "677908",
+    "677968",
+    "679436",
+    "682304",
+    "684806",
+    "684810",
+    "712849",
+    "722155",
+    "725093"
+   ]
+  },
+  {
+   "q": "Arelewd Nude F Endmin",
+   "game": "",
+   "count": 1,
+   "modIds": [
+    "652288"
+   ]
+  },
+  {
+   "q": "Arelew",
+   "game": "",
+   "count": 60,
+   "modIds": [
+    "514858",
+    "516135",
+    "519555",
+    "522676",
+    "526967",
+    "529657",
+    "530378",
+    "534806",
+    "539248",
+    "543891",
+    "548436",
+    "551331",
+    "552897",
+    "554810",
+    "557838",
+    "561065",
+    "563179",
+    "573056",
+    "576228",
+    "579418",
+    "583361",
+    "584219",
+    "586235",
+    "589362",
+    "594242",
+    "596119",
+    "598959",
+    "602067",
+    "604887",
+    "608248",
+    "611141",
+    "614023",
+    "617079",
+    "621300",
+    "624794",
+    "627891",
+    "630714",
+    "635222",
+    "637753",
+    "640458",
+    "645370",
+    "648119",
+    "651235",
+    "652288",
+    "656466",
+    "662361",
+    "666289",
+    "670603",
+    "674179",
+    "679608",
+    "686778",
+    "687260",
+    "691243",
+    "695134",
+    "699239",
+    "707751",
+    "712995",
+    "718163",
+    "719211",
+    "723606"
+   ]
+  },
+  {
+   "q": "管理员座位改造/Seat Modification Endministrator",
+   "game": "Arknights: Endfield",
+   "count": 1,
+   "modIds": [
+    "656899"
+   ]
+  }
+ ],
+ "records": [
+  {
+   "t": "gb",
+   "k": "4da5953254b88244570ffc5059bc7c9c",
+   "v": {
+    "modId": "727694",
+    "modName": "Claret swimsuit",
+    "author": "UntitledWolff",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727694",
+    "fileName": "claret_swinsuit.zip",
+    "gbMd5": "4da5953254b88244570ffc5059bc7c9c"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "4da5953254b88244570ffc5059bc7c9c",
+   "v": {
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Claret Flint/[UntitledWolff] Claret swimsuit",
+    "file": "claret_swinsuit.zip",
+    "hash": "4da5953254b88244570ffc5059bc7c9c",
+    "gbMd5": "4da5953254b88244570ffc5059bc7c9c",
+    "kind": "file",
+    "modId": "727694",
+    "modName": "Claret swimsuit",
+    "author": "UntitledWolff",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727694"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "gb",
+   "k": "7d638c79fbab65376d00db26cd675400",
+   "v": {
+    "modId": "727694",
+    "modName": "Claret swimsuit",
+    "author": "UntitledWolff",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727694",
+    "fileName": "swimsuit_claretfixed.zip",
+    "gbMd5": "7d638c79fbab65376d00db26cd675400"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "7d638c79fbab65376d00db26cd675400",
+   "v": {
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Claret Flint/[UntitledWolff] Claret swimsuit",
+    "file": "swimsuit_claretfixed.zip",
+    "hash": "7d638c79fbab65376d00db26cd675400",
+    "gbMd5": "7d638c79fbab65376d00db26cd675400",
+    "kind": "file",
+    "modId": "727694",
+    "modName": "Claret swimsuit",
+    "author": "UntitledWolff",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727694"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "gb",
+   "k": "8b88180014ae8294119ae4608bd90af4",
+   "v": {
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "gbMd5": "8b88180014ae8294119ae4608bd90af4"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "8b88180014ae8294119ae4608bd90af4",
+   "v": {
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "hash": "8b88180014ae8294119ae4608bd90af4",
+    "gbMd5": "8b88180014ae8294119ae4608bd90af4",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "gb",
+   "k": "ba178b0c68eaff3f639c86794c0555bd",
+   "v": {
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "gbMd5": "ba178b0c68eaff3f639c86794c0555bd"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "ba178b0c68eaff3f639c86794c0555bd",
+   "v": {
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "hash": "ba178b0c68eaff3f639c86794c0555bd",
+    "gbMd5": "ba178b0c68eaff3f639c86794c0555bd",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "gb",
+   "k": "beaa139b84e804e13e80dcb9bb7a55d6",
+   "v": {
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "more_busty_alice_thymefield_v2_035fc.rar",
+    "gbMd5": "beaa139b84e804e13e80dcb9bb7a55d6"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "beaa139b84e804e13e80dcb9bb7a55d6",
+   "v": {
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "more_busty_alice_thymefield_v2_035fc.rar",
+    "hash": "beaa139b84e804e13e80dcb9bb7a55d6",
+    "gbMd5": "beaa139b84e804e13e80dcb9bb7a55d6",
+    "kind": "file",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "gb",
+   "k": "e94b648c73b554dc2751316fe8c521c8",
+   "v": {
+    "modId": "656899",
+    "modName": "管理员座位改造/Seat Modification Endministrator",
+    "author": "Fengyun111",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/656899",
+    "fileName": "power_dcbc8.zip",
+    "gbMd5": "e94b648c73b554dc2751316fe8c521c8"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "e94b648c73b554dc2751316fe8c521c8",
+   "v": {
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/其他/[Fengyun111] 管理员座位改造 Seat Modification Endministrator",
+    "file": "power_dcbc8.zip",
+    "hash": "e94b648c73b554dc2751316fe8c521c8",
+    "gbMd5": "e94b648c73b554dc2751316fe8c521c8",
+    "kind": "file",
+    "modId": "656899",
+    "modName": "管理员座位改造/Seat Modification Endministrator",
+    "author": "Fengyun111",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/656899"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "gb",
+   "k": "950379c78bf726b71a6ff133a622de8c",
+   "v": {
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+    "gbMd5": "950379c78bf726b71a6ff133a622de8c"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "950379c78bf726b71a6ff133a622de8c",
+   "v": {
+    "modDir": "<ROOT_3>/[鹰角]/明日方舟：终末地/Mods/.Mods/(gamebanana)/Operators/.Operators/[327532] Zhuang Fangyi - Noctilucent Maid",
+    "file": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+    "hash": "950379c78bf726b71a6ff133a622de8c",
+    "gbMd5": "950379c78bf726b71a6ff133a622de8c",
+    "kind": "file",
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "cc1330870c8cdf35795f989289244c29",
+   "v": {
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "6ad3363cb569a.jpg",
+    "hash": "cc1330870c8cdf35795f989289244c29",
+    "gbMd5": "cc1330870c8cdf35795f989289244c29",
+    "kind": "image",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "d6a033c5fea978232abeb7085494a262",
+   "v": {
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "6ad336547e3b6.jpg",
+    "hash": "d6a033c5fea978232abeb7085494a262",
+    "gbMd5": "d6a033c5fea978232abeb7085494a262",
+    "kind": "image",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "local",
+   "k": "f3478d17a5c2bfee0b9193f16bfeabcb",
+   "v": {
+    "modDir": "<ROOT_3>/[miHoYo]/Zenless Zone Zero – 绝零区/Mods/.Mods/(gamebanana)/代理人/Alice Thymefield – 爱丽丝·泰姆菲尔德/[marmothaaaaa] More busty Alice Thymefield mod",
+    "file": "6ad3364b4bb38.jpg",
+    "hash": "f3478d17a5c2bfee0b9193f16bfeabcb",
+    "gbMd5": "f3478d17a5c2bfee0b9193f16bfeabcb",
+    "kind": "image",
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "name",
+   "k": "6ad3363cb569a.jpg",
+   "v": {
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad3363cb569a.jpg",
+    "kind": "image"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "name",
+   "k": "6ad3364b4bb38.jpg",
+   "v": {
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad3364b4bb38.jpg",
+    "kind": "image"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "name",
+   "k": "6ad336547e3b6.jpg",
+   "v": {
+    "modId": "727557",
+    "modName": "More busty Alice Thymefield mod",
+    "author": "marmothaaaaa",
+    "game": "Zenless Zone Zero",
+    "url": "https://gamebanana.com/mods/727557",
+    "fileName": "6ad336547e3b6.jpg",
+    "kind": "image"
+   },
+   "file": "Zenless Zone Zero.jsonl"
+  },
+  {
+   "t": "name",
+   "k": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+   "v": {
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_-_noctilucent_maid_-_v101.zip",
+    "kind": "file"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "name",
+   "k": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+   "v": {
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_-_noctilucent_maid_-_v102.zip",
+    "kind": "file"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  },
+  {
+   "t": "name",
+   "k": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+   "v": {
+    "modId": "672402",
+    "modName": "Zhuang Fangyi - Noctilucent Maid",
+    "author": "327532",
+    "game": "Arknights: Endfield",
+    "url": "https://gamebanana.com/mods/672402",
+    "fileName": "zhuang_fangyi_noctilucentmaid_free_v11.zip",
+    "kind": "file"
+   },
+   "file": "Arknights：Endfield.jsonl"
+  }
+ ]
+}
