@@ -266,15 +266,23 @@ gamebanana-mods-downloader/
 
 **索引维护**：启动自动加载三表；每次新下载写完 HTML → **自动增量并入**（新 hash/原名立即可查）；全量重建用设置页「重建索引」。
 
-> **1.3.10 存储后端**：索引可存 **SQLite**（`json/index/index.db`）——增量并入只 **UPSERT 变化的行**，
-> 不再重写整个游戏文件（实测单条增删 391ms ⇒ 只写变化行）。判定顺序：库里有该游戏的行就用库，
-> 否则回落 `.jsonl`（再回落旧 `.json`）；Node < 22.5 无内置 `node:sqlite` 时自动全程走文件，功能不降级。
-> 一次性迁移（人工执行，不自动跑）：
+> **存储后端：默认 JSONL（`json/index/<游戏名>.jsonl`，旧 `.json` 仍可读）。**
+> 曾把索引改存 SQLite（`json/index/index.db`，行级 UPSERT）并上线验证过正确性，
+> 但**实测是退化** ⇒ 已改回文件优先：启动加载慢 **1.6–2×**、全库增量写反而慢 **3–8%**、
+> 体积大 **17–28%**（不含 WAL）。根因是调用方每次传全量记录 ⇒ 成本在序列化，
+> 而 JSONL 写整个文件落到页缓存近乎免费。复跑对比（任何机器可跑）：
 >
 > ```bash
-> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index            # 预演
-> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index --apply    # 真迁移（原文件保留可回退）
-> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index --verify   # 库与文件逐条比对
+> node scripts/bench-index-store.cjs --synthetic 83000 --bases 12 --iters 5   # 合成数据
+> node scripts/bench-index-store.cjs --dir json/index --iters 5               # 真实索引（只读）
+> ```
+>
+> SQLite 后端代码保留但不启用；想试可设 `GBMD_INDEX_BACKEND=sqlite`，
+> 迁移/校验脚本仍可用（默认预演，`--apply` 才写）：
+>
+> ```bash
+> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index --apply --base <游戏名>
+> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index --verify
 > ```
 
 > **2026-10-11 变更：不再自动回填「内容 md5」**（旧逻辑已注释保留）。

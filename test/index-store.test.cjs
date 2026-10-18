@@ -14,6 +14,9 @@ const os = require("node:os");
 const path = require("node:path");
 
 const log = makeLog("index-store");
+// 2026-10-18：默认后端已改为 JSONL（实测索引换 SQLite 反而慢，见 lib/index-store.js 的 sqliteEnabled 注释）。
+//   本文件测的是 **SQLite 后端本体**，所以显式开启；另有一条用例专门断言「默认走 JSONL」。
+process.env.GBMD_INDEX_BACKEND = "sqlite";
 const store = require("../server/lib/index-store.js");
 const jsonlStore = require("../server/lib/jsonl-store.js");
 
@@ -155,5 +158,25 @@ loggedTest(log, "stats：能报出每个 base 的行数（启动日志/迁移校
     assert.equal(st.exists, true, "写过库就应存在");
     assert.equal(st.bases.GameE, sampleRecords().length, "行数应等于记录数");
     assert.equal(st.total, sampleRecords().length);
+  });
+});
+
+loggedTest(log, "默认后端是 JSONL：不设开关时写文件、读回 format=jsonl、不建库", () => {
+  withTmp((dir) => {
+    const base = path.join(dir, "GameDefault");
+    const saved = process.env.GBMD_INDEX_BACKEND;
+    delete process.env.GBMD_INDEX_BACKEND; // 模拟生产的默认配置
+    try {
+      const w = store.writeIndexAtomic(base, { game: "GameDefault", schema: 2 }, sampleRecords());
+      assert.equal(w.ok, true, "默认应能正常写入");
+      assert.equal(fs.existsSync(base + ".jsonl"), true, "默认应产出 .jsonl 文件");
+      assert.equal(fs.existsSync(store.dbPathOf(dir)), false, "默认不该建库（索引换库实测是退化）");
+      const back = store.readIndex(base);
+      assert.equal(back.format, "jsonl", "默认读回来应是 jsonl");
+      assert.deepEqual(canon(back.records), canon(sampleRecords()), "内容要与写入一致");
+    } finally {
+      if (saved === undefined) delete process.env.GBMD_INDEX_BACKEND;
+      else process.env.GBMD_INDEX_BACKEND = saved;
+    }
   });
 });
