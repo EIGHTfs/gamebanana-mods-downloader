@@ -2,17 +2,27 @@
 // ============================================================
 // 索引存储后端性能对比：JSONL（整文件重写） vs SQLite（行级增量）（2026-10-18 新增）
 //
-// 用途：用**真实索引数据**做同数据双臂对比，回答「换库到底快多少、快在哪」。
-//   只读源目录（把 .jsonl 复制到临时工作目录后再跑），绝不改动生产索引。
+// 为什么要有这个脚本：换存储后端时，**正确性通过不代表性能变好**。
+//   实测教训：第一版 index-store 每次写都回库读整份行（最大 base 71,842 行）算差异，
+//   结果比直接重写 JSONL 还慢 2.4 倍；加了行级差异缓存后才反过来。
+//   ⇒ 以后动存储层，先跑这个脚本，别靠推理。
 //
-// 测的四件事：
-//   ① 启动加载 load()      —— 两种后端的「全量读 + 建三段 Map」耗时与内存
-//   ② 单游戏增量写（改 1 条）—— 这是改造的核心收益点：JSONL 要重写整个游戏文件，SQLite 只动 1 行
-//   ③ 全库增量写（每游戏改 1 条）—— 对应 rebuild / 批量收尾场景
-//   ④ 落盘体积 —— jsonl 总大小 vs index.db 大小
+// 测四件事：
+//   ① 启动加载 load()        —— 全量读 + 建三段 Map（两种后端对比）
+//   ② 单游戏增量写（改 1 条）—— 核心收益点：JSONL 重写整个游戏文件，SQLite 只动 1 行
+//   ③ 全库增量写（各改 1 条）—— rebuild / 批量收尾场景
+//   ④ 落盘体积
 //
-// 用法（参数化，脚本内不写具体路径）：
-//   node scripts/bench-index-store.cjs --dir <json/index> [--work <临时目录>] [--iters 5]
+// 两种数据来源（二选一）：
+//   --dir <json/index>                    用真实索引（会先复制到临时工作目录，源目录只读）
+//   --synthetic <记录数> [--bases <个数>]  生成合成数据（任何机器可跑，用于后端对比）
+//
+// 用法：
+//   node scripts/bench-index-store.cjs --synthetic 250000 --bases 12 --iters 5
+//   node scripts/bench-index-store.cjs --dir <json/index> --iters 5
+//
+// 读数的正确姿势：写入耗时看 **min 与 p50**（自动 checkpoint 会让个别次偶发变慢），
+//   不要只看 avg —— avg 会被 checkpoint 尖峰带偏。
 //
 // 退出码：0 成功 / 1 参数或执行错误
 // ============================================================
@@ -24,21 +34,29 @@ const path = require("path");
 
 const jsonlStore = require("../server/lib/jsonl-store");
 const indexStore = require("../server/lib/index-store");
-const hashIndex = require("../server/lib/hash-index");
+// ⚠ 不要在这里 require hash-index：它在**模块加载期**就解析 GBMD_JSON_DIR，
+//   顶部 require 会让它指向项目自己的 json/index（空），load() 测出来只有 1–2ms，假的。
+//   见 runLoad()：设好环境变量 + 清缓存后再 require。
 
 const USAGE = [
-  "用法：node scripts/bench-index-store.cjs --dir <json/index> [--work <临时目录>] [--iters 5]",
+  "用法：",
+  "  node scripts/bench-index-store.cjs --synthetic <记录数> [--bases 12] [--iters 5]   # 合成数据",
+  "  node scripts/bench-index-store.cjs --dir <json/index> [--iters 5]                  # 真实索引",
   "",
-  "  --dir    源索引目录（只读，会被完整复制到 --work 下再跑），必填",
-  "  --work   工作目录（缺省 os.tmpdir 下的临时目录，跑完自动清理）",
-  "  --iters  每项重复次数（缺省 5，报告取中位数之外的均值与会话最快值）"
+  "  --dir       真实索引目录（只读，会复制到临时工作目录再跑）",
+  "  --synthetic 生成多少条记录（与 --dir 二选一）",
+  "  --bases     合成数据分成几个 base（缺省 12，模拟「一游戏一文件」）",
+  "  --work      工作目录（缺省 os.tmpdir 下临时目录，跑完自动清理）",
+  "  --iters     每项重复次数（缺省 5）"
 ].join("\n");
 
 function parseArgs(argv) {
-  const out = { iters: 5 };
+  const out = { iters: 5, bases: 12 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--dir") out.dir = argv[++i];
+    else if (a === "--synthetic") out.synthetic = Math.max(1, parseInt(argv[++i], 10) || 0);
+    else if (a === "--bases") out.bases = Math.max(1, parseInt(argv[++i], 10) || 12);
     else if (a === "--work") out.work = argv[++i];
     else if (a === "--iters") out.iters = Math.max(1, parseInt(argv[++i], 10) || 5);
     else if (a === "-h" || a === "--help") out.help = true;
@@ -46,10 +64,7 @@ function parseArgs(argv) {
   return out;
 }
 
-/** 高精度计时（毫秒，保留 2 位） */
-function ms(t0) {
-  return Number(process.hrtime.bigint() - t0) / 1e6;
-}
+function ms(t0) { return Number(process.hrtime.bigint() - t0) / 1e6; }
 
 function fmt(n) {
   if (n == null || Number.isNaN(n)) return "-";
@@ -58,46 +73,16 @@ function fmt(n) {
   return n.toFixed(2) + "ms";
 }
 
-function fmtMB(bytes) {
-  return (bytes / 1048576).toFixed(1) + "MB";
+function fmtMB(bytes) { return (bytes / 1048576).toFixed(1) + "MB"; }
+
+/** 百分位（样本少时退化到最近值） */
+function pct(samples, p) {
+  const s = samples.slice().sort((a, b) => a - b);
+  const i = Math.min(s.length - 1, Math.max(0, Math.round((p / 100) * (s.length - 1))));
+  return s[i];
 }
 
-/** 把源目录的 .jsonl/.json 索引文件复制到工作目录的 index/ 下（不动源） */
-function prepareWork(srcDir, workRoot) {
-  const indexDir = path.join(workRoot, "index");
-  fs.mkdirSync(indexDir, { recursive: true });
-  const files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".jsonl") || f.endsWith(".json"));
-  for (const f of files) fs.copyFileSync(path.join(srcDir, f), path.join(indexDir, f));
-  return { indexDir, files: files.length };
-}
-
-/** 一次完整的 load()：读全部 base + 建三段 Map（与生产启动路径同一个函数） */
-function runLoad(indexDir) {
-  const oldEnv = process.env.GBMD_JSON_DIR;
-  process.env.GBMD_JSON_DIR = path.dirname(indexDir);
-  try {
-    hashIndex.load();
-    return hashIndex.status();
-  } finally {
-    if (oldEnv === undefined) delete process.env.GBMD_JSON_DIR;
-    else process.env.GBMD_JSON_DIR = oldEnv;
-  }
-}
-
-/** 读出某个 base 的记录（两种后端都能读；用于构造写入负载） */
-function readBase(indexDir, base) {
-  return jsonlStore.readIndex(path.join(indexDir, base));
-}
-
-/** 改其中一条（模拟一次真实增量：某个文件的 hash/size 变了） */
-function mutate(records) {
-  const out = records.map((r) => r);
-  const i = Math.floor(out.length / 2);
-  out[i] = Object.assign({}, out[i], { v: Object.assign({}, out[i].v, { _benchTouched: Date.now() }) });
-  return out;
-}
-
-/** 计时一组重复，返回 {avg, min, max} */
+/** 重复执行一组，返回分布（min / p50 / avg / max） */
 function timeIt(iters, fn) {
   const samples = [];
   for (let i = 0; i < iters; i++) {
@@ -106,18 +91,105 @@ function timeIt(iters, fn) {
     samples.push(ms(t0));
   }
   const sum = samples.reduce((a, b) => a + b, 0);
-  return { avg: sum / samples.length, min: Math.min(...samples), max: Math.max(...samples), n: iters };
+  return {
+    n: iters, min: Math.min.apply(null, samples), max: Math.max.apply(null, samples),
+    p50: pct(samples, 50), avg: sum / samples.length
+  };
 }
+
+function fmtDist(d) {
+  return "min " + fmt(d.min) + " / p50 " + fmt(d.p50) + " / avg " + fmt(d.avg) + " / max " + fmt(d.max);
+}
+
+/** 合成一条记录（形态与真实索引一致：gb/local/name 三段 + 中等体积值） */
+function synthRecords(baseIdx, count, out) {
+  for (let i = 0; i < count; i++) {
+    const h = (baseIdx.toString(16) + i.toString(16)).padStart(32, "0").slice(0, 32);
+    const modId = String(100000 + baseIdx * 1000 + (i % 500));
+    out.push({ t: "gb", k: h, v: { modId, modName: "Mod " + modId, author: "author" + (i % 40), game: "Game" + baseIdx, url: "https://gamebanana.com/mods/" + modId, fileName: "file_" + i + ".zip", gbMd5: h } });
+    out.push({ t: "local", k: h, v: { modId, modDir: "<ROOT>/Game" + baseIdx + "/Mods/" + modId, file: "file_" + i + ".zip", hash: h, gbMd5: h, kind: "file" } });
+    out.push({ t: "name", k: "file_" + i + ".zip", v: { modId, modName: "Mod " + modId, game: "Game" + baseIdx, fileName: "file_" + i + ".zip", kind: "file" } });
+  }
+}
+
+/**
+ * 准备数据：真实目录复制，或生成合成数据。
+ *   ⚠ 只返回 base 名与**条数**，不在内存里留记录 —— 否则大 base 规模（几十万条）直接 OOM
+ *   （实测 750k 条时把 V8 默认堆吃爆）。记录一律「用到哪个 base 才读哪个」。
+ */
+function prepareData(opts, workRoot) {
+  const indexDir = path.join(workRoot, "index");
+  fs.mkdirSync(indexDir, { recursive: true });
+  const counts = new Map();
+
+  if (opts.synthetic) {
+    const per = Math.ceil(opts.synthetic / opts.bases);
+    for (let b = 0; b < opts.bases; b++) {
+      const recs = [];
+      synthRecords(b, per, recs);
+      const base = "Game" + b;
+      jsonlStore.writeIndexAtomic(path.join(indexDir, base), { game: base, schema: 2 }, recs);
+      counts.set(base, recs.length);
+      recs.length = 0; // 及时释放，别把上一个 base 留着
+    }
+    return { indexDir, bases: [...counts.keys()], counts, source: "合成数据" };
+  }
+
+  const files = fs.readdirSync(opts.dir).filter((f) => f.endsWith(".jsonl") || f.endsWith(".json"));
+  for (const f of files) fs.copyFileSync(path.join(opts.dir, f), path.join(indexDir, f));
+  const bases = files.map((f) => f.replace(/\.jsonl?$/, "")).sort();
+  for (const b of bases) {
+    const r = jsonlStore.readIndex(path.join(indexDir, b));
+    counts.set(b, Array.isArray(r.records) ? r.records.length : 0);
+  }
+  return { indexDir, bases, counts, source: "真实索引" };
+}
+
+/** 读单个 base 的记录（流式使用，用完即弃） */
+function readBase(indexDir, base) {
+  const r = jsonlStore.readIndex(path.join(indexDir, base));
+  return Array.isArray(r.records) ? r.records : [];
+}
+
+/** 一次完整 load()：走生产同一个函数（读全部 base + 建三段 Map）
+ *  必须先设 GBMD_JSON_DIR、再清缓存、才 require —— hash-index 在加载期就固化索引目录。
+ */
+function runLoad(indexDir) {
+  const oldEnv = process.env.GBMD_JSON_DIR;
+  process.env.GBMD_JSON_DIR = path.dirname(indexDir);
+  const modPath = require.resolve("../server/lib/hash-index.js");
+  delete require.cache[modPath];
+  delete require.cache[require.resolve("../server/lib/index-store.js")];
+  delete require.cache[require.resolve("../server/lib/jsonl-store.js")];
+  try {
+    const hi = require(modPath);
+    hi.load();
+    return hi.status();
+  } finally {
+    delete require.cache[modPath];
+    if (oldEnv === undefined) delete process.env.GBMD_JSON_DIR;
+    else process.env.GBMD_JSON_DIR = oldEnv;
+  }
+}
+
+/** 改其中一条（模拟一次真实增量：某个文件的 hash/size 变了） */
+function mutate(records) {
+  const out = records.slice();
+  const i = Math.floor(out.length / 2);
+  out[i] = Object.assign({}, out[i], { v: Object.assign({}, out[i].v, { _benchTouched: Date.now() }) });
+  return out;
+}
+
+function fileSize(p) { try { return fs.statSync(p).size; } catch (_) { return 0; } }
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
-  if (opts.help || !opts.dir) {
+  if (opts.help || (!opts.dir && !opts.synthetic)) {
     process.stdout.write(USAGE + "\n");
     return opts.help ? 0 : 1;
   }
-  const srcDir = path.resolve(opts.dir);
-  if (!fs.existsSync(srcDir)) {
-    process.stdout.write("✗ 目录不存在：" + srcDir + "\n");
+  if (opts.dir && !fs.existsSync(path.resolve(opts.dir))) {
+    process.stdout.write("✗ 目录不存在：" + path.resolve(opts.dir) + "\n");
     return 1;
   }
   const probe = indexStore.probe();
@@ -126,101 +198,98 @@ function main() {
     return 1;
   }
 
-  const workRoot = opts.work
-    ? path.resolve(opts.work)
-    : fs.mkdtempSync(path.join(os.tmpdir(), "idxbench-"));
+  const workRoot = opts.work ? path.resolve(opts.work) : fs.mkdtempSync(path.join(os.tmpdir(), "idxbench-"));
   const cleanup = !opts.work;
   try {
-    const { indexDir, files } = prepareWork(srcDir, workRoot);
-    const bases = fs.readdirSync(indexDir).filter((f) => f.endsWith(".jsonl") || f.endsWith(".json")).map((f) => f.replace(/\.jsonl?$/, "")).sort();
-
-    // 估算源数据规模
+    if (opts.dir) opts.dir = path.resolve(opts.dir);
+    const data = prepareData(opts, workRoot);
+    const { indexDir, bases, counts } = data;
     let totalRecords = 0;
     let jsonlBytes = 0;
-    const recsOf = new Map();
     for (const b of bases) {
-      const r = readBase(indexDir, b);
-      const recs = Array.isArray(r.records) ? r.records : [];
-      recsOf.set(b, recs);
-      totalRecords += recs.length;
-      jsonlBytes += r.bytes || 0;
-      if (!r.bytes) {
-        try { jsonlBytes += fs.statSync(path.join(indexDir, b + ".jsonl")).size; } catch (_) {}
-      }
+      totalRecords += counts.get(b);
+      jsonlBytes += fileSize(path.join(indexDir, b + ".jsonl"));
     }
-    // 挑记录最多的那个 base 做「单游戏增量写」负载
     let bigBase = bases[0];
-    for (const b of bases) if (recsOf.get(b).length > recsOf.get(bigBase).length) bigBase = b;
+    for (const b of bases) if (counts.get(b) > counts.get(bigBase)) bigBase = b;
 
-    process.stdout.write("== 索引性能对比（同数据双臂） ==\n");
-    process.stdout.write("  数据规模: " + bases.length + " 个 base / " + totalRecords + " 条 / jsonl " + fmtMB(jsonlBytes) + "\n");
-    process.stdout.write("  最大 base: " + bigBase + "（" + recsOf.get(bigBase).length + " 条）\n");
+    process.stdout.write("== 索引后端性能对比：JSONL vs SQLite ==\n");
+    process.stdout.write("  数据来源: " + data.source + "\n");
+    process.stdout.write("  规模    : " + bases.length + " 个 base / " + totalRecords + " 条 / jsonl " + fmtMB(jsonlBytes) + "\n");
+    process.stdout.write("  最大 base: " + bigBase + "（" + counts.get(bigBase) + " 条）\n");
     process.stdout.write("  重复次数: " + opts.iters + "\n\n");
 
-    // ---------- ① 启动加载 ----------
+    // ① 启动加载
     const loadJsonl = timeIt(opts.iters, () => { runLoad(indexDir); });
-    // 种库：把工作目录里的数据写进 SQLite（一次性）
-    for (const b of bases) indexStore.writeIndexAtomic(path.join(indexDir, b), { game: b, schema: 2 }, recsOf.get(b));
+    for (const b of bases) indexStore.writeIndexAtomic(path.join(indexDir, b), { game: b, schema: 2 }, readBase(indexDir, b));
     indexStore.closeDb();
     const loadSqlite = timeIt(opts.iters, () => { runLoad(indexDir); });
     indexStore.closeDb();
 
-    // ---------- ② 单游戏增量写（改 1 条）----------
-    const bigRecs = recsOf.get(bigBase);
-    const bigTouched = mutate(bigRecs);
-    const bigJsonlPath = path.join(indexDir, bigBase);
-    // JSONL：整文件重写（这正是改造前的行为）
+    // ② 单游戏增量写（只改 1 条）
+    const bigTouched = mutate(readBase(indexDir, bigBase));
+    const bigBasePath = path.join(indexDir, bigBase);
     const wJsonl = timeIt(opts.iters, () => {
-      jsonlStore.writeIndexAtomic(bigJsonlPath, { game: bigBase, schema: 2 }, bigTouched);
+      jsonlStore.writeIndexAtomic(bigBasePath, { game: bigBase, schema: 2 }, bigTouched);
     });
-    const jsonlFileBytes = (() => { try { return fs.statSync(bigJsonlPath + ".jsonl").size; } catch (_) { return 0; } })();
-    // SQLite：只 UPSERT 变化的那一行
-    const walBefore = (() => { try { return fs.statSync(indexStore.dbPathOf(indexDir) + "-wal").size; } catch (_) { return 0; } })();
+    const bigJsonlBytes = fileSize(bigBasePath + ".jsonl");
     const wSqlite = timeIt(opts.iters, () => {
-      indexStore.writeIndexAtomic(path.join(indexDir, bigBase), { game: bigBase, schema: 2 }, bigTouched);
-    });
-    const walAfter = (() => { try { return fs.statSync(indexStore.dbPathOf(indexDir) + "-wal").size; } catch (_) { return 0; } })();
-    indexStore.closeDb();
-
-    // ---------- ③ 全库增量写（每游戏改 1 条）----------
-    const allTouched = new Map();
-    for (const b of bases) allTouched.set(b, mutate(recsOf.get(b)));
-    const allJsonl = timeIt(opts.iters, () => {
-      for (const b of bases) jsonlStore.writeIndexAtomic(path.join(indexDir, b), { game: b, schema: 2 }, allTouched.get(b));
-    });
-    const allSqlite = timeIt(opts.iters, () => {
-      for (const b of bases) indexStore.writeIndexAtomic(path.join(indexDir, b), { game: b, schema: 2 }, allTouched.get(b));
+      indexStore.writeIndexAtomic(bigBasePath, { game: bigBase, schema: 2 }, bigTouched);
     });
     indexStore.closeDb();
 
-    // ---------- ④ 落盘体积 ----------
-    const dbSize = (() => { try { return fs.statSync(indexStore.dbPathOf(indexDir)).size; } catch (_) { return 0; } })();
-    const walSize = (() => { try { return fs.statSync(indexStore.dbPathOf(indexDir) + "-wal").size; } catch (_) { return 0; } })();
-    const jsonlTotal = (() => {
-      let n = 0;
-      for (const f of fs.readdirSync(indexDir)) if (f.endsWith(".jsonl")) n += fs.statSync(path.join(indexDir, f)).size;
-      return n;
-    })();
+    // ③ 全库增量写（每 base 改 1 条）
+    //   逐 base「读+改（不计时）→ 计时写 → 丢弃」，峰值只占一个 base 的内存；
+    //   若把全部 base 的记录与副本都攥在手里，几十万条规模会直接 OOM（实测 750k 条爆堆）。
+    const timeAllBases = (writeFn) => {
+      const samples = [];
+      for (let i = 0; i < opts.iters; i++) {
+        let total = 0;
+        for (const b of bases) {
+          const touched = mutate(readBase(indexDir, b));
+          const t0 = process.hrtime.bigint();
+          writeFn(b, touched);
+          total += ms(t0);
+        }
+        samples.push(total);
+      }
+      const sum = samples.reduce((a, b) => a + b, 0);
+      return { n: opts.iters, min: Math.min.apply(null, samples), max: Math.max.apply(null, samples), p50: pct(samples, 50), avg: sum / samples.length };
+    };
+    const allJsonl = timeAllBases((b, touched) => {
+      jsonlStore.writeIndexAtomic(path.join(indexDir, b), { game: b, schema: 2 }, touched);
+    });
+    const allSqlite = timeAllBases((b, touched) => {
+      indexStore.writeIndexAtomic(path.join(indexDir, b), { game: b, schema: 2 }, touched);
+    });
+    indexStore.closeDb();
 
-    const speed = (a, b) => (b > 0 ? (a / b).toFixed(1) + "×" : "-");
+    // ④ 体积
+    const dbSize = fileSize(indexStore.dbPathOf(indexDir));
+    const walSize = fileSize(indexStore.dbPathOf(indexDir) + "-wal");
+    let jsonlTotal = 0;
+    for (const f of fs.readdirSync(indexDir)) if (f.endsWith(".jsonl")) jsonlTotal += fileSize(path.join(indexDir, f));
+
+    const times = (a, b) => (b > 0 ? (a / b).toFixed(2) + "×" : "-");
     process.stdout.write("① 启动加载 load()（读全部 base + 建三段 Map）\n");
-    process.stdout.write("   JSONL : 均 " + fmt(loadJsonl.avg) + "（最快 " + fmt(loadJsonl.min) + "）\n");
-    process.stdout.write("   SQLite: 均 " + fmt(loadSqlite.avg) + "（最快 " + fmt(loadSqlite.min) + "）\n");
-    process.stdout.write("   对比  : SQLite 是 JSONL 的 " + speed(loadJsonl.avg, loadSqlite.avg) + "\n\n");
+    process.stdout.write("   JSONL : " + fmtDist(loadJsonl) + "\n");
+    process.stdout.write("   SQLite: " + fmtDist(loadSqlite) + "\n");
+    process.stdout.write("   结论  : 载入速度比 = " + times(loadJsonl.p50, loadSqlite.p50) + "（>1 表示 SQLite 更快；两种后端都要全量读，预期接近）\n\n");
 
-    process.stdout.write("② 单游戏增量写（" + bigBase + " / " + bigRecs.length + " 条 / 只改 1 条）\n");
-    process.stdout.write("   JSONL : 均 " + fmt(wJsonl.avg) + "（最快 " + fmt(wJsonl.min) + "）  写了 " + fmtMB(jsonlFileBytes) + "\n");
-    process.stdout.write("   SQLite: 均 " + fmt(wSqlite.avg) + "（最快 " + fmt(wSqlite.min) + "）  WAL 变化 " + fmtMB(Math.max(0, walAfter - walBefore)) + "\n");
-    process.stdout.write("   对比  : SQLite 比 JSONL 快 " + speed(wJsonl.avg, wSqlite.avg) + "\n\n");
+    process.stdout.write("② 单游戏增量写（" + bigBase + " / " + counts.get(bigBase) + " 条 / 只改 1 条）\n");
+    process.stdout.write("   JSONL : " + fmtDist(wJsonl) + "   每次写 " + fmtMB(bigJsonlBytes) + "\n");
+    process.stdout.write("   SQLite: " + fmtDist(wSqlite) + "   每次只 UPSERT 1 行\n");
+    process.stdout.write("   结论  : p50 比 = " + times(wJsonl.p50, wSqlite.p50) + "\n\n");
 
     process.stdout.write("③ 全库增量写（" + bases.length + " 个 base，各改 1 条）\n");
-    process.stdout.write("   JSONL : 均 " + fmt(allJsonl.avg) + "（最快 " + fmt(allJsonl.min) + "）\n");
-    process.stdout.write("   SQLite: 均 " + fmt(allSqlite.avg) + "（最快 " + fmt(allSqlite.min) + "）\n");
-    process.stdout.write("   对比  : SQLite 比 JSONL 快 " + speed(allJsonl.avg, allSqlite.avg) + "\n\n");
+    process.stdout.write("   JSONL : " + fmtDist(allJsonl) + "\n");
+    process.stdout.write("   SQLite: " + fmtDist(allSqlite) + "\n");
+    process.stdout.write("   结论  : p50 比 = " + times(allJsonl.p50, allSqlite.p50) + "\n\n");
 
     process.stdout.write("④ 落盘体积\n");
-    process.stdout.write("   JSONL 合计 : " + fmtMB(jsonlTotal) + "\n");
-    process.stdout.write("   SQLite     : " + fmtMB(dbSize) + "（另有 WAL " + fmtMB(walSize) + "，会自动 checkpoint）\n");
+    process.stdout.write("   JSONL 合计: " + fmtMB(jsonlTotal) + "\n");
+    process.stdout.write("   SQLite    : " + fmtMB(dbSize) + "（另有 WAL " + fmtMB(walSize) + "，会自动 checkpoint）\n");
+    process.stdout.write("\n读法提示：写入看 min/p50；avg 会被 WAL 自动 checkpoint 的尖峰带偏。\n");
     return 0;
   } finally {
     indexStore.closeDb();
