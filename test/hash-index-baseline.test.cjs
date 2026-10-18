@@ -45,6 +45,10 @@ function freshIndex(jsonDir) {
   delete require.cache[modPath];
   const storePath = require.resolve("../server/lib/jsonl-store.js");
   delete require.cache[storePath];
+  // 2026-10-18：索引存储层也带模块级状态（打开的库句柄），必须一起清，
+  //   否则上一个临时目录的库会残留到下一个用例
+  const idxStorePath = require.resolve("../server/lib/index-store.js");
+  delete require.cache[idxStorePath];
   const oldEnv = process.env.GBMD_JSON_DIR;
   process.env.GBMD_JSON_DIR = jsonDir;
   try {
@@ -62,6 +66,7 @@ function withTmp(fn) {
   try {
     return fn(root);
   } finally {
+    try { require("../server/lib/index-store.js").closeDb(); } catch (_) {}
     try { fs.rmSync(root, { recursive: true, force: true }); } catch (_) {}
   }
 }

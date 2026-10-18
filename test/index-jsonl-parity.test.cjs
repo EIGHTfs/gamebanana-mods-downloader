@@ -19,6 +19,8 @@ function freshIndex(jsonDir) {
   delete require.cache[modPath];
   const storePath = require.resolve("../server/lib/jsonl-store.js");
   delete require.cache[storePath];
+  // 2026-10-18：索引存储层（SQLite 优先）也有模块级库句柄，必须一起清
+  delete require.cache[require.resolve("../server/lib/index-store.js")];
   const oldEnv = process.env.GBMD_JSON_DIR;
   process.env.GBMD_JSON_DIR = jsonDir;
   try {

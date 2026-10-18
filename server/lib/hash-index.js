@@ -32,6 +32,8 @@ const { parseIndexObj, readIndexObj } = require("./index-html");
 //   三段 Map（gb/local/name）↔ 记录 {t:"gb"|"local"|"name", k, v}，以及按游戏分文件的路径换算。
 //   读：双读（.jsonl 优先，回落旧 .json）；写：只产 .jsonl。
 const jsonlStore = require("./jsonl-store");
+// 2026-10-18：索引存储层（SQLite 优先、JSONL/JSON 回落）。与 jsonl-store 同签名 ⇒ 下面调用点不用分叉。
+const indexStore = require("./index-store");
 const SECTION_NAMES = ["gb", "local", "name"];
 /** 某游戏的索引「基路径」（不含后缀）：json/index/<sanitize 后的游戏名> */
 function gameIndexBase(game) {
@@ -97,8 +99,8 @@ function mapToRecords(g) {
  * @param {string} [fallbackGame] 文件里没写 game 时用的游戏名
  */
 function loadGameIndexByBase(base, fallbackGame) {
-  const r = jsonlStore.readIndex(base);
-  if (r.format === "jsonl") {
+  const r = indexStore.readIndex(base);
+  if (r.format === "jsonl" || r.format === "sqlite") {
     const g = {
       game: r.meta.game || fallbackGame,
       gb: jsonlStore.mapOf(r.records, "gb"),
@@ -110,7 +112,7 @@ function loadGameIndexByBase(base, fallbackGame) {
     const live = g.gb.size + g.local.size + g.name.size;
     if (live && r.records.length > live * 1.5) {
       try {
-        jsonlStore.writeIndexAtomic(base, { game: g.game, schema: 2 }, mapToRecords(g));
+        indexStore.writeIndexAtomic(base, { game: g.game, schema: 2 }, mapToRecords(g));
         if (buildState) buildState.compacted = (buildState.compacted || 0) + 1;
       } catch (_) {}
     }
@@ -137,7 +139,7 @@ function loadGameFile(game) {
 function saveGameFile(game, g) {
   try {
     fs.mkdirSync(INDEX_DIR, { recursive: true });
-    const w = jsonlStore.writeIndexAtomic(gameIndexBase(game), { game: (g && g.game) || game, schema: 2 }, mapToRecords(g));
+    const w = indexStore.writeIndexAtomic(gameIndexBase(game), { game: (g && g.game) || game, schema: 2 }, mapToRecords(g));
     return w.ok;
   } catch (_) { return false; }
 }
@@ -232,13 +234,12 @@ function load() {
   //     node scripts/migrate-json-index-to-jsonl.cjs --dir json/index --profile gbmd --apply
   //   （本文件的 migrateIndexToJsonl() 就是这次转换的程序入口，保留供手动/脚本调用。）
   loadedGames = new Map();
-  let files = [];
-  // 双读：新格式 .jsonl 与旧格式 .json 都能启动加载（迁移失败也照常可跑）
-  try { files = fs.readdirSync(INDEX_DIR).filter((f) => f.endsWith(".jsonl") || f.endsWith(".json")); } catch (_) {}
-  for (const f of files) {
+  // 2026-10-18：要加载哪些游戏由存储层决定 —— 有库就用库里的 base 列表；
+  //   没有库才扫目录里的 .jsonl / .json（双读：新旧格式都能启动，迁移失败也照常可跑）。
+  let stems = [];
+  try { stems = indexStore.listBases(INDEX_DIR); } catch (_) {}
+  for (const stem of stems) {
     try {
-      // 用「基路径」读取（不带后缀），由存储层决定 .jsonl / .json，避免把已 sanitize 的名字再 sanitize 一次
-      const stem = f.replace(/\.jsonl?$/, "");
       const g = loadGameIndexByBase(path.join(INDEX_DIR, stem), stem);
       if (g) loadedGames.set(g.game, g);
     } catch (_) {}

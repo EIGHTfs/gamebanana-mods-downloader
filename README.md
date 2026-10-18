@@ -250,7 +250,7 @@ gamebanana-mods-downloader/
 
 网页「设置 → HTML 反查」：输入文件 MD5 **或图片原始短名**（GB 原名，如 `69b46e18405cc.jpg`），反查它属于哪个 mod。
 
-索引按游戏分文件存 `json/index/<游戏名>.json`，每文件含三块：
+索引按游戏分文件存 `json/index/<游戏名>.jsonl`（旧版本为 `.json`，仍可读），每文件含三块：
 
 | 索引 | 内容 |
 |---|---|
@@ -265,6 +265,17 @@ gamebanana-mods-downloader/
 - **离线目录搜索**：按 mod 名/作者模糊搜 GB 表（无需连香蕉网），未下载的可一键下载
 
 **索引维护**：启动自动加载三表；每次新下载写完 HTML → **自动增量并入**（新 hash/原名立即可查）；全量重建用设置页「重建索引」。
+
+> **1.3.10 存储后端**：索引可存 **SQLite**（`json/index/index.db`）——增量并入只 **UPSERT 变化的行**，
+> 不再重写整个游戏文件（实测单条增删 391ms ⇒ 只写变化行）。判定顺序：库里有该游戏的行就用库，
+> 否则回落 `.jsonl`（再回落旧 `.json`）；Node < 22.5 无内置 `node:sqlite` 时自动全程走文件，功能不降级。
+> 一次性迁移（人工执行，不自动跑）：
+>
+> ```bash
+> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index            # 预演
+> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index --apply    # 真迁移（原文件保留可回退）
+> node scripts/migrate-index-jsonl-to-sqlite.cjs --dir json/index --verify   # 库与文件逐条比对
+> ```
 
 > **2026-10-11 变更：不再自动回填「内容 md5」**（旧逻辑已注释保留）。
 > 原因：反查的主键是 GB 自带的 `gbMd5`（随 HTML 落盘）与 **GB 原名**（图片短名本身即 GB 的 hash，
@@ -445,4 +456,4 @@ A: 图片/gif 优先（每个 mod 的预览图先下载），压缩包后下—�
 > 版本记录已**外置**到 **[docs/CHANGELOG.md](docs/CHANGELOG.md)** —— 由 dsh-git-push 插件的 `doc-version`
 > 从 git log 聚合（`apply` 更新 / `check` 查漂移，可接 CI），启用该工具前的历史版本一并保留在该文件里。
 
-当前版本：**1.3.9**
+当前版本：**1.3.10**
