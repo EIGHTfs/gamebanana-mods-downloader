@@ -5,6 +5,15 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+// 2026-10-18：必须隔离 —— hash-index 在**模块加载期**就解析 GBMD_JSON_DIR，不设会直接写项目真实的
+//   json/index/。以前只产 .jsonl（用例末尾删掉就干净），现在索引可能落在 json/index/index.db，
+//   跨次运行残留会让「新增条数」断言变成 0（实测踩到：第二次跑 gbAdded=0）。
+//   这里统一指向临时目录，进程退出时清理。
+const TMP_JSON = fs.mkdtempSync(path.join(os.tmpdir(), "gbmd-p3-json-"));
+process.env.GBMD_JSON_DIR = TMP_JSON;
+process.on("exit", () => {
+  try { fs.rmSync(TMP_JSON, { recursive: true, force: true }); } catch (_) {}
+});
 const log = makeLog("p3-bug1");
 
 // 2026-10-11 修：utils/index-html → lib/index-html
@@ -34,9 +43,5 @@ loggedTest(log, "bug#1 行为：ingestModDir 读 description.html 入索引（sa
   assert.equal(r.saved, 1);
   assert.ok(r.gbAdded >= 1, "应入 GB 表");
   fs.rmSync(tmp, { recursive: true, force: true });
-  // 清 saveGameFile 副作用（json/index/TestGameP3*.json，gitignored）
-  try {
-    const idxDir = path.resolve(__dirname, "..", "json", "index");
-    for (const n of fs.readdirSync(idxDir)) if (n.startsWith("TestGameP3")) fs.unlinkSync(path.join(idxDir, n));
-  } catch (_) {}
+  // 索引副作用随 TMP_JSON 一起在进程退出时清理（见文件头说明），不再动项目真实 json/index/
 });
