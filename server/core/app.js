@@ -251,7 +251,25 @@ function createServer(opts) {
   const cfgPort = typeof config.get === "function"
     ? config.get("port")
     : (typeof config.readConfig === "function" ? (config.readConfig() || {}).port : null);
-  const port = portOpt || cfgPort || process.env.PORT || DEFAULT_PORT;
+  // 端口优先级：显式环境变量 PORT（bin/start.sh 注入）> 调用方传参 > 配置文件/默认值。
+  //   原来把 cfgPort 放在 PORT 之前，导致「配置文件里有默认 port」时 --port 与 PORT 永远被覆盖 ——
+  //   实测 npx --port 8682 仍监听 8642。命令行显式指定的端口必须能盖过配置文件默认值。
+  const envPort = Number(process.env.PORT || 0);
+  const port = (Number.isInteger(envPort) && envPort > 0 ? envPort : (portOpt || cfgPort || DEFAULT_PORT));
+
+  // 监听失败要说人话：不处理的话，EADDRINUSE 会变成未捕获异常，
+  //   而本项目 boot.cjs 有「uncaughtException 只记日志、进程继续」的兜底 ——
+  //   结果是"端口被占用 → 进程还活着但根本没在监听"，比崩了更难查。
+  //   所以这里显式拦截，给出下一步并用非 0 退出码退出（用 2，与参数错误 1 区分）。
+  server.on("error", (e) => {
+    if (e && e.code === "EADDRINUSE") {
+      console.error(`端口 ${port} 已被占用：用 --port <其他端口> 换一个，或先停掉占用该端口的进程`);
+      console.error(`排查：lsof -i :${port}   或   netstat -tlnp | grep :${port}`);
+      process.exit(2);
+    }
+    console.error(`服务启动失败：${(e && e.message) || e}`);
+    process.exit(2);
+  });
 
   server.listen(port, () => {
       // 不传 host 时 Node 监听 ::/0.0.0.0（局域网可访问）。

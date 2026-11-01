@@ -12,9 +12,15 @@ const crypto = require("crypto");
 
 const jsonDir = require("./store/json-dir");
 // config.json 是例外：留在 server/（不随其它运行态 json 迁到 json/）
+// 但「server 在哪」要跟着数据根走：装成 npm 包后 __dirname 是 <...>/node_modules/<pkg>/server，
+//   把配置写进包目录 ⇒ 升级即丢（npm 会整体替换该目录），且包目录可能只读。
+// DATA_DIR 的语义与本项目既有的 store/json-dir.js 一致：它指向 **server 目录**。
+//   仓库运行：未设置 ⇒ 仍是 <项目根>/server（行为一字不变）
+//   npm 包运行：bin 注入 <数据根>/server ⇒ 配置落 <数据根>/server/config.json
 //runtime-manifest.json file server/config.json watch=skip desc="服务配置（含密码/路径，本机权威）"
 //userdata-manifest.json file server/config.json desc="服务配置（例外留在 server/）"
-const CONFIG_PATH = path.join(__dirname, "config.json");
+const CONFIG_DIR = (process.env.DATA_DIR || process.env.GBMD_DATA_DIR || __dirname).trim();
+const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 (function restoreConfigFromJsonDir() {
   const misplaced = jsonDir.jsonFile("config.json");
   try {
