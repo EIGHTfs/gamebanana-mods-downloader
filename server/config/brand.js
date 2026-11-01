@@ -39,7 +39,7 @@ const DEFAULT_BRAND = {
 
 // .env 解析结果缓存：按 .env 绝对路径存，同一份文件在进程内只解析一次。
 // 用 Map 而不是单个变量——同一进程可能先后对多个项目根调用 readBrand
-// （例如仓库自带 example 与调用方项目并存），单值缓存会串项目。
+// （例如主项目与测试建的临时项目并存），单值缓存会串项目。
 const dotEnvCache = new Map();
 
 // 判断品牌值是否「等于没配」：undefined / null / 空串 / 纯空白都算缺，交给下一级兜底。
