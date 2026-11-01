@@ -1,12 +1,12 @@
-# npx 发包准备（gamebanana-mods-downloader）
+# npx 发包准备
 
-> 只调研、未改代码。本文同时是三个同构项目里最完整的一份，另两份（iwara / gallery）只写差异。
+> 只调研、未改代码。本文同时是三个同构项目里最完整的一份，另两份（其他项目）只写差异。
 
 ## 一、现状盘点（实测）
 
 | 项 | 实测结果 |
 |---|---|
-| 入口 | `server/boot.cjs`（**与 iwara、gallery 逐字相同**，md5 前 8 位 `ef54878e`） |
+| 入口 | `server/boot.cjs`（**与其他项目逐字相同**，md5 前 8 位 `ef54878e`） |
 | 启动链 | `boot.cjs` → `require("./lib/cjs-bootstrap.cjs")`（三项目逐字相同 `12a8d0a2`）→ `require("./app.js")` |
 | 端口 | `server/config.js:33` 默认 **8642**；`config.js:287` 有 `ports` 配置块 |
 | 第三方依赖 | **零**。全部是 Node 内置：`child_process` / `crypto` / `dns` / `fs` / `http` / `https` / `module` / `net` / `os` / `node:sqlite` / `node:string_decoder` |
@@ -129,5 +129,5 @@
 
 ## 七、建议发布顺序
 
-**先发 gallery 作为试点**：它 `server/` 最小（67 文件 / 608 KB）、**完全不依赖 brand 机制**（无 `@brand:` 指令、无 `brand.js`）⇒ **`assemble.json` 可以直接排除，不需要方案 b**，是最干净的试点。
-验证通过（`npx` 能起、页面正常、数据落 `~/.gallery`）后，再把方案 b 复制到 gbmd / iwara。
+**先发一个下游项目作为试点**：它 `server/` 最小（67 文件 / 608 KB）、**完全不依赖 brand 机制**（无 `@brand:` 指令、无 `brand.js`）⇒ **`assemble.json` 可以直接排除，不需要方案 b**，是最干净的试点。
+验证通过（`npx` 能起、页面正常、数据落 `~/.<项目名>`）后，再把方案 b 复制到本项目与其他项目。
