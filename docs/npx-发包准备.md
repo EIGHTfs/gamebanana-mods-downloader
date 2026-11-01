@@ -64,6 +64,11 @@
 
 ### 4.1 问题有多严重（实测，不是猜测）
 
+> **现状已变（本节结论需降级看待）**：`server/config/brand.js` 现在是**四级兜底且恒返回对象**
+> —— 进程环境变量 `BRAND_*` → 项目根 `.env` → `assemble.json` 的 `brand` 段 → 内置默认。
+> 因此「清单缺失 ⇒ 返回 null ⇒ 页面残留 `@brand:logo@` 字面量」这条破相路径**已经不存在**；
+> 下面 4.2 的方案对比仍可作为历史调研参考，但「a) 运行时容忍缺失」这项工作已由品牌链覆盖。
+
 `server/config/brand.js:20` 读 `../assemble.json` 的 `brand` 段；**文件缺失时返回 `null`**（不抛错）。
 `null` 的后果**不是"用默认值"**，而是 `replaceBrandInText()` 遇到 `!brand` 时**原样保留文本**
 （`server/assemble/fragment-assembler.js:64`）。
