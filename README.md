@@ -86,15 +86,15 @@ PID 文件为项目根 `<项目名>.pid`（不入库）；日志超过 10MB 在 
 
 | 登录（夜间） | 下载（夜间） |
 | --- | --- |
-| ![登录](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/01-login.jpg) | ![下载](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/02-download.jpg) |
+| ![登录](https://raw.githubusercontent.com/EIGHTfs/gamebanana-mods-downloader/main/docs/screenshots/01-login.jpg) | ![下载](https://raw.githubusercontent.com/EIGHTfs/gamebanana-mods-downloader/main/docs/screenshots/02-download.jpg) |
 
 | 下载进度（夜间，敏感信息已打码） | 搜索：三种通道（夜间） |
 | --- | --- |
-| ![下载进度](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/03-progress.jpg) | ![搜索](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/04-search.jpg) |
+| ![下载进度](https://raw.githubusercontent.com/EIGHTfs/gamebanana-mods-downloader/main/docs/screenshots/03-progress.jpg) | ![搜索](https://raw.githubusercontent.com/EIGHTfs/gamebanana-mods-downloader/main/docs/screenshots/04-search.jpg) |
 
 | 设置（夜间） | 设置（白天） |
 | --- | --- |
-| ![设置-夜间](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/05-settings-night.jpg) | ![设置-白天](https://cdn.jsdelivr.net/gh/EIGHTfs/gamebanana-mods-downloader@main/docs/screenshots/06-settings-day.jpg) |
+| ![设置-夜间](https://raw.githubusercontent.com/EIGHTfs/gamebanana-mods-downloader/main/docs/screenshots/05-settings-night.jpg) | ![设置-白天](https://raw.githubusercontent.com/EIGHTfs/gamebanana-mods-downloader/main/docs/screenshots/06-settings-day.jpg) |
 
 ### 三种搜索通道
 
