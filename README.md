@@ -2,6 +2,15 @@
 
 > 从 [GameBanana](https://gamebanana.com) 搜索、下载并自动整理 Mod 的零依赖 Node.js 服务：单进程、无 npm 依赖、自带网页界面，局域网浏览器直接用。
 
+
+### npx 运行
+
+```bash
+npx gamebanana-mods-downloader --port <端口>
+```
+
+数据目录默认 `~/.gamebanana-mods-downloader`，可用 `--data-dir` 或环境变量 `DATA_DIR` 指定。
+
 ## 功能
 
 | 功能 | 做什么 | 入口 |

@@ -14,7 +14,12 @@
 const fs = require("fs");
 const path = require("path");
 
-const JSON_DIR = process.env.GBMD_JSON_DIR ? path.resolve(process.env.GBMD_JSON_DIR) : path.join(__dirname, "..", "..", "json");
+// 数据目录同源：store/json-dir.js 的 JSON_DIR 跟着 DATA_DIR 走（装成 npm 包后落数据根），
+//   这里若自行用 __dirname 推算，就会写进 <...>/node_modules/<pkg>/json ——
+//   升级即丢、且包目录可能只读。保留 GBMD_JSON_DIR 作为显式覆盖。
+const JSON_DIR = process.env.GBMD_JSON_DIR
+  ? path.resolve(process.env.GBMD_JSON_DIR)
+  : require("../store/json-dir").JSON_DIR;
 const INDEX_DIR = path.join(JSON_DIR, "index"); //userdata-manifest.json dir json/index .json 按游戏拆分的哈希/原名索引
 const LEGACY_FILES = [
   path.join(JSON_DIR, "gb-hash-index.json"),

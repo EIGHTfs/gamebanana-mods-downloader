@@ -26,7 +26,12 @@
 const fs = require("fs");
 const path = require("path");
 const { parseIndexObj, readIndexObj } = require("./index-html");
-const JSON_DIR = process.env.GBMD_JSON_DIR ? path.resolve(process.env.GBMD_JSON_DIR) : path.join(__dirname, "..", "..", "json");
+// 数据目录同源：store/json-dir.js 的 JSON_DIR 跟着 DATA_DIR 走（装成 npm 包后落数据根），
+//   这里若自行用 __dirname 推算，就会写进 <...>/node_modules/<pkg>/json ——
+//   升级即丢、且包目录可能只读。保留 GBMD_JSON_DIR 作为显式覆盖。
+const JSON_DIR = process.env.GBMD_JSON_DIR
+  ? path.resolve(process.env.GBMD_JSON_DIR)
+  : require("../store/json-dir").JSON_DIR;
 const INDEX_DIR = path.join(JSON_DIR, "index"); // 2026-09-02 按游戏分文件后的索引目录
 
 let nameIndexCache = null; // { at, map } 懒加载 + 缓存（organize 高频调用时避免反复读盘）
