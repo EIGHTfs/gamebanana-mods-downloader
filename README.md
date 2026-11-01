@@ -157,7 +157,7 @@ curl -s http://<本机IP>:8642/api/task
 
 ```bash
 node --test                     # 自动发现 test/**/*.test.cjs
-node test/gb-verify.cjs         # 联网实测：按角色链路的四项能力
+node test/gb-verify.cjs         # 联网校验：按角色链路的四项能力
 ```
 
 ## 文档索引
